@@ -2,3 +2,6 @@ ollama
 chromadb
 flask
 pypdf
+groq
+matplotlib
+numpy

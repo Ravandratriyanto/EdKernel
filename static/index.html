@@ -10,6 +10,11 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
     onload="renderMathInPage()"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral', suppressErrorRendering: true });
+    window.__mermaid = mermaid;
+  </script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,8 +84,26 @@
     }
 
     .settings-bar input:focus { border-color: #4f46e5; }
-    #input-model { width: 120px; }
-    #input-host  { width: 210px; }
+    #input-model   { width: 200px; }
+    #input-host    { width: 210px; }
+    #input-api-key { width: 260px; font-family: monospace; letter-spacing: 0.03em; }
+
+    .provider-toggle {
+      display: flex;
+      background: #f3f4f6;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+
+    .provider-toggle button {
+      border: none; background: transparent;
+      color: #6b7280; padding: 4px 14px;
+      cursor: pointer; font-size: 0.78rem; font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .provider-toggle button.active { background: #4f46e5; color: white; }
 
     #chat-area {
       flex: 1;
@@ -221,6 +244,14 @@
     }
     .icon-btn:hover { border-color: #4f46e5; color: #4f46e5; }
 
+    /* mermaid diagrams inside bubbles */
+    .bubble .mermaid-wrap { margin-top: 10px; background: #f8fafc; border-radius: 10px; padding: 12px; overflow-x: auto; }
+    .bubble .mermaid-wrap svg { max-width: 100%; }
+
+    /* generated graph images */
+    .bubble .graph-img { margin-top: 10px; border-radius: 10px; overflow: hidden; max-width: 100%; }
+    .bubble .graph-img img { width: 100%; display: block; }
+
     button.send-btn {
       background: #4f46e5; color: white; border: none;
       border-radius: 10px; padding: 0 20px; height: 44px;
@@ -244,10 +275,20 @@
 </header>
 
 <div class="settings-bar">
+  <div class="provider-toggle">
+    <button id="btn-ollama" class="active" onclick="setProvider('ollama')">Ollama</button>
+    <button id="btn-groq"   onclick="setProvider('groq')">Groq</button>
+  </div>
   <label>Model</label>
   <input id="input-model" value="gemma4" />
-  <label>Ollama host</label>
-  <input id="input-host" value="http://localhost:11434" />
+  <span id="host-group">
+    <label>Host</label>
+    <input id="input-host" value="http://localhost:11434" />
+  </span>
+  <span id="key-group" class="hidden">
+    <label>API Key</label>
+    <input id="input-api-key" type="password" placeholder="gsk_..." />
+  </span>
 </div>
 
 <div id="chat-area"></div>
@@ -269,7 +310,8 @@
     <div id="answer-attach-strip" class="attach-strip hidden"></div>
     <div class="input-row">
       <button class="icon-btn" title="Attach file" onclick="openFilePicker('answer')">📎</button>
-      <textarea id="input-answer" rows="1" placeholder="Type your answer..." onkeydown="answerKeydown(event)"></textarea>
+      <button class="icon-btn" title="Generate graph" onclick="requestGraph()">📊</button>
+      <textarea id="input-answer" rows="1" placeholder="Type your answer or describe a graph..." onkeydown="answerKeydown(event)"></textarea>
       <button class="send-btn" id="btn-send" onclick="sendAnswer()">Send</button>
     </div>
   </div>
@@ -292,8 +334,19 @@
   let mode = 'learn';
   let messages = [];
   let busy = false;
-  let attachment = null;      // {type, text?, b64?, name, previewUrl?}
-  let filePicker_target = ''; // which panel triggered the file picker
+  let attachment = null;
+  let filePicker_target = '';
+  let provider = 'ollama';
+
+  function setProvider(p) {
+    provider = p;
+    document.getElementById('btn-ollama').classList.toggle('active', p === 'ollama');
+    document.getElementById('btn-groq').classList.toggle('active', p === 'groq');
+    document.getElementById('host-group').classList.toggle('hidden', p !== 'ollama');
+    document.getElementById('key-group').classList.toggle('hidden', p !== 'groq');
+    document.getElementById('input-model').value =
+      p === 'groq' ? 'llama-3.3-70b-versatile' : 'gemma4';
+  }
 
   /* ---- mode ---- */
   function setMode(m) {
@@ -318,8 +371,13 @@
     document.getElementById('btn-start').disabled = false;
   }
 
-  function model() { return document.getElementById('input-model').value.trim() || 'gemma4'; }
-  function host()  { return document.getElementById('input-host').value.trim()  || 'http://localhost:11434'; }
+  function model()  { return document.getElementById('input-model').value.trim() || 'gemma4'; }
+  function host()   { return document.getElementById('input-host').value.trim()  || 'http://localhost:11434'; }
+  function apiKey() { return document.getElementById('input-api-key').value.trim(); }
+
+  function basePayload() {
+    return { provider, model: model(), host: host(), api_key: apiKey() };
+  }
 
   /* ---- attachment ---- */
   function openFilePicker(target) {
@@ -418,6 +476,8 @@
         { left: '$',  right: '$',  display: false },
       ]
     });
+    renderMermaidIn(bubble);
+    renderGraphBlocksIn(bubble);
     area.scrollTop = area.scrollHeight;
   }
 
@@ -462,7 +522,7 @@
       const res  = await fetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, model: model(), host: host(), attachment: attach }),
+        body: JSON.stringify({ topic, ...basePayload(), attachment: attach }),
       });
       const data = await res.json();
       removeThinking();
@@ -501,7 +561,7 @@
       const res  = await fetch('/api/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, input, model: model(), host: host(), attachment: attach }),
+        body: JSON.stringify({ messages, input, ...basePayload(), attachment: attach }),
       });
       const data = await res.json();
       removeThinking();
@@ -545,7 +605,7 @@
       const res  = await fetch('/api/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, answer, model: model(), host: host(), attachment: attach }),
+        body: JSON.stringify({ question, answer, ...basePayload(), attachment: attach }),
       });
       const data = await res.json();
       removeThinking();
@@ -558,6 +618,129 @@
   }
 
   function renderMathInPage() { /* KaTeX onload hook — nothing needed at page load */ }
+
+  /* ---- mermaid ---- */
+  async function renderMermaidIn(bubble) {
+    const mermaid = window.__mermaid;
+    if (!mermaid) return;
+    const blocks = bubble.querySelectorAll('pre code.language-mermaid');
+    for (const block of blocks) {
+      const code = block.textContent;
+      const pre  = block.parentElement;
+      try {
+        const id  = 'mmd-' + Math.random().toString(36).slice(2);
+        const { svg } = await mermaid.render(id, code);
+        const wrap = document.createElement('div');
+        wrap.className = 'mermaid-wrap';
+        wrap.innerHTML = svg;
+        pre.replaceWith(wrap);
+      } catch (e) {
+        // Fallback: show raw code in a styled block instead of erroring
+        const fallback = document.createElement('pre');
+        fallback.style.cssText = 'background:#f3f4f6;border-radius:8px;padding:10px;font-size:0.8rem;overflow-x:auto;margin-top:8px';
+        fallback.textContent = code;
+        pre.replaceWith(fallback);
+      }
+    }
+  }
+
+  /* ---- auto graph blocks (```graph in tutor response) ---- */
+  function renderGraphBlocksIn(bubble) {
+    const blocks = bubble.querySelectorAll('pre code.language-graph');
+    for (const block of blocks) {
+      const description = block.textContent.trim();
+      const pre = block.parentElement;
+
+      // Replace with a loading placeholder immediately
+      const placeholder = document.createElement('div');
+      placeholder.className = 'graph-img';
+      placeholder.innerHTML = '<div style="padding:12px;color:#9ca3af;font-size:0.85rem">Generating graph...</div>';
+      pre.replaceWith(placeholder);
+
+      // Fire off the graph request
+      fetch('/api/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, ...basePayload() }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.image) {
+          const img = document.createElement('img');
+          img.src = `data:image/png;base64,${data.image}`;
+          img.style.cssText = 'width:100%;border-radius:8px;display:block';
+          placeholder.innerHTML = '';
+          placeholder.appendChild(img);
+        } else {
+          placeholder.innerHTML = `<div style="padding:8px;color:#ef4444;font-size:0.8rem">Graph error: ${data.error}</div>`;
+        }
+        document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+      })
+      .catch(e => {
+        placeholder.innerHTML = `<div style="padding:8px;color:#ef4444;font-size:0.8rem">Graph error: ${e.message}</div>`;
+      });
+    }
+  }
+
+  /* ---- manual graph request ---- */
+  async function requestGraph() {
+    const description = document.getElementById('input-answer').value.trim();
+    if (!description || busy) return;
+    busy = true;
+    document.getElementById('btn-send').disabled = true;
+    document.getElementById('input-answer').value = '';
+
+    appendBubble('student', `📊 Graph request: ${description}`);
+    appendThinking();
+
+    try {
+      const res  = await fetch('/api/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, ...basePayload() }),
+      });
+      const data = await res.json();
+      removeThinking();
+
+      if (data.error) {
+        appendBubble('tutor', `Could not generate graph: ${data.error}`);
+      } else {
+        appendGraphBubble(data.image, description);
+      }
+    } catch (e) {
+      removeThinking();
+      appendBubble('tutor', `Error: ${e.message}`);
+    }
+
+    document.getElementById('btn-send').disabled = false;
+    busy = false;
+  }
+
+  function appendGraphBubble(imgB64, caption) {
+    const area = document.getElementById('chat-area');
+    const row  = document.createElement('div');
+    row.className = 'bubble-row tutor';
+
+    const av = document.createElement('div');
+    av.className = 'avatar tutor-av';
+    av.textContent = 'T';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'graph-img';
+    const img = document.createElement('img');
+    img.src = `data:image/png;base64,${imgB64}`;
+    img.alt = caption;
+    wrap.appendChild(img);
+    bubble.appendChild(wrap);
+
+    row.appendChild(av);
+    row.appendChild(bubble);
+    area.appendChild(row);
+    area.scrollTop = area.scrollHeight;
+  }
 </script>
 </body>
 </html>
