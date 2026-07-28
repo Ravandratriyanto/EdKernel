@@ -1,0 +1,9 @@
+Mitochondria are membrane-bound organelles found in the cytoplasm of eukaryotic cells. They are known as the powerhouse of the cell because they generate most of the cell's supply of ATP through cellular respiration. Mitochondria have a double membrane structure with an inner membrane folded into cristae, which increases surface area for ATP production.
+
+The area of a triangle is calculated using the formula: A = (base x height) / 2, also written as A = bh/2. This is because a triangle is exactly half of a rectangle or parallelogram with the same base and height.
+
+Photosynthesis is the process by which plants convert sunlight, water, and carbon dioxide into glucose and oxygen. The equation is: 6CO2 + 6H2O + light energy -> C6H12O6 + 6O2.
+
+Newton's second law of motion states that Force = mass x acceleration (F = ma). The SI unit of force is the Newton (N).
+
+The quadratic formula solves equations of the form ax^2 + bx + c = 0: x = (-b +/- sqrt(b^2 - 4ac)) / 2a.
