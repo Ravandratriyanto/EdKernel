@@ -5,3 +5,5 @@ data/chroma/
 .env
 .venv/
 .logs/
+training/out/
+training/data/

@@ -118,3 +118,23 @@
 - `/api/upload` decides image-vs-PDF by filename extension, but clipboard blobs usually arrive without a usable name — so the handler synthesizes `pasted-<timestamp>.<ext>` from the blob's MIME type to get past the `ALLOWED_IMAGES` check
 - `activeAttachTarget()` picks the strip that's actually visible: check panel in check mode, otherwise answer row mid-lesson or topic row before a lesson starts
 - Known edge: an exotic clipboard type (e.g. AVIF) falls back to a `.png` name, so the data URI would claim `image/png` for non-PNG bytes and the vision model would likely reject it
+
+### Plain-language tutor prompt
+- The tutor's English was too academic. `app.py` and `main.py` had drifted into two different `TUTOR_SYSTEM_PROMPT`s; both updated
+- Rules added: short sentences, everyday words a 12-year-old knows, one idea per sentence, no filler ("let us consider", "it is important to note"), explicit swaps (`use` not `utilise`, `so` not `therefore`, `find` not `determine`), subject terms explained in plain words on first use, and assume English may be the student's second language
+- Deliberately a prompt change, not a fine-tune — tone is the wrong reason to train, and prompts iterate in seconds
+
+### Phase A — a transformer from scratch (`training/`)
+- `training/train_tiny.py`: complete char-level GPT in one file — tokenizer, causal self-attention, residual blocks, training loop, sampling. No `transformers`, no `Trainer`. Commented to explain *why* (what `is_causal=True` prevents, what the residual `x +` buys)
+- Verified on CPU: loss 4.19 → 2.78 in 300 steps on tinyshakespeare; samples show word-length gaps and the `NAME:` speaker format emerging
+- Overfitting demo measured, not asserted: training on the 975-byte `biology.txt` drives train loss to 0.90 while val *climbs* to 3.59 (gap +2.69) — the same failure that will bite Phase C if fine-tuned on too few logged sessions
+- Fixed a usability bug found while testing: a corpus smaller than `block_size` crashed with an unreadable torch error from inside `get_batch`; now fails early with the actual split size and a working `--block-size` suggestion
+- `torch` kept out of the app's `requirements.txt` (multi-GB) — `training/requirements.txt` holds it with both the CPU and CUDA install commands
+- `training/data/` and `training/out/` gitignored: the corpus is downloadable and checkpoints are build artifacts
+- Note: no GPU on the dev box (`nvidia-smi` finds no driver), so everything above was verified against the CPU wheel
+
+### Deployment thinking (no code yet)
+- Decision: rent compute, don't own. School load is ~15% duty cycle (school hours, weekdays, term time), and IB/Cambridge exam calendars are globally synchronised — the entire customer base peaks in the same May fortnight. Size owned capacity to baseline, burst to rented for exam season
+- Serving target for a fine-tuned 7-8B: **48GB** (L40S/A6000 class). KV cache is 128 KiB/token for a Llama-3-8B-class model with GQA, so 24GB leaves only ~7 concurrent sessions at 4k context once bf16 weights take 16GB; 48GB gives ~33 at 8k with FP8 weights. Size against 8k, not 4k — PDF attachments cap at 8000 chars and past papers are long
+- Use vLLM/SGLang for continuous batching and prefix caching; the latter directly offsets the stateless resend-full-history design
+- Blockers for the business model, none of which exist yet: no auth at all (the API key is typed into the browser, so every user brings their own), no per-student metering, no session logging. Billing "reasonable tokens" requires all three

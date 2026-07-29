@@ -1,0 +1,6 @@
+# Training-only. Deliberately separate from the app's requirements.txt so that
+# running the tutor doesn't pull a multi-GB torch build.
+#
+#   CPU:   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   CUDA:  pip install torch          (on the GPU box)
+torch
