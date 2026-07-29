@@ -108,11 +108,14 @@ locally.
 
 - [x] Phase 1: a script that sends one prompt to Ollama and prints the reply
 - [x] Phase 2: `python main.py check --text "..." --answer "..."` runs end to end
-- [ ] Phase 3: check mode's answers visibly use ingested reference material
-- [ ] Phase 4: `python main.py learn --text "..."` walks through steps interactively
-- [ ] Phase 5: three wrong answers in a row produce three *different*,
+- [x] Phase 3: check mode's answers visibly use ingested reference material
+- [x] Phase 4: `python main.py learn --text "..."` walks through steps interactively
+- [x] Phase 5: three wrong answers in a row produce three *different*,
       increasingly specific hints
 - [ ] Phase 6: `--image` produces the same learn/check flow as `--text`
+      — done in the web app (`vision/image_handler.py`, wired into
+      `/api/start`, `/api/reply`, `/api/check`); the `--image` CLI flag
+      is still outstanding
 - [ ] Phase 7: `--video` produces the same flow as `--image`
 
 

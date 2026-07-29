@@ -88,3 +88,26 @@
 - Pushed to GitHub: https://github.com/Ravandratriyanto/OLLM
 - Known issue: occasional "Failed to fetch" on `/api/graph` — likely matplotlib thread-safety with Flask dev server; `use_reloader=False` is a candidate fix
 - Next phases planned: hint escalation (3 wrong answers → 3 increasingly specific hints), image input for learn/check, video input
+
+---
+
+## Session 3 — 2026-07-29
+
+### Phase 5 — Escalating hints (written up late; shipped in `5823248`)
+- `/api/reply` takes a `wrong_streak` from the client and injects a `[Tutor note: ...]` into the user message: 1× = slightly more specific clue, 2× = name the key concept, 3+ = explain it outright then ask them to apply it
+- `TUTOR_SYSTEM_PROMPT` requires every evaluation to end with `[CORRECT]` or `[WRONG]`; `_strip_signal()` pulls that marker off before the text reaches the UI
+- Frontend keeps the streak: reset to 0 on `correct === true`, `+= 1` on `false`
+
+### Linux support
+- Repo cloned to Linux; `start.bat` has no portable equivalent (`start "..." cmd /k` spawns named terminal windows)
+- Added `start.sh`: backgrounds Ollama and Flask to `.logs/`, polls ports for readiness instead of fixed `timeout /t` sleeps, picks up `.venv/bin/python`, skips Ollama when absent or already running, traps signals to kill children
+- `.gitignore`: dropped `"D:OLLMstatic"/` (unmatchable off Windows), added `.venv/` and `.logs/`
+
+### Phase 6 — Image input (web app)
+- Problem: `_apply_attachment()` only passed images to Ollama. On Groq — now the default provider for speed — the image was dropped and replaced with a bare "(Student attached image: x.png)" note, so the model was told an image existed but never saw it. In `/api/check` it was dropped entirely, not even a note
+- Built `vision/image_handler.py` with `transcribe(b64, name, provider, ...) -> str`: Groq goes through `qwen/qwen3.6-27b` using the `image_url` + base64 data URI format (20MB / 5 images per request per Groq docs); Ollama uses its native `images` key
+- Transcription prompt demands verbatim numbers/symbols in LaTeX, a one-sentence description for diagrams, and no attempt to answer the question
+- Wired into `/api/start`, `/api/reply`, and `/api/check`. Ollama keeps the native image path unchanged; every other provider gets the transcription inlined into the message text
+- `vision_model` is overridable per-request, defaulting to `GROQ_VISION_MODEL`
+- Failures degrade gracefully: a failed transcription logs a warning and falls back to "(Student attached image: x.png — could not be read: ...)" rather than 500ing the request
+- Still outstanding for Phase 6: the `--image` flag in `main.py` (CLI path untouched)

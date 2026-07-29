@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
+from vision.image_handler import transcribe
 
 _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
 
@@ -121,8 +122,9 @@ def api_start():
     provider   = data.get("provider", "ollama")
     model      = data.get("model", "gemma4")
     host       = data.get("host", "http://localhost:11434")
-    api_key    = data.get("api_key", "")
-    attachment = data.get("attachment")
+    api_key      = data.get("api_key", "")
+    attachment   = data.get("attachment")
+    vision_model = data.get("vision_model", "")
 
     context_chunks = retrieve(topic)
     context        = "\n\n".join(context_chunks) if context_chunks else ""
@@ -130,7 +132,7 @@ def api_start():
 
     user_msg = {"role": "user", "content": f"{context_prefix}Teach me about: {topic}"}
     if attachment:
-        _apply_attachment(user_msg, attachment, provider)
+        _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
     messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}, user_msg]
     response = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
@@ -149,6 +151,7 @@ def api_reply():
     host         = data.get("host", "http://localhost:11434")
     api_key      = data.get("api_key", "")
     attachment   = data.get("attachment")
+    vision_model = data.get("vision_model", "")
     wrong_streak = int(data.get("wrong_streak", 0))
 
     hint_note = ""
@@ -161,7 +164,7 @@ def api_reply():
 
     user_msg = {"role": "user", "content": user_input + hint_note}
     if attachment:
-        _apply_attachment(user_msg, attachment, provider)
+        _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
     messages.append(user_msg)
     response = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
@@ -185,8 +188,9 @@ def api_check():
     provider   = data.get("provider", "ollama")
     model      = data.get("model", "gemma4")
     host       = data.get("host", "http://localhost:11434")
-    api_key    = data.get("api_key", "")
-    attachment = data.get("attachment")
+    api_key      = data.get("api_key", "")
+    attachment   = data.get("attachment")
+    vision_model = data.get("vision_model", "")
 
     context_chunks = retrieve(question)
     context        = "\n\n".join(context_chunks) if context_chunks else ""
@@ -210,8 +214,13 @@ def api_check():
 
     pdf_context = f"Attached document:\n{attachment['text']}\n\n" if attachment and attachment.get("type") == "pdf" else ""
 
+    # Providers without image input get the question transcribed to text instead.
+    image_context = ""
+    if attachment and attachment.get("type") == "image":
+        image_context = _transcription_note(attachment, provider, model, host, api_key, vision_model).strip() + "\n\n"
+
     prompt = (
-        f"{context_prefix}{pdf_context}"
+        f"{context_prefix}{pdf_context}{image_context}"
         f"Question: {question}\n"
         f"Student's answer: {answer}\n\n"
         "Is the student's answer correct? Explain briefly."
@@ -220,13 +229,29 @@ def api_check():
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _apply_attachment(msg: dict, attachment: dict, provider: str):
+def _apply_attachment(msg: dict, attachment: dict, provider: str, model: str = "",
+                      host: str = "", api_key: str = "", vision_model: str = ""):
     if attachment.get("type") == "image":
+        name = attachment.get("name", "image")
         if provider == "ollama":
             msg["images"] = [attachment["b64"]]
-        msg["content"] += f"\n\n(Student attached image: {attachment.get('name', 'image')})"
+            msg["content"] += f"\n\n(Student attached image: {name})"
+        else:
+            msg["content"] += _transcription_note(attachment, provider, model, host, api_key, vision_model)
     elif attachment.get("type") == "pdf":
         msg["content"] += f"\n\nAttached document ({attachment.get('name', 'file')}):\n{attachment['text']}"
+
+def _transcription_note(attachment: dict, provider: str, model: str, host: str,
+                        api_key: str, vision_model: str) -> str:
+    """Transcribe an image to text for providers that can't take image input."""
+    name = attachment.get("name", "image")
+    try:
+        text = transcribe(attachment["b64"], name=name, provider=provider,
+                          model=model, host=host, api_key=api_key, vision_model=vision_model)
+    except Exception as e:
+        app.logger.warning("Image transcription failed for %s: %s", name, e)
+        return f"\n\n(Student attached image: {name} — could not be read: {e})"
+    return f"\n\nThe student attached an image ({name}). Transcription:\n{text}"
 
 def _strip_images(messages: list) -> list:
     return [{"role": m["role"], "content": m["content"]} for m in messages]
