@@ -1,0 +1,20 @@
+# Keep line endings sane across the Windows and Linux checkouts.
+# Without this, Git for Windows (core.autocrlf=true) can commit start.sh with
+# CRLF, and Linux then fails with: /usr/bin/env: 'bash\r': No such file or directory
+
+* text=auto eol=lf
+
+# Shell scripts must be LF or the shebang breaks.
+*.sh text eol=lf
+
+# Batch files are the one thing that genuinely wants CRLF.
+*.bat text eol=crlf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.pdf binary
+*.pt  binary
