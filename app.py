@@ -10,6 +10,8 @@ from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 
+_SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
+
 app = Flask(__name__, static_folder="static")
 
 TUTOR_SYSTEM_PROMPT = (
@@ -18,7 +20,12 @@ TUTOR_SYSTEM_PROMPT = (
     "1. One short hint or question (1-2 sentences max) that nudges the student toward the next idea.\n"
     "2. Wait for their answer before revealing anything else.\n"
     "Never explain more than one idea per turn. Never give the full answer unprompted. "
-    "If the student is wrong, give a small clue and ask again. If they are right, affirm briefly and move to the next idea with another question. "
+    "When the student answers incorrectly, escalate your hints based on how many times they have been wrong in a row:\n"
+    "- Wrong once: subtle nudge only, stay indirect.\n"
+    "- Wrong twice: name the key concept without fully explaining it.\n"
+    "- Wrong three or more times: directly explain the concept they are missing, then ask them to apply it.\n"
+    "If they are right, affirm briefly and move to the next idea with another question. "
+    "When evaluating a student's answer, end your response with exactly [CORRECT] or [WRONG] on its own line. "
     "When a process diagram or flowchart would help (cycles, cause-effect, steps), include it as a ```mermaid code block using 'graph TD'. "
     "Mermaid syntax rule: always wrap node labels in double quotes when they contain special characters. Example: A[\"Step one\"] --> B[\"Step two\"]. "
     "NEVER use Mermaid for mathematical function plots — Mermaid cannot draw axes or curves. "
@@ -127,30 +134,46 @@ def api_start():
 
     messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}, user_msg]
     response = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+    response, _ = _strip_signal(response)
     messages.append({"role": "assistant", "content": response})
 
     return jsonify({"response": response, "messages": _strip_images(messages), "done": "Topic complete." in response})
 
 @app.route("/api/reply", methods=["POST"])
 def api_reply():
-    data       = request.json
-    messages   = data.get("messages", [])
-    user_input = data.get("input", "")
-    provider   = data.get("provider", "ollama")
-    model      = data.get("model", "gemma4")
-    host       = data.get("host", "http://localhost:11434")
-    api_key    = data.get("api_key", "")
-    attachment = data.get("attachment")
+    data         = request.json
+    messages     = data.get("messages", [])
+    user_input   = data.get("input", "")
+    provider     = data.get("provider", "ollama")
+    model        = data.get("model", "gemma4")
+    host         = data.get("host", "http://localhost:11434")
+    api_key      = data.get("api_key", "")
+    attachment   = data.get("attachment")
+    wrong_streak = int(data.get("wrong_streak", 0))
 
-    user_msg = {"role": "user", "content": user_input}
+    hint_note = ""
+    if wrong_streak == 1:
+        hint_note = "\n\n[Tutor note: student answered this wrong once — give a slightly more specific clue than your first hint.]"
+    elif wrong_streak == 2:
+        hint_note = "\n\n[Tutor note: student answered this wrong twice — give a direct clue that names the key concept.]"
+    elif wrong_streak >= 3:
+        hint_note = "\n\n[Tutor note: student answered this wrong 3+ times — directly explain the concept they are missing, then ask them to apply it.]"
+
+    user_msg = {"role": "user", "content": user_input + hint_note}
     if attachment:
         _apply_attachment(user_msg, attachment, provider)
 
     messages.append(user_msg)
     response = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+    response, correct = _strip_signal(response)
     messages.append({"role": "assistant", "content": response})
 
-    return jsonify({"response": response, "messages": _strip_images(messages), "done": "Topic complete." in response})
+    return jsonify({
+        "response": response,
+        "messages": _strip_images(messages),
+        "done": "Topic complete." in response,
+        "correct": correct,
+    })
 
 # ── check endpoint ───────────────────────────────────────────────────────────
 
@@ -208,5 +231,11 @@ def _apply_attachment(msg: dict, attachment: dict, provider: str):
 def _strip_images(messages: list) -> list:
     return [{"role": m["role"], "content": m["content"]} for m in messages]
 
+def _strip_signal(text: str) -> tuple:
+    m = _SIGNAL_RE.search(text)
+    if not m:
+        return text.strip(), None
+    return text[:m.start()].strip(), m.group(1).upper() == "CORRECT"
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, use_reloader=False)

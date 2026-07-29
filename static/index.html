@@ -337,6 +337,7 @@
   let attachment = null;
   let filePicker_target = '';
   let provider = 'ollama';
+  let wrongStreak = 0;
 
   function setProvider(p) {
     provider = p;
@@ -357,6 +358,7 @@
     document.getElementById('check-panel').classList.toggle('hidden', m !== 'check');
     clearChat();
     messages = [];
+    wrongStreak = 0;
     clearAttachment();
     resetLearnUI();
   }
@@ -511,6 +513,7 @@
     const topic = document.getElementById('input-topic').value.trim();
     if (!topic || busy) return;
     busy = true;
+    wrongStreak = 0;
     document.getElementById('btn-start').disabled = true;
     document.getElementById('topic-row').classList.add('hidden');
 
@@ -561,11 +564,13 @@
       const res  = await fetch('/api/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, input, ...basePayload(), attachment: attach }),
+        body: JSON.stringify({ messages, input, ...basePayload(), attachment: attach, wrong_streak: wrongStreak }),
       });
       const data = await res.json();
       removeThinking();
       messages = data.messages;
+      if (data.correct === true)  wrongStreak = 0;
+      if (data.correct === false) wrongStreak += 1;
       appendBubble('tutor', data.response);
 
       if (data.done) {
