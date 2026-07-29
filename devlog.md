@@ -138,3 +138,23 @@
 - Serving target for a fine-tuned 7-8B: **48GB** (L40S/A6000 class). KV cache is 128 KiB/token for a Llama-3-8B-class model with GQA, so 24GB leaves only ~7 concurrent sessions at 4k context once bf16 weights take 16GB; 48GB gives ~33 at 8k with FP8 weights. Size against 8k, not 4k — PDF attachments cap at 8000 chars and past papers are long
 - Use vLLM/SGLang for continuous batching and prefix caching; the latter directly offsets the stateless resend-full-history design
 - Blockers for the business model, none of which exist yet: no auth at all (the API key is typed into the browser, so every user brings their own), no per-student metering, no session logging. Billing "reasonable tokens" requires all three
+
+### Current state
+- Phases 1–5 complete. Phase 6 complete for the web app; the `--image` flag in `main.py` is the only piece left before it meets the readme's definition of done. Phase 7 (video) untouched
+- Runs on Linux via `start.sh`; `start.bat` kept for Windows. Ollama is optional now — with the Groq provider the tutor works with no local model server at all
+- Images work on every provider: Ollama natively, everything else through transcription. They can be attached with 📎 or pasted with Ctrl+V
+- Training work has its own tree under `training/`, independent of the app. Phase A (from-scratch transformer) runs and is verified; Phases B and C not started
+
+### Known issues / caveats
+- **The Groq key still needs rotating.** It was briefly written into `.gitignore` — which does not hide anything, since `.gitignore` is itself tracked and pushed. Caught before any commit, and a full-history scan (`git log --all -p` for `gsk_` + 20 chars) is clean, so nothing ever reached GitHub. The key is still burned: it sat on disk, in editor undo history, and in a chat transcript. Same drill as the Session 2 incident — revoke at console.groq.com and only ever paste the new key into the UI field
+- Phase 6 has not been exercised against the live Groq API. The model id and request format come from Groq's vision docs; no real image has round-tripped. Worth one manual test
+- Clipboard paste was verified with a stubbed DOM and `node --check`, not a real browser paste event
+- An exotic clipboard image type (e.g. AVIF) is named `.png` by the paste handler, so the data URI would mislabel the bytes and the vision model would likely reject it
+- The `/api/graph` "Failed to fetch" from Session 2 is believed fixed by `use_reloader=False`, but has not recurred often enough to confirm
+- No GPU on the dev box, so all training verification is CPU-only
+
+### Next
+1. **Phase B — session logging.** The bottleneck for three separate things at once: the Phase C fine-tuning dataset, per-student token metering for billing, and the auth model the school-subscription plan needs. Every unlogged session is data that cannot be recovered later
+2. Server-side session state + prompt caching. `/api/reply` resends the whole history every turn, so input tokens grow quadratically across a session — plausibly a 2–5× cost reduction before any hardware decision
+3. Auth: the API key currently lives in the browser, which inverts the intended model. Schools paying for their students requires domain-verified SSO and per-tenant quotas
+4. Then Phase C (LoRA fine-tune), Phase 7 (video), and the `--image` CLI flag
