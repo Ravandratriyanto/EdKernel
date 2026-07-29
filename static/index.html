@@ -301,7 +301,7 @@
   <div id="topic-row">
     <div id="learn-attach-strip" class="attach-strip hidden"></div>
     <div class="input-row">
-      <button class="icon-btn" title="Attach file" onclick="openFilePicker('learn')">📎</button>
+      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('learn')">📎</button>
       <input id="input-topic" placeholder="Enter a topic to learn (e.g. photosynthesis)" onkeydown="if(event.key==='Enter') startLearn()" />
       <button class="send-btn" id="btn-start" onclick="startLearn()">Start</button>
     </div>
@@ -309,7 +309,7 @@
   <div id="answer-row" class="hidden">
     <div id="answer-attach-strip" class="attach-strip hidden"></div>
     <div class="input-row">
-      <button class="icon-btn" title="Attach file" onclick="openFilePicker('answer')">📎</button>
+      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')">📎</button>
       <button class="icon-btn" title="Generate graph" onclick="requestGraph()">📊</button>
       <textarea id="input-answer" rows="1" placeholder="Type your answer or describe a graph..." onkeydown="answerKeydown(event)"></textarea>
       <button class="send-btn" id="btn-send" onclick="sendAnswer()">Send</button>
@@ -321,7 +321,7 @@
 <div id="check-panel" class="hidden">
   <div id="check-attach-strip" class="attach-strip hidden"></div>
   <div class="input-row" style="align-items:stretch">
-    <button class="icon-btn" title="Attach file" onclick="openFilePicker('check')" style="align-self:flex-end">📎</button>
+    <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('check')" style="align-self:flex-end">📎</button>
     <div style="flex:1; display:flex; flex-direction:column; gap:8px">
       <textarea id="input-question" placeholder="Question"></textarea>
       <textarea id="input-check-answer" placeholder="Your answer"></textarea>
@@ -391,7 +391,10 @@
   async function handleFileChange() {
     const file = document.getElementById('file-input').files[0];
     if (!file) return;
+    uploadFile(file, filePicker_target);
+  }
 
+  async function uploadFile(file, target) {
     const fd = new FormData();
     fd.append('file', file);
 
@@ -402,8 +405,30 @@
     attachment = data;
     if (data.type === 'image') attachment.previewUrl = URL.createObjectURL(file);
 
-    renderAttachStrip(filePicker_target);
+    renderAttachStrip(target);
   }
+
+  /* ---- paste an image straight from the clipboard ---- */
+  const PASTE_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+  // Whichever input the user can actually see is the one the paste belongs to.
+  function activeAttachTarget() {
+    if (mode === 'check') return 'check';
+    return document.getElementById('answer-row').classList.contains('hidden') ? 'learn' : 'answer';
+  }
+
+  document.addEventListener('paste', (event) => {
+    const items = Array.from(event.clipboardData?.items || []);
+    const item  = items.find(i => i.kind === 'file' && i.type.startsWith('image/'));
+    if (!item) return;                       // plain text paste — leave it alone
+    const blob = item.getAsFile();
+    if (!blob) return;
+
+    event.preventDefault();                  // don't drop a blob URL into the textarea
+    const ext  = PASTE_EXT[blob.type] || 'png';
+    const name = `pasted-${Date.now()}.${ext}`;
+    uploadFile(new File([blob], name, { type: blob.type }), activeAttachTarget());
+  });
 
   function renderAttachStrip(target) {
     const stripId = target === 'check' ? 'check-attach-strip'

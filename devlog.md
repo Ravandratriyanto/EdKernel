@@ -111,3 +111,10 @@
 - `vision_model` is overridable per-request, defaulting to `GROQ_VISION_MODEL`
 - Failures degrade gracefully: a failed transcription logs a warning and falls back to "(Student attached image: x.png — could not be read: ...)" rather than 500ing the request
 - Still outstanding for Phase 6: the `--image` flag in `main.py` (CLI path untouched)
+
+### Clipboard paste for images
+- Extracted `uploadFile(file, target)` out of `handleFileChange()` so the 📎 picker and the clipboard share one upload path
+- Document-level `paste` listener grabs the first `kind === 'file'` image item; a plain text paste is left alone (no `preventDefault`) so typing is unaffected
+- `/api/upload` decides image-vs-PDF by filename extension, but clipboard blobs usually arrive without a usable name — so the handler synthesizes `pasted-<timestamp>.<ext>` from the blob's MIME type to get past the `ALLOWED_IMAGES` check
+- `activeAttachTarget()` picks the strip that's actually visible: check panel in check mode, otherwise answer row mid-lesson or topic row before a lesson starts
+- Known edge: an exotic clipboard type (e.g. AVIF) falls back to a `.png` name, so the data URI would claim `image/png` for non-PNG bytes and the vision model would likely reject it
