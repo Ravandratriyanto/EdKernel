@@ -5,3 +5,4 @@ pypdf
 groq
 matplotlib
 numpy
+requests

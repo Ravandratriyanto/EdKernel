@@ -1,6 +1,7 @@
 import io
 import re
 import base64
+import requests
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -24,7 +25,13 @@ TUTOR_SYSTEM_PROMPT = (
     "immediately explain what it means in plain words. Assume English may be the student's second language. "
     "Each response must follow this exact structure:\n"
     "1. One short hint or question (1-2 sentences max) that nudges the student toward the next idea.\n"
-    "2. Wait for their answer before revealing anything else.\n"
+    "2. Immediately after the question, provide exactly 4 multiple-choice options on separate lines using this exact format:\n"
+    "A) option text\n"
+    "B) option text\n"
+    "C) option text\n"
+    "D) option text\n"
+    "Make one option correct and the others plausible but wrong. Do not label or hint which is correct.\n"
+    "3. Wait for their answer before revealing anything else.\n"
     "Never explain more than one idea per turn. Never give the full answer unprompted. "
     "When the student answers incorrectly, escalate your hints based on how many times they have been wrong in a row:\n"
     "- Wrong once: subtle nudge only, stay indirect.\n"
@@ -266,6 +273,129 @@ def _strip_signal(text: str) -> tuple:
     if not m:
         return text.strip(), None
     return text[:m.start()].strip(), m.group(1).upper() == "CORRECT"
+
+# ── past papers ─────────────────────────────────────────────────────────────
+
+PAPER_DOMAINS = [
+    "physicsandmathstutor.com",
+    "savemyexams.co.uk",
+    "aqa.org.uk",
+    "cambridgeinternational.org",
+    "ocr.org.uk",
+    "qualifications.pearson.com",
+    "collegeboard.org",
+    "pastpapers.co",
+    "revisely.co.uk",
+    "znotes.org",
+]
+
+PAPER_GEN_PROMPT = (
+    "You are an SAT/A-level exam question writer.\n"
+    "Read the content below from past papers and generate {n} multiple-choice questions "
+    "that test understanding of key concepts.\n\n"
+    "Use this EXACT format — no deviations:\n\n"
+    "Q1. Question text here\n"
+    "A) First option\n"
+    "B) Second option\n"
+    "C) Third option\n"
+    "D) Fourth option\n"
+    "[ANSWER: B]\n\n"
+    "Rules:\n"
+    "- Number questions Q1, Q2, Q3 etc.\n"
+    "- Always exactly 4 options: A B C D\n"
+    "- Always end each question with [ANSWER: X] on its own line\n"
+    "- One correct answer, three plausible distractors\n"
+    "- Match SAT/A-level difficulty\n"
+    "- Blank line between questions\n\n"
+    "Past paper content:\n{content}"
+)
+
+@app.route("/api/papers", methods=["POST"])
+def api_papers():
+    data        = request.json
+    topic       = data.get("topic", "")
+    tavily_key  = data.get("tavily_key", "")
+    n_questions = int(data.get("n_questions", 5))
+    provider    = data.get("provider", "ollama")
+    model_name  = data.get("model", "gemma4")
+    host        = data.get("host", "http://localhost:11434")
+    api_key     = data.get("api_key", "")
+
+    if not topic:
+        return jsonify({"error": "No topic provided"}), 400
+    if not tavily_key:
+        return jsonify({"error": "Tavily API key required"}), 400
+
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": tavily_key,
+                "query": f"{topic} past paper exam questions SAT A-level",
+                "search_depth": "advanced",
+                "include_domains": PAPER_DOMAINS,
+                "max_results": 6,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+    except Exception as e:
+        return jsonify({"error": f"Search failed: {e}"}), 500
+
+    if not results:
+        return jsonify({"error": "No past paper content found for that topic. Try a more specific query."}), 404
+
+    content_parts = [r["content"] for r in results[:5] if r.get("content")]
+    sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results[:5]]
+    combined = "\n\n---\n\n".join(content_parts)[:7000]
+
+    prompt = PAPER_GEN_PROMPT.format(n=n_questions, content=combined)
+    try:
+        raw = chat(
+            [{"role": "user", "content": prompt}],
+            model=model_name, host=host, provider=provider, api_key=api_key,
+        )
+    except Exception as e:
+        return jsonify({"error": f"Question generation failed: {e}"}), 500
+
+    return jsonify({"questions": raw, "sources": sources})
+
+
+@app.route("/api/papers/hint", methods=["POST"])
+def api_papers_hint():
+    data         = request.json
+    question     = data.get("question", "")
+    options      = data.get("options", [])
+    chosen       = data.get("chosen", "")
+    correct      = data.get("correct", "")
+    wrong_streak = int(data.get("wrong_streak", 1))
+    provider     = data.get("provider", "ollama")
+    model_name   = data.get("model", "gemma4")
+    host         = data.get("host", "http://localhost:11434")
+    api_key      = data.get("api_key", "")
+
+    opts_text = "\n".join(f"{o['letter']}) {o['text']}" for o in options)
+    if wrong_streak == 1:
+        instruction = "Give a subtle hint that nudges the student toward the right thinking. Stay indirect — do not name the concept yet."
+    elif wrong_streak == 2:
+        instruction = "Name the key concept the student needs but do not give away the answer."
+    else:
+        instruction = "Directly explain why the chosen option is wrong and explain the correct concept clearly. Then ask the student to confirm they understand."
+
+    messages = [
+        {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
+        {"role": "user", "content": (
+            f"Past paper question:\n{question}\n\n{opts_text}\n\n"
+            f"The student chose: {chosen}\n"
+            f"The correct answer is: {correct}\n\n"
+            f"{instruction} Write in plain, simple English. Do not end with [CORRECT] or [WRONG]."
+        )},
+    ]
+    response = chat(messages, model=model_name, host=host, provider=provider, api_key=api_key)
+    response, _ = _strip_signal(response)
+    return jsonify({"response": response})
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, use_reloader=False)

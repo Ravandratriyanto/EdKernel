@@ -252,6 +252,45 @@
     .bubble .graph-img { margin-top: 10px; border-radius: 10px; overflow: hidden; max-width: 100%; }
     .bubble .graph-img img { width: 100%; display: block; }
 
+    /* multiple-choice option buttons */
+    .options-row {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 4px 0 4px 42px;
+      margin-top: -8px;
+    }
+    .option-btn {
+      background: white; border: 2px solid #4f46e5;
+      border-radius: 10px; padding: 7px 16px;
+      cursor: pointer; font-size: 0.88rem;
+      color: #4f46e5; font-weight: 500;
+      transition: all 0.15s;
+    }
+    .option-btn:hover:not(:disabled) { background: #4f46e5; color: white; }
+    .option-btn:disabled { opacity: 0.45; cursor: not-allowed; border-color: #9ca3af; color: #9ca3af; }
+    .option-btn.correct { background: #d1fae5; border-color: #059669; color: #065f46; }
+    .option-btn.wrong   { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
+
+    /* past-paper sources */
+    .sources-bar {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 6px 0 2px 42px;
+    }
+    .source-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 0.75rem; color: #1d4ed8;
+      text-decoration: none; max-width: 260px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .source-chip:hover { background: #dbeafe; }
+
+    /* paper progress pill */
+    .paper-progress {
+      text-align: center; font-size: 0.8rem; color: #6b7280;
+      padding: 2px 0 6px 0;
+    }
+
     button.send-btn {
       background: #4f46e5; color: white; border: none;
       border-radius: 10px; padding: 0 20px; height: 44px;
@@ -289,6 +328,10 @@
     <label>API Key</label>
     <input id="input-api-key" type="password" placeholder="gsk_..." />
   </span>
+  <span>
+    <label>Tavily Key</label>
+    <input id="input-tavily-key" type="password" placeholder="tvly-..." style="width:220px;font-family:monospace;letter-spacing:0.03em" />
+  </span>
 </div>
 
 <div id="chat-area"></div>
@@ -304,6 +347,7 @@
       <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('learn')">📎</button>
       <input id="input-topic" placeholder="Enter a topic to learn (e.g. photosynthesis)" onkeydown="if(event.key==='Enter') startLearn()" />
       <button class="send-btn" id="btn-start" onclick="startLearn()">Start</button>
+      <button class="send-btn" id="btn-papers" onclick="startPapers()" style="background:#0891b2" title="Search past papers and generate questions">📄 Papers</button>
     </div>
   </div>
   <div id="answer-row" class="hidden">
@@ -339,6 +383,11 @@
   let provider = 'ollama';
   let wrongStreak = 0;
 
+  // past-papers quiz state
+  let paperMode = false;
+  let paperQuestions = [];
+  let paperIndex = 0;
+
   function setProvider(p) {
     provider = p;
     document.getElementById('btn-ollama').classList.toggle('active', p === 'ollama');
@@ -359,6 +408,7 @@
     clearChat();
     messages = [];
     wrongStreak = 0;
+    paperMode = false; paperQuestions = []; paperIndex = 0;
     clearAttachment();
     resetLearnUI();
   }
@@ -370,12 +420,14 @@
     document.getElementById('answer-row').classList.add('hidden');
     document.getElementById('input-topic').value = '';
     document.getElementById('input-answer').value = '';
-    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-start').disabled  = false;
+    document.getElementById('btn-papers').disabled = false;
   }
 
-  function model()  { return document.getElementById('input-model').value.trim() || 'gemma4'; }
-  function host()   { return document.getElementById('input-host').value.trim()  || 'http://localhost:11434'; }
-  function apiKey() { return document.getElementById('input-api-key').value.trim(); }
+  function model()      { return document.getElementById('input-model').value.trim() || 'gemma4'; }
+  function host()       { return document.getElementById('input-host').value.trim()  || 'http://localhost:11434'; }
+  function apiKey()     { return document.getElementById('input-api-key').value.trim(); }
+  function tavilyKey()  { return document.getElementById('input-tavily-key').value.trim(); }
 
   function basePayload() {
     return { provider, model: model(), host: host(), api_key: apiKey() };
@@ -465,8 +517,30 @@
     });
   }
 
+  /* ---- multiple-choice option helpers ---- */
+  const OPTION_RE = /^([A-D])\)\s+(.+)$/gm;
+
+  function extractOptions(text) {
+    const opts = [];
+    let m;
+    OPTION_RE.lastIndex = 0;
+    while ((m = OPTION_RE.exec(text)) !== null) opts.push({ letter: m[1], text: m[2].trim() });
+    return opts;
+  }
+
+  function stripOptions(text) {
+    return text.replace(/^[A-D]\)\s+.+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function selectOption(text, optRow) {
+    if (busy) return;
+    optRow.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+    document.getElementById('input-answer').value = text;
+    sendAnswer();
+  }
+
   /* ---- bubbles ---- */
-  function appendBubble(role, text, attach) {
+  function appendBubble(role, text, attach, onOptionSelect) {
     const area = document.getElementById('chat-area');
     const row  = document.createElement('div');
     row.className = `bubble-row ${role === 'tutor' ? 'tutor' : 'student'}`;
@@ -477,7 +551,10 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.innerHTML = marked.parse(text);
+
+    const options = role === 'tutor' ? extractOptions(text) : [];
+    const displayText = options.length > 0 ? stripOptions(text) : text;
+    bubble.innerHTML = marked.parse(displayText);
 
     if (attach) {
       if (attach.type === 'image') {
@@ -505,6 +582,22 @@
     });
     renderMermaidIn(bubble);
     renderGraphBlocksIn(bubble);
+
+    if (options.length > 0) {
+      const optRow = document.createElement('div');
+      optRow.className = 'options-row';
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = `${opt.letter}) ${opt.text}`;
+        btn.onclick = onOptionSelect
+          ? () => onOptionSelect(opt.letter, opt.text, optRow)
+          : () => selectOption(`${opt.letter}) ${opt.text}`, optRow);
+        optRow.appendChild(btn);
+      });
+      area.appendChild(optRow);
+    }
+
     area.scrollTop = area.scrollHeight;
   }
 
@@ -770,6 +863,203 @@
     row.appendChild(bubble);
     area.appendChild(row);
     area.scrollTop = area.scrollHeight;
+  }
+
+  /* ── past papers ─────────────────────────────────────────────────────── */
+
+  function parsePaperQuestions(raw) {
+    const questions = [];
+    const blocks = raw.split(/\n(?=Q\d+\.)/);
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+      const beforeOpts = block.split(/^A\)/m)[0];
+      const qText = beforeOpts.replace(/^Q\d+\.\s*/, '').trim();
+      if (!qText) continue;
+      const opts = [...block.matchAll(/^([A-D])\)\s*(.+)$/gm)];
+      if (opts.length < 2) continue;
+      const ansMatch = block.match(/\[ANSWER:\s*([A-D])\]/i);
+      if (!ansMatch) continue;
+      questions.push({
+        text: qText,
+        options: opts.map(m => ({ letter: m[1], text: m[2].trim() })),
+        answer: ansMatch[1].toUpperCase(),
+      });
+    }
+    return questions;
+  }
+
+  function showSources(sources) {
+    if (!sources || !sources.length) return;
+    const area = document.getElementById('chat-area');
+    const bar  = document.createElement('div');
+    bar.className = 'sources-bar';
+    sources.forEach(s => {
+      if (!s.url) return;
+      const a = document.createElement('a');
+      a.className = 'source-chip';
+      a.href = s.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = '🔗 ' + (s.title || s.url);
+      bar.appendChild(a);
+    });
+    area.appendChild(bar);
+    area.scrollTop = area.scrollHeight;
+  }
+
+  function showPaperProgress() {
+    const area = document.getElementById('chat-area');
+    const p = document.createElement('div');
+    p.className = 'paper-progress';
+    p.textContent = `Question ${paperIndex + 1} of ${paperQuestions.length}`;
+    area.appendChild(p);
+    area.scrollTop = area.scrollHeight;
+  }
+
+  function showPaperQuestion() {
+    if (paperIndex >= paperQuestions.length) {
+      appendDone();
+      document.getElementById('answer-row').classList.add('hidden');
+      return;
+    }
+    showPaperProgress();
+    const q = paperQuestions[paperIndex];
+    const text = q.text + '\n\n' + q.options.map(o => `${o.letter}) ${o.text}`).join('\n');
+    appendBubble('tutor', text, null, (letter, optText, optRow) =>
+      selectPaperOption(letter, optText, optRow, q)
+    );
+  }
+
+  async function selectPaperOption(letter, optText, optRow, q) {
+    if (busy) return;
+    busy = true;
+
+    // Colour the chosen button, disable all
+    optRow.querySelectorAll('.option-btn').forEach(btn => {
+      btn.disabled = true;
+      const btnLetter = btn.textContent.trim()[0];
+      if (btnLetter === letter)   btn.classList.add(letter === q.answer ? 'correct' : 'wrong');
+      if (btnLetter === q.answer && letter !== q.answer) btn.classList.add('correct');
+    });
+
+    appendBubble('student', `${letter}) ${optText}`);
+
+    if (letter === q.answer) {
+      wrongStreak = 0;
+      paperIndex++;
+      const msg = paperIndex < paperQuestions.length ? 'Correct! Here is the next one.' : 'Correct!';
+      appendBubble('tutor', msg);
+      busy = false;
+      showPaperQuestion();
+    } else {
+      wrongStreak++;
+      appendThinking();
+      try {
+        const res  = await fetch('/api/papers/hint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question:     q.text,
+            options:      q.options,
+            chosen:       letter,
+            correct:      q.answer,
+            wrong_streak: wrongStreak,
+            ...basePayload(),
+          }),
+        });
+        let data;
+        try { data = await res.json(); }
+        catch { data = { error: `Server error (HTTP ${res.status})` }; }
+        removeThinking();
+        appendBubble('tutor', data.response || data.error);
+      } catch (e) {
+        removeThinking();
+        appendBubble('tutor', `Error: ${e.message}`);
+      }
+
+      if (wrongStreak >= 3) {
+        // Move on after 3 wrong answers
+        paperIndex++;
+        busy = false;
+        showPaperQuestion();
+      } else {
+        // Re-show the same question with fresh buttons
+        busy = false;
+        const text = q.text + '\n\n' + q.options.map(o => `${o.letter}) ${o.text}`).join('\n');
+        appendBubble('tutor', text, null, (l, t, row) => selectPaperOption(l, t, row, q));
+      }
+    }
+  }
+
+  async function startPapers() {
+    const topic     = document.getElementById('input-topic').value.trim();
+    const tvlyKey   = tavilyKey();
+    if (!topic || busy) return;
+    if (!tvlyKey) { alert('Enter a Tavily API key in the settings bar to search past papers.'); return; }
+
+    busy = true;
+    paperMode = true;
+    wrongStreak = 0;
+    paperQuestions = [];
+    paperIndex = 0;
+
+    document.getElementById('btn-papers').disabled = true;
+    document.getElementById('btn-start').disabled  = true;
+    document.getElementById('topic-row').classList.add('hidden');
+    clearChat();
+
+    appendThinking();
+    try {
+      const res  = await fetch('/api/papers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          tavily_key:  tvlyKey,
+          n_questions: 5,
+          ...basePayload(),
+        }),
+      });
+      let data;
+      try { data = await res.json(); }
+      catch { data = { error: `Server error (HTTP ${res.status}) — check the Flask console` }; }
+      removeThinking();
+
+      if (data.error) {
+        appendBubble('tutor', `Could not fetch papers: ${data.error}`);
+        document.getElementById('topic-row').classList.remove('hidden');
+        document.getElementById('btn-start').disabled  = false;
+        document.getElementById('btn-papers').disabled = false;
+        busy = false;
+        paperMode = false;
+        return;
+      }
+
+      showSources(data.sources);
+      paperQuestions = parsePaperQuestions(data.questions);
+
+      if (!paperQuestions.length) {
+        appendBubble('tutor', 'Could not parse questions from the search results. Try a different topic.');
+        document.getElementById('topic-row').classList.remove('hidden');
+        document.getElementById('btn-start').disabled  = false;
+        document.getElementById('btn-papers').disabled = false;
+        busy = false;
+        paperMode = false;
+        return;
+      }
+
+      busy = false;
+      showPaperQuestion();
+
+    } catch (e) {
+      removeThinking();
+      appendBubble('tutor', `Error: ${e.message}`);
+      document.getElementById('topic-row').classList.remove('hidden');
+      document.getElementById('btn-start').disabled  = false;
+      document.getElementById('btn-papers').disabled = false;
+      busy = false;
+      paperMode = false;
+    }
   }
 </script>
 </body>
