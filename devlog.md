@@ -158,3 +158,75 @@
 2. Server-side session state + prompt caching. `/api/reply` resends the whole history every turn, so input tokens grow quadratically across a session — plausibly a 2–5× cost reduction before any hardware decision
 3. Auth: the API key currently lives in the browser, which inverts the intended model. Schools paying for their students requires domain-verified SSO and per-tenant quotas
 4. Then Phase C (LoRA fine-tune), Phase 7 (video), and the `--image` CLI flag
+
+## Session 4 — 2026-07-30
+
+Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons) from the private repo. Everything below is on top of that.
+
+### API keys in `.env`
+- Keys were typed into the browser every session and lived nowhere else. `.env` was already in `.gitignore` but nothing read it
+- `load_dotenv()` at import; `_key(data, field, env_var)` resolves a key as *UI value wins, `.env` is the fallback*. Wired into all six `api_key` sites and the one `tavily_key` site
+- `.env.example` added as the committed template. `python-dotenv` added to `requirements.txt` explicitly — it was already installed, but only as a transitive chromadb dependency, which would break silently if chromadb ever dropped it
+- Deliberately a fallback, not a replacement: the UI field still overrides, so a second key can be used without editing files
+
+### `keycheck.py` — key status at launch
+- Both `start.sh` and `start.bat` now print which keys `.env` provides before anything starts
+- Written once in Python rather than twice in bash + batch: parsing `.env` in batch is genuinely unreliable (undefined `for` tokens expand to literals, CRLF leaves a stray `\r` inside the value). Python is already a hard requirement of both scripts
+- No heavy imports (no chromadb) so it stays instant; ASCII-only output so it doesn't throw on a cp437 Windows console
+- Values masked to the last 4 characters — `start.sh` output sits in scrollback, and last-4 is enough to confirm *which* key loaded
+- `start.sh` calls it after `$PYTHON` is resolved so it uses the venv; `start.bat` uses `"%~dp0keycheck.py"` so it works from any working directory
+
+### Multiple-choice options made optional
+- The frontend was already conditional (`if (options.length > 0)`); the mandate was entirely in the prompt — *"Each response must follow this exact structure … exactly 4 multiple-choice options"*
+- Rewritten around the **shape of the answer**, not the tutor's judgement. Offer options when the answer is one of a few named things, or the student has been wrong twice on the same idea, or they are too new to the topic to have the words. Do NOT offer them for explain-in-your-own-words, "what do you notice", a calculated number or derived expression, a multi-step method, or a plain affirmation
+- The calculation case matters most: four options let a student backsolve by elimination instead of doing the working, which trains the wrong skill for A-level
+- Relaxed *exactly 4* → **2 to 4**, so binary judgements get two buttons instead of two padded distractors
+- `extractOptions` now requires **≥ 2** matches. Once options are optional, a lone `A) …` line is far more likely to be prose than a choice set — same floor the past-papers parser already used
+- Ordering constraint found while doing this: `_SIGNAL_RE` is anchored to end-of-string, so options must sit *before* any `[CORRECT]`/`[WRONG]` marker. The prompt now says so explicitly, otherwise answer tracking breaks silently
+
+### Bug: `[WAITING FOR RESPONSE]` leaking into the UI
+- Two causes compounding. `/api/reply` injects `[Tutor note: ...]` into the *user* message, and the reworked prompt put "stop and wait for their answer" next to the `[CORRECT]`/`[WRONG]` instruction. The model generalised the bracket convention and invented its own marker
+- `_strip_signal` only matched `[CORRECT]`/`[WRONG]` anchored at end-of-string, so a mid-response marker sailed through to the bubble
+- Fixed twice over: `_STRAY_MARKER_RE` drops any all-caps bracket marker on its own line (whatever the model invents), and the prompt names the two permitted markers and bans inventing others
+- Anchored per-line so it cannot eat interval notation like `[0, 5]` or an inline `[SI]` — both covered by the test cases
+- Regression was self-inflicted, and shipped because the previous prompt change was verified only structurally, never against real model output. Prompt changes need a live turn
+
+### Bug: the tutor ignored direct requests
+- Screenshot showed a student asking three times for downloadable papers ("PLEASE FOR GOODNESS SAKE") and getting Socratic questions plus option buttons every time
+- `"never give the full answer unprompted"` made every input a lesson turn, including meta-requests that were not about the subject at all
+- Prompt now answers out-of-lesson requests plainly in 1–2 sentences, never attaches options to them, states honestly that PDFs are not possible, and repeats the plain answer if asked again rather than steering back into the lesson
+- Verified live against `llama-3.3-70b-versatile`, replaying the exact three messages: refuses plainly on both attempts, no invented marker, no options on the meta-turns
+
+### What the Tavily key actually does (investigated, not changed)
+- One call to `https://api.tavily.com/search` with `include_domains` restricted to 10 revision sites. Tavily returns a text **snippet** per result in `content`
+- `/api/papers` uses only those snippets, capped at 7000 chars, and asks the model to **write new questions** from them
+- So the questions students answer are LLM-generated, *not* real past-paper questions — they will not match a real mark scheme, and the answer key is whatever the model asserted. That is a bigger accuracy risk than the missing PDF feature
+- No PDF is fetched, stored or served anywhere. The only thing reaching the user is the source URL list rendered as link chips
+- Upgrade path if real papers are wanted: `include_raw_content: true` for fuller text (one line), or filter results to `.pdf` URLs and fetch them directly — `pypdf` is already a dependency, so actual questions could be extracted verbatim instead of invented
+
+### Key exposure — third incident
+- Both a live Groq key and a live Tavily key were written into `.env.example`, which is **not** gitignored (only `.env` is). Caught before any commit
+- Scrubbed back to blanks, real values moved into `.env`, and `.env.example` now carries a header saying it is committed and must never hold a real key
+- Full-history scan clean: `git log --all -p` for `gsk_`/`tvly-` + 20 chars finds nothing. The 4 apparent hits are the `placeholder="gsk_..."` attributes in `index.html`
+- Both keys are burned regardless — they were on disk in a tracked-file location, in editor undo history, and in a chat transcript. "Never committed" is not "never exposed"
+- Pattern worth naming: Session 2 was a key pasted into chat, Session 3 was a key written into `.gitignore`, this is a key written into `.env.example`. Two of three landed in a file git tracks. `.env` + `keycheck.py` give the keys a correct home now, but nothing *stops* a paste into the wrong file — a `pre-commit` hook rejecting `gsk_[A-Za-z0-9]{20,}` / `tvly-[A-Za-z0-9_-]{20,}` in a staged diff would
+
+### Current state
+- Past-papers mode works but generates questions rather than serving papers. Options are now optional across the tutor; past-papers MCQs stay mandatory, which is correct for that mode
+- Keys can live in `.env` and are reported (masked) at launch on both platforms
+- Groq path exercised live this session for the first time in a while — the tutor prompt changes were verified against `llama-3.3-70b-versatile`, not just structurally
+
+### Known issues / caveats
+- **Both keys still need rotating.** The Groq key in particular: the live test this session succeeded, which proves it has *not* been revoked. Revoke at console.groq.com and app.tavily.com
+- The Session 3 note about the Groq key needing rotation was never actioned — worth checking whether the key exposed this session is the same one
+- Past-paper questions are invented by the model from search snippets. No mark-scheme fidelity, and the `[ANSWER: X]` key is the model's own claim
+- No downloadable PDFs. The tutor now says so honestly instead of deflecting, but the feature does not exist
+- Options behaviour was verified on three meta-turns and by unit-testing the parser; the *conditions* (whether it correctly withholds options on a calculation question mid-lesson) have not been exercised over a long real lesson
+- A broken-image placeholder appeared in the UI above a student bubble in this session's screenshot — a failed attachment preview, uninvestigated
+- Everything from Session 3's caveat list that was not touched here still stands
+
+### Next
+1. Rotate both keys, then add the `pre-commit` secret hook so incident #4 is impossible rather than merely unlikely
+2. Decide what past-papers mode should be: honest practice-question generator (rename it) or real paper retrieval (`include_raw_content`, then `.pdf` fetch + `pypdf` extraction). Right now the name promises the second and delivers the first
+3. Phase B — session logging, still the bottleneck for the fine-tuning dataset, metering, and auth
+4. Server-side session state + prompt caching; `/api/reply` still resends full history every turn

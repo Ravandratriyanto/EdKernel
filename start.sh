@@ -64,6 +64,10 @@ else
     echo "No .venv found — using $PYTHON"
 fi
 
+echo
+"$PYTHON" keycheck.py
+echo
+
 if port_open "$FLASK_PORT"; then
     echo "Port $FLASK_PORT is already in use — is the app already running?" >&2
     exit 1

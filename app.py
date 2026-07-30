@@ -1,4 +1,5 @@
 import io
+import os
 import re
 import base64
 import requests
@@ -6,15 +7,29 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory
 from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
 
+load_dotenv()
+
 _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
 
+# Models mimic the bracket convention they see — the [CORRECT]/[WRONG] signal and
+# the [Tutor note: ...] lines we inject — and invent markers of their own, e.g.
+# [WAITING FOR RESPONSE]. Anchored to a whole line so it can't eat interval
+# notation like [0, 5] or a citation mid-sentence.
+_STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', re.MULTILINE)
+
 app = Flask(__name__, static_folder="static")
+
+
+def _key(data: dict, field: str, env_var: str) -> str:
+    """A key typed into the UI wins; otherwise fall back to the one in .env."""
+    return (data.get(field) or "").strip() or os.environ.get(env_var, "").strip()
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a Socratic SAT/A-level tutor. Your job is to guide the student to discover answers themselves — never lecture or dump information. "
@@ -23,15 +38,31 @@ TUTOR_SYSTEM_PROMPT = (
     "One idea per sentence. No filler, no throat-clearing, no phrases like 'let us consider' or 'it is important to note'. "
     "You may use a subject term (like 'mitochondria' or 'derivative') when it is the thing being taught — but the first time it appears, "
     "immediately explain what it means in plain words. Assume English may be the student's second language. "
-    "Each response must follow this exact structure:\n"
-    "1. One short hint or question (1-2 sentences max) that nudges the student toward the next idea.\n"
-    "2. Immediately after the question, provide exactly 4 multiple-choice options on separate lines using this exact format:\n"
+    "Every response is one short hint or question (1-2 sentences max) that nudges the student toward the next idea. "
+    "End there — do not answer your own question, and do not announce that you are waiting.\n"
+    "The ONLY bracketed markers you may ever write are [CORRECT] and [WRONG]. Never invent others such as "
+    "[WAITING FOR RESPONSE] or [PAUSE] — they are shown to the student as raw text and look broken.\n"
+    "If the student asks for something that is not the lesson — a file, a download, a past paper, or a question about "
+    "what this app can do — answer plainly in one or two sentences and say honestly if you cannot do it. Never reply to "
+    "that kind of request with a Socratic question, and never attach options to it. Specifically: you cannot fetch, "
+    "attach, or produce PDF files. Past papers are a separate feature the student starts from the past-papers control, "
+    "and it generates practice questions rather than handing over the original paper. If they ask again after you have "
+    "said you cannot, say so once more in plain words — do not steer them back into the lesson as if they had not asked.\n"
+    "Multiple-choice options are OPTIONAL. Most turns should not have them. Offer them only when the answer really is "
+    "a pick-one-of-a-few, or when the student is stuck and needs the field narrowed:\n"
+    "- Offer options when: the answer is one of a few named things (which term, which rule applies, which step comes next, "
+    "which line of the working is wrong); or the student has just been wrong twice in a row on the same idea; "
+    "or they are brand new to the topic and do not yet have the words to answer freely.\n"
+    "- Do NOT offer options when: you are asking them to explain something in their own words; asking what they notice; "
+    "asking them to calculate a number or derive an expression (options let them work backwards from the answers instead of "
+    "doing the maths); asking for a method with several steps; or you are just affirming a correct answer and moving on.\n"
+    "When you do offer options, give 2 to 4 of them, each on its own line, at the end of your response but BEFORE any "
+    "[CORRECT] or [WRONG] marker, in this exact format:\n"
     "A) option text\n"
     "B) option text\n"
-    "C) option text\n"
-    "D) option text\n"
-    "Make one option correct and the others plausible but wrong. Do not label or hint which is correct.\n"
-    "3. Wait for their answer before revealing anything else.\n"
+    "Make one correct and the rest plausible but wrong. Do not label or hint which is correct. "
+    "Never use this 'A)' line format for anything else — not for listing points, steps, or examples. Those lines render as "
+    "clickable buttons, so a line starting with 'A)' that is not an answer choice will break the interface.\n"
     "Never explain more than one idea per turn. Never give the full answer unprompted. "
     "When the student answers incorrectly, escalate your hints based on how many times they have been wrong in a row:\n"
     "- Wrong once: subtle nudge only, stay indirect.\n"
@@ -95,7 +126,7 @@ def api_graph():
     provider    = data.get("provider", "ollama")
     model       = data.get("model", "gemma4")
     host        = data.get("host", "http://localhost:11434")
-    api_key     = data.get("api_key", "")
+    api_key     = _key(data, "api_key", "API_KEY")
 
     if not description:
         return jsonify({"error": "No description provided"}), 400
@@ -134,7 +165,7 @@ def api_start():
     provider   = data.get("provider", "ollama")
     model      = data.get("model", "gemma4")
     host       = data.get("host", "http://localhost:11434")
-    api_key      = data.get("api_key", "")
+    api_key      = _key(data, "api_key", "API_KEY")
     attachment   = data.get("attachment")
     vision_model = data.get("vision_model", "")
 
@@ -161,7 +192,7 @@ def api_reply():
     provider     = data.get("provider", "ollama")
     model        = data.get("model", "gemma4")
     host         = data.get("host", "http://localhost:11434")
-    api_key      = data.get("api_key", "")
+    api_key      = _key(data, "api_key", "API_KEY")
     attachment   = data.get("attachment")
     vision_model = data.get("vision_model", "")
     wrong_streak = int(data.get("wrong_streak", 0))
@@ -200,7 +231,7 @@ def api_check():
     provider   = data.get("provider", "ollama")
     model      = data.get("model", "gemma4")
     host       = data.get("host", "http://localhost:11434")
-    api_key      = data.get("api_key", "")
+    api_key      = _key(data, "api_key", "API_KEY")
     attachment   = data.get("attachment")
     vision_model = data.get("vision_model", "")
 
@@ -270,9 +301,12 @@ def _strip_images(messages: list) -> list:
 
 def _strip_signal(text: str) -> tuple:
     m = _SIGNAL_RE.search(text)
-    if not m:
-        return text.strip(), None
-    return text[:m.start()].strip(), m.group(1).upper() == "CORRECT"
+    if m:
+        clean, correct = text[:m.start()], m.group(1).upper() == "CORRECT"
+    else:
+        clean, correct = text, None
+    clean = _STRAY_MARKER_RE.sub('', clean)
+    return re.sub(r'\n{3,}', '\n\n', clean).strip(), correct
 
 # ── past papers ─────────────────────────────────────────────────────────────
 
@@ -314,12 +348,12 @@ PAPER_GEN_PROMPT = (
 def api_papers():
     data        = request.json
     topic       = data.get("topic", "")
-    tavily_key  = data.get("tavily_key", "")
+    tavily_key  = _key(data, "tavily_key", "TAVILY_KEY")
     n_questions = int(data.get("n_questions", 5))
     provider    = data.get("provider", "ollama")
     model_name  = data.get("model", "gemma4")
     host        = data.get("host", "http://localhost:11434")
-    api_key     = data.get("api_key", "")
+    api_key     = _key(data, "api_key", "API_KEY")
 
     if not topic:
         return jsonify({"error": "No topic provided"}), 400
@@ -373,7 +407,7 @@ def api_papers_hint():
     provider     = data.get("provider", "ollama")
     model_name   = data.get("model", "gemma4")
     host         = data.get("host", "http://localhost:11434")
-    api_key      = data.get("api_key", "")
+    api_key      = _key(data, "api_key", "API_KEY")
 
     opts_text = "\n".join(f"{o['letter']}) {o['text']}" for o in options)
     if wrong_streak == 1:

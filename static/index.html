@@ -520,12 +520,15 @@
   /* ---- multiple-choice option helpers ---- */
   const OPTION_RE = /^([A-D])\)\s+(.+)$/gm;
 
+  /* Options are optional now, so a single stray "A) ..." line is far more likely
+     to be prose than a choice set. Two is the smallest real set (a yes/no pick),
+     which is the same floor the past-papers parser uses. */
   function extractOptions(text) {
     const opts = [];
     let m;
     OPTION_RE.lastIndex = 0;
     while ((m = OPTION_RE.exec(text)) !== null) opts.push({ letter: m[1], text: m[2].trim() });
-    return opts;
+    return opts.length >= 2 ? opts : [];
   }
 
   function stripOptions(text) {
