@@ -211,26 +211,6 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 - Both keys are burned regardless — they were on disk in a tracked-file location, in editor undo history, and in a chat transcript. "Never committed" is not "never exposed"
 - Pattern worth naming: Session 2 was a key pasted into chat, Session 3 was a key written into `.gitignore`, this is a key written into `.env.example`. Two of three landed in a file git tracks. `.env` + `keycheck.py` give the keys a correct home now, but nothing *stops* a paste into the wrong file — a `pre-commit` hook rejecting `gsk_[A-Za-z0-9]{20,}` / `tvly-[A-Za-z0-9_-]{20,}` in a staged diff would
 
-### Current state
-- Past-papers mode works but generates questions rather than serving papers. Options are now optional across the tutor; past-papers MCQs stay mandatory, which is correct for that mode
-- Keys can live in `.env` and are reported (masked) at launch on both platforms
-- Groq path exercised live this session for the first time in a while — the tutor prompt changes were verified against `llama-3.3-70b-versatile`, not just structurally
-
-### Known issues / caveats
-- **Both keys still need rotating.** The Groq key in particular: the live test this session succeeded, which proves it has *not* been revoked. Revoke at console.groq.com and app.tavily.com
-- The Session 3 note about the Groq key needing rotation was never actioned — worth checking whether the key exposed this session is the same one
-- Past-paper questions are invented by the model from search snippets. No mark-scheme fidelity, and the `[ANSWER: X]` key is the model's own claim
-- No downloadable PDFs. The tutor now says so honestly instead of deflecting, but the feature does not exist
-- Options behaviour was verified on three meta-turns and by unit-testing the parser; the *conditions* (whether it correctly withholds options on a calculation question mid-lesson) have not been exercised over a long real lesson
-- A broken-image placeholder appeared in the UI above a student bubble in this session's screenshot — a failed attachment preview, uninvestigated
-- Everything from Session 3's caveat list that was not touched here still stands
-
-### Next
-1. Rotate both keys, then add the `pre-commit` secret hook so incident #4 is impossible rather than merely unlikely
-2. Decide what past-papers mode should be: honest practice-question generator (rename it) or real paper retrieval (`include_raw_content`, then `.pdf` fetch + `pypdf` extraction). Right now the name promises the second and delivers the first
-3. Phase B — session logging, still the bottleneck for the fine-tuning dataset, metering, and auth
-4. Server-side session state + prompt caching; `/api/reply` still resends full history every turn
-
 ### Phase 6 complete — `--image` in the CLI
 - `--text` and `--image` are now a `add_mutually_exclusive_group(required=True)`, so exactly one must be given and argparse produces both error messages for free
 - `question_from_image()` reads the file, base64-encodes it, and calls the existing `transcribe()`. `main()` resolves `question` once and everything downstream is untouched — the readme said "no new logic needed here" and that held
@@ -294,3 +274,29 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 
 ### CLAUDE.md
 - Added, covering how to work here: ask before writing code that might be typed by hand, explain unfamiliar Python syntax, verify against live output rather than structurally, keys in `.env` only, and the recurring gotchas (`<think>` leakage, `pypdf` mangling notation, `_SIGNAL_RE` anchoring)
+
+### Current state
+- **Phase 6 complete**, in both front ends. Images work in the web app and in the CLI via `--image`, on Ollama and Groq. The readme box is ticked; Phase 7 (video) is the next unbuilt phase
+- **Past papers are real papers now.** They are searched, downloaded, cached and served as actual PDF downloads, and questions are generated from the paper's own text rather than from search snippets. Snippet generation survives only as the fallback when a topic yields no usable PDF
+- Answer keys are re-solved before the student sees them; anything the check disagrees with is dropped
+- Papers can be asked for **in conversation** — "just give me the papers" fetches them without disturbing the lesson. The 📄 button still starts a full quiz
+- Keys live in `.env`, are reported masked at launch on both platforms, and `hooks/pre-commit` refuses commits containing them. Both keys were rotated this session
+- The Groq path is properly exercised now: the tutor prompt, the vision transcription, the paper generation and the answer check were all run against `llama-3.3-70b-versatile` rather than checked structurally
+
+### Known issues / caveats
+- **`pypdf` mangles notation.** `g(x)` extracted as `gx^h` in a question that was otherwise correct and correctly keyed. Parentheses and ligatures are lost. A cleanup pass over extracted text before it reaches the generator is the obvious next fix, and it is the most visible quality problem left in past-papers mode
+- **Scanned papers are downloadable but unreadable.** `_question_pages` reports `scanned` and the UI flags it, but nothing transcribes them. The vision path now works and could be pointed at rasterised pages — needs `pymupdf` or `pdf2image`, neither currently a dependency
+- Answer verification is one extra model call per search and catches disagreement, not shared error. Two wrong solves that agree still pass. It fixed the observed 2-in-3 failure rate, which is not the same as making the keys trustworthy
+- Search quality is mixed: a "quadratic equations" search returned an "Alignment to Texas Standards" document alongside genuine papers. Tavily has no notion of what an exam paper is beyond the domain filter
+- The two `TUTOR_SYSTEM_PROMPT`s have drifted apart again — `main.py`'s has no options, no `[CORRECT]`/`[WRONG]` and no escalating hints, so the CLI tutor behaves like a different product from the web one. Third time this has happened; they want to be one shared constant
+- Intent detection is keyword-based and will miss phrasings the patterns do not cover. It was tuned against real failures rather than guesses, but it is a heuristic
+- Option *conditions* still have not been exercised over a long real lesson — whether the tutor correctly withholds options on a calculation question mid-lesson is unverified
+- The broken-image placeholder seen in this session's screenshot was never investigated
+- `data/papers/` grows without bound; nothing prunes the cache (13MB after a handful of searches)
+
+### Next
+1. **Phase B — session logging.** Flagged for three sessions running and still the bottleneck for three things at once: the Phase C fine-tuning dataset, per-student metering, and the auth model the school-subscription plan needs. Every unlogged lesson is data that cannot be recovered later
+2. Unify the two tutor prompts into one shared constant before they drift a fourth time
+3. Clean up extracted PDF text so notation survives, then consider vision transcription for scans
+4. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn
+5. Then Phase 7 (video) and Phase C (LoRA fine-tune)
