@@ -269,3 +269,14 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 - A tutor that marks a correct student wrong is worse than no feature. Grounding in real papers improved the *questions* but did nothing for the *keys*, because the key is still the model asserting an answer rather than solving one
 - Two ways out, neither implemented: a verification pass that re-solves each question and drops any where the solve disagrees with the key (doubles token cost, catches both failures above), or extracting real questions verbatim alongside the real mark scheme and stopping generation altogether
 - Until one of those lands, past-papers mode should be treated as practice-shaped, not authoritative
+
+### Answer-key verification pass
+- After generation, `_parse_questions()` reads the questions server-side, `_verify_questions()` re-solves them, and any question whose key the solve disagrees with is dropped before the browser ever sees it
+- **The checker never sees the `[ANSWER: X]` lines.** Sent the key it is meant to test, a model simply agrees with it; stripping the key is the entire reason this works
+- One batched call rather than one per question — same signal for a fraction of the cost. The prompt asks for brief working before a `FINAL` block of `Q1: B` lines, since reasoning materially improves arithmetic accuracy. `X` is allowed as a verdict for questions where no option is correct
+- Generation now overshoots by `VERIFY_OVERSHOOT` (3) so the student still gets the number they asked for after drops
+- Both failure modes fail open, not closed: an unparseable reply or a raised exception keeps the unverified questions rather than returning an empty quiz. A missing verdict for one question keeps that question — absence of evidence is not a wrong answer, and dropping questions on a formatting wobble is worse than the thing being fixed
+- `_format_questions()` rebuilds the wire format so the frontend parser is untouched; verified by round-tripping parse → format → parse to an identical structure
+- Live result on the same topic that previously produced 2 wrong keys out of 3: **2 questions dropped, and all 3 survivors independently check out** (`x+300` at 81 = 381 ✓, intersection of `x=5` and `y=4x-2` = (5,18) ✓, `xy+81=170` at `y=6` → `89/6` ✓). The UI now says how many were discarded
+- Cost: one extra call per search, on top of one generation call. Cheap next to serving a student a wrong mark scheme
+- Still open: PDF text extraction mangles notation — one surviving question renders `g(x)` as `gx^h`, because parentheses and ligatures are lost on extraction. The maths is right and the key is right, but it reads badly. Worth a cleanup pass over extracted text before it reaches the generator

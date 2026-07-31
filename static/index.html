@@ -907,7 +907,7 @@
     return questions;
   }
 
-  function showPapers(papers, grounded) {
+  function showPapers(papers, grounded, dropped) {
     const area = document.getElementById('chat-area');
 
     if (papers && papers.length) {
@@ -937,6 +937,9 @@
     note.textContent = grounded
       ? 'Questions generated from the text of the papers above.'
       : 'No downloadable paper found — questions generated from search results, so they are practice questions rather than real exam questions.';
+    if (dropped > 0) {
+      note.textContent += ` ${dropped} more ${dropped === 1 ? 'was' : 'were'} discarded for having a wrong answer key.`;
+    }
     area.appendChild(note);
     area.scrollTop = area.scrollHeight;
   }
@@ -1088,7 +1091,7 @@
         return;
       }
 
-      showPapers(data.papers, data.grounded);
+      showPapers(data.papers, data.grounded, data.dropped);
       showSources(data.sources);
       paperQuestions = parsePaperQuestions(data.questions);
 

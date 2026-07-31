@@ -101,6 +101,7 @@ PDF_TEXT_LIMIT  = 8000
 PAPER_CACHE_DIR = Path(__file__).parent / "data" / "papers"
 PAPER_MAX_BYTES = 20 * 1024 * 1024   # a scanned A-level paper can be big; 20MB is plenty
 PAPER_MAX_FETCH = 3                  # per search, to keep the request from crawling
+VERIFY_OVERSHOOT = 3                 # spare questions, since the answer check drops some
 _PAPER_ID_RE    = re.compile(r'^[0-9a-f]{16}$')
 
 
@@ -484,6 +485,93 @@ def api_paper_download(paper_id: str):
                      mimetype="application/pdf")
 
 
+VERIFY_PROMPT = (
+    "You are checking the answer key of a multiple-choice exam paper.\n"
+    "Solve every question below from scratch and decide the correct option yourself. "
+    "Work through the reasoning briefly for each one — do not guess from how the options look.\n"
+    "If a question is unanswerable, contradictory, or no option is correct, answer X for it.\n\n"
+    "After your working, end your reply with a final block in exactly this format and nothing after it:\n"
+    "FINAL\n"
+    "Q1: B\n"
+    "Q2: D\n\n"
+    "Questions:\n{questions}"
+)
+
+_Q_BLOCK_RE  = re.compile(r'\n(?=Q\d+\.)')
+_Q_OPTION_RE = re.compile(r'^([A-D])\)\s*(.+)$', re.MULTILINE)
+_Q_ANSWER_RE = re.compile(r'\[ANSWER:\s*([A-D])\]', re.IGNORECASE)
+_VERDICT_RE  = re.compile(r'^Q(\d+)\s*:\s*([A-DX])\s*$', re.MULTILINE | re.IGNORECASE)
+
+
+def _parse_questions(raw: str) -> list[dict]:
+    """Pull Q/options/key out of the generator's output.
+
+    Mirrors parsePaperQuestions() in the frontend — the same shape has to be
+    understood here so the key can be checked before the browser ever sees it.
+    """
+    questions = []
+    for block in _Q_BLOCK_RE.split(raw or ""):
+        if not block.strip():
+            continue
+        options = _Q_OPTION_RE.findall(block)
+        answer  = _Q_ANSWER_RE.search(block)
+        if len(options) < 2 or not answer:
+            continue
+        text = _Q_OPTION_RE.split(block)[0]
+        text = re.sub(r'^Q\d+\.\s*', '', text).strip()
+        if text:
+            questions.append({"text": text, "options": options,
+                              "answer": answer.group(1).upper()})
+    return questions
+
+
+def _format_questions(questions: list[dict]) -> str:
+    """Rebuild the generator's wire format so the frontend parser is unchanged."""
+    out = []
+    for i, q in enumerate(questions, 1):
+        lines = [f"Q{i}. {q['text']}"]
+        lines += [f"{letter}) {body}" for letter, body in q["options"]]
+        lines.append(f"[ANSWER: {q['answer']}]")
+        out.append("\n".join(lines))
+    return "\n\n".join(out)
+
+
+def _verify_questions(questions: list[dict], **llm) -> tuple[list[dict], int]:
+    """Re-solve each question and drop any whose key the solve disagrees with.
+
+    One batched call rather than one per question — same signal, a fraction of
+    the cost. The questions are sent WITHOUT their [ANSWER: X] lines so the
+    checker cannot simply agree with the key it was meant to test.
+    """
+    if not questions:
+        return questions, 0
+
+    asked = "\n\n".join(
+        "\n".join([f"Q{i}. {q['text']}"]
+                  + [f"{letter}) {body}" for letter, body in q["options"]])
+        for i, q in enumerate(questions, 1)
+    )
+
+    try:
+        reply = chat([{"role": "user", "content": VERIFY_PROMPT.format(questions=asked)}], **llm)
+    except Exception:
+        # A failed check must not cost the student their questions; fall back to
+        # the unverified set rather than returning nothing.
+        return questions, 0
+
+    tail = reply.rsplit("FINAL", 1)[-1]
+    verdicts = {int(n): letter.upper() for n, letter in _VERDICT_RE.findall(tail)}
+
+    kept = []
+    for i, q in enumerate(questions, 1):
+        verdict = verdicts.get(i)
+        # No verdict parsed → keep it. Absence of evidence isn't a wrong answer,
+        # and silently dropping questions on a formatting wobble is worse.
+        if verdict is None or verdict == q["answer"]:
+            kept.append(q)
+    return kept, len(questions) - len(kept)
+
+
 @app.route("/api/papers", methods=["POST"])
 def api_papers():
     data        = request.json
@@ -565,7 +653,9 @@ def api_papers():
 
     sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results[:5]]
 
-    prompt = PAPER_GEN_PROMPT.format(n=n_questions, content=combined)
+    # Over-generate, because verification drops whatever it cannot confirm and
+    # the student should still end up with the number they asked for.
+    prompt = PAPER_GEN_PROMPT.format(n=n_questions + VERIFY_OVERSHOOT, content=combined)
     try:
         raw = chat(
             [{"role": "user", "content": prompt}],
@@ -574,13 +664,24 @@ def api_papers():
     except Exception as e:
         return jsonify({"error": f"Question generation failed: {e}"}), 500
 
+    llm_kwargs = {"model": model_name, "host": host,
+                  "provider": provider, "api_key": api_key}
+    questions = _parse_questions(raw)
+    verified, dropped = _verify_questions(questions, **llm_kwargs)
+    verified = verified[:n_questions]
+
+    if not verified:
+        return jsonify({"error": "Generated questions all failed the answer check. "
+                                 "Try a more specific topic."}), 502
+
     return jsonify({
-        "questions": raw,
+        "questions": _format_questions(verified),
         "sources": sources,
         "papers": papers,
         # Lets the UI say where the questions came from, instead of implying
         # they are straight off a real paper when they came from snippets.
         "grounded": bool(paper_texts),
+        "dropped": dropped,
     })
 
 
