@@ -285,6 +285,22 @@
     }
     .source-chip:hover { background: #dbeafe; }
 
+    /* downloadable past papers — greener and heavier than a plain source link,
+       since this is a real file rather than a page to read */
+    .paper-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #ecfdf5; border: 1px solid #6ee7b7;
+      border-radius: 20px; padding: 4px 11px;
+      font-size: 0.78rem; color: #065f46; font-weight: 500;
+      text-decoration: none; max-width: 300px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .paper-chip:hover { background: #d1fae5; }
+    .paper-chip.scanned { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+    .grounding-note {
+      padding: 2px 0 4px 42px; font-size: 0.72rem; color: #6b7280;
+    }
+
     /* paper progress pill */
     .paper-progress {
       text-align: center; font-size: 0.8rem; color: #6b7280;
@@ -891,6 +907,40 @@
     return questions;
   }
 
+  function showPapers(papers, grounded) {
+    const area = document.getElementById('chat-area');
+
+    if (papers && papers.length) {
+      const bar = document.createElement('div');
+      bar.className = 'sources-bar';
+      papers.forEach(p => {
+        const unusable = p.scanned || p.no_questions;
+        const a = document.createElement('a');
+        a.className = 'paper-chip' + (unusable ? ' scanned' : '');
+        a.href = p.download;
+        a.setAttribute('download', '');
+        a.textContent = (unusable ? '⚠ ' : '⬇ ') + (p.title || 'Past paper');
+        a.title = p.scanned
+          ? `${p.url}\n\nScanned paper — downloadable, but it has no text layer, so the questions below are not based on it.`
+          : p.no_questions
+          ? `${p.url}\n\nDownloadable, but no exam questions were found in it, so the questions below are not based on it.`
+          : `${p.url}\n\nClick to download`;
+        bar.appendChild(a);
+      });
+      area.appendChild(bar);
+    }
+
+    // Be explicit about provenance: "past papers" must not imply these are the
+    // real questions when they were generated from search snippets.
+    const note = document.createElement('div');
+    note.className = 'grounding-note';
+    note.textContent = grounded
+      ? 'Questions generated from the text of the papers above.'
+      : 'No downloadable paper found — questions generated from search results, so they are practice questions rather than real exam questions.';
+    area.appendChild(note);
+    area.scrollTop = area.scrollHeight;
+  }
+
   function showSources(sources) {
     if (!sources || !sources.length) return;
     const area = document.getElementById('chat-area');
@@ -1038,6 +1088,7 @@
         return;
       }
 
+      showPapers(data.papers, data.grounded);
       showSources(data.sources);
       paperQuestions = parsePaperQuestions(data.questions);
 

@@ -249,3 +249,23 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 - Scans added lines only, so deleting a key is never blocked; `--no-verify` bypasses; error output masks the key it found and names the file
 - Verified three ways: blocks a seeded key, ignores `placeholder="gsk_..."` in `index.html`, ignores key removals
 - Fresh clones need `git config core.hooksPath hooks` once — it is repo config, not something a clone inherits
+
+### Past papers are now really fetched and downloadable
+- `/api/papers` filters Tavily results to `.pdf` URLs, downloads up to `PAPER_MAX_FETCH` (3), caches them under `data/papers/<id>.pdf` with a `.json` sidecar for the title, and returns a `papers[]` list with a `download` link. Snippet-based generation stays as the fallback when a topic yields no usable PDF
+- `_fetch_pdf` guards the obvious ways this goes wrong: 20s timeout, 20MB streaming cap, `Content-Type` check, and a `%PDF` magic-byte check because these sites return HTML error pages with a 200 constantly. Any failure returns `None` so one bad paper never sinks the whole search
+- **The download route takes an id, never a URL.** A `?url=` route would have made the server an open proxy — anything on the box could be fetched through it, including `localhost:11434` and cloud metadata. Ids are generated server-side and validated against `^[0-9a-f]{16}$`, so the browser can only ask for papers we already chose to fetch. `_allowed_paper_host` is defence in depth on the fetch side, matching on the parsed hostname (a substring test would pass `evil.com/?x=aqa.org.uk`)
+- Verified: SSRF targets and both plain and percent-encoded traversal all rejected; oversized and HTML-pretending-to-be-PDF rejected; a real fetch round-trips byte-identical through the download route with a `secure_filename`'d download name
+
+### Page selection — the first version generated questions about the College Board
+- A full-document extract is mostly cover sheets, instructions and marketing, so the first working run produced *"What is the primary mission of the College Board organization?"* — correctly grounded in the real PDF, just the wrong part of it
+- `_question_pages()` scores each page (numbered-question patterns ×3, `?` count, density of `=+×÷≤≥∫√^`), keeps the best pages within a 7000-char budget, then restores document order so multi-page questions still read correctly
+- Returns `(has_text_layer, question_text)` because those are different failures: no text at all means a scan, while text with nothing question-shaped means it is readable but not a paper. Only the first is a candidate for vision transcription. The UI flags both, and the paper stays downloadable either way
+- After the change the same topic produced actual maths from an SAT practice PDF
+
+### Known issue: generated answer keys are unreliable
+- The maths is now real, but the model still gets its own questions wrong. In one 3-question run, **2 of the 3 `[ANSWER: X]` keys were incorrect**:
+  - `g(x) = x^2 + 300` at `x = 81` — key said `381`, which is `81 + 300`; the actual value is `6861` and no option matched
+  - circumference `2πr` with `r = 4` — key said `4π`; the answer is `8π`
+- A tutor that marks a correct student wrong is worse than no feature. Grounding in real papers improved the *questions* but did nothing for the *keys*, because the key is still the model asserting an answer rather than solving one
+- Two ways out, neither implemented: a verification pass that re-solves each question and drops any where the solve disagrees with the key (doubles token cost, catches both failures above), or extracting real questions verbatim alongside the real mark scheme and stopping generation altogether
+- Until one of those lands, past-papers mode should be treated as practice-shaped, not authoritative

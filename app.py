@@ -1,14 +1,19 @@
 import io
 import os
 import re
+import json
 import base64
+import hashlib
+from pathlib import Path
+from urllib.parse import urlparse
 import requests
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
+from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
@@ -91,6 +96,70 @@ GRAPH_SYSTEM_PROMPT = (
 ALLOWED_IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 PDF_TEXT_LIMIT  = 8000
 
+# Downloaded past papers are cached here so the browser can ask for them by id
+# instead of by URL — see _fetch_pdf for why that matters.
+PAPER_CACHE_DIR = Path(__file__).parent / "data" / "papers"
+PAPER_MAX_BYTES = 20 * 1024 * 1024   # a scanned A-level paper can be big; 20MB is plenty
+PAPER_MAX_FETCH = 3                  # per search, to keep the request from crawling
+_PAPER_ID_RE    = re.compile(r'^[0-9a-f]{16}$')
+
+
+def _pdf_text(data: bytes) -> str:
+    """Extract the text layer from PDF bytes. Empty string if it has none."""
+    reader = PdfReader(io.BytesIO(data))
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+# A numbered question ("12." or "12)") at the start of a line, and the symbols
+# that show up in maths but almost never in a copyright notice.
+_QUESTION_NUM_RE = re.compile(r'^\s*\d{1,2}[\.\)]\s+\S', re.MULTILINE)
+_MATH_CHARS      = set("=+×÷≤≥∫√^")
+
+
+def _question_pages(data: bytes, budget: int = 7000) -> tuple[bool, str]:
+    """Pull the pages that actually carry exam questions.
+
+    Past-paper PDFs open with cover sheets, instructions and marketing, and a
+    plain full-document extract is mostly that. Feeding it to the generator
+    produces questions about the exam board rather than the maths, so pages are
+    scored for question-likeness and the best ones are kept in reading order.
+
+    Returns (has_text_layer, question_text). The two are different failures: a
+    scan has no text at all, while a text PDF with nothing question-shaped is
+    readable but not a paper. Only the first means "download it and use vision".
+    """
+    reader = PdfReader(io.BytesIO(data))
+
+    has_text = False
+    scored = []
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text() or ""
+        if text.strip():
+            has_text = True
+        if len(text.strip()) < 80:
+            continue
+        score = (len(_QUESTION_NUM_RE.findall(text)) * 3
+                 + text.count("?")
+                 + sum(c in _MATH_CHARS for c in text) // 4)
+        if score >= 3:
+            scored.append((score, i, text))
+
+    if not scored:
+        return has_text, ""
+
+    # Best pages first to fill the budget, then restore document order so a
+    # multi-page question still reads correctly.
+    scored.sort(key=lambda t: -t[0])
+    kept, total = [], 0
+    for score, i, text in scored:
+        if total >= budget:
+            break
+        kept.append((i, text))
+        total += len(text)
+
+    kept.sort()
+    return has_text, "\n\n".join(text for _, text in kept)[:budget]
+
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
@@ -107,8 +176,7 @@ def api_upload():
     ext  = "." + name.rsplit(".", 1)[-1] if "." in name else ""
 
     if ext == ".pdf":
-        reader = PdfReader(io.BytesIO(file.read()))
-        text   = "\n".join(page.extract_text() or "" for page in reader.pages)
+        text = _pdf_text(file.read())
         return jsonify({"type": "pdf", "text": text[:PDF_TEXT_LIMIT], "name": file.filename})
 
     if ext in ALLOWED_IMAGES:
@@ -340,9 +408,81 @@ PAPER_GEN_PROMPT = (
     "- Always end each question with [ANSWER: X] on its own line\n"
     "- One correct answer, three plausible distractors\n"
     "- Match SAT/A-level difficulty\n"
-    "- Blank line between questions\n\n"
+    "- Blank line between questions\n"
+    "- Base every question on the subject matter being examined. Ignore cover pages, instructions, "
+    "copyright notices, exam board names and any marketing text — never write a question about the "
+    "exam board, the test itself, or the organisation that published the paper\n\n"
     "Past paper content:\n{content}"
 )
+
+def _allowed_paper_host(url: str) -> bool:
+    """True only for the revision sites in PAPER_DOMAINS.
+
+    Checked on the parsed hostname, never with a substring test — otherwise
+    `evil.com/?x=aqa.org.uk` would pass.
+    """
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == d or host.endswith("." + d) for d in PAPER_DOMAINS)
+
+
+def _fetch_pdf(url: str) -> bytes | None:
+    """Download a past paper. Returns None on any failure — one bad paper
+    should never take down the whole search."""
+    if not _allowed_paper_host(url):
+        return None
+    try:
+        with requests.get(url, timeout=20, stream=True) as resp:
+            resp.raise_for_status()
+            # Servers hand back HTML error pages with a 200 all the time, so
+            # trust the bytes over the headers.
+            ctype = resp.headers.get("Content-Type", "").lower()
+            if "pdf" not in ctype and not url.lower().endswith(".pdf"):
+                return None
+
+            chunks, total = [], 0
+            for chunk in resp.iter_content(64 * 1024):
+                total += len(chunk)
+                if total > PAPER_MAX_BYTES:
+                    return None
+                chunks.append(chunk)
+    except Exception:
+        return None
+
+    data = b"".join(chunks)
+    return data if data.startswith(b"%PDF") else None
+
+
+def _cache_paper(url: str, title: str, data: bytes) -> str:
+    """Store a fetched paper and return the id the browser uses to ask for it."""
+    paper_id = hashlib.sha256(url.encode()).hexdigest()[:16]
+    PAPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    (PAPER_CACHE_DIR / f"{paper_id}.pdf").write_bytes(data)
+    # Sidecar so the download name and source survive a restart.
+    (PAPER_CACHE_DIR / f"{paper_id}.json").write_text(
+        json.dumps({"url": url, "title": title}))
+    return paper_id
+
+
+@app.route("/api/papers/download/<paper_id>")
+def api_paper_download(paper_id: str):
+    # The id is used to build a path, so it must be exactly what we generated.
+    if not _PAPER_ID_RE.match(paper_id):
+        return jsonify({"error": "Bad paper id"}), 400
+
+    pdf_path = PAPER_CACHE_DIR / f"{paper_id}.pdf"
+    if not pdf_path.is_file():
+        return jsonify({"error": "Paper not in cache — run the search again"}), 404
+
+    meta_path = PAPER_CACHE_DIR / f"{paper_id}.json"
+    title = json.loads(meta_path.read_text()).get("title", "") if meta_path.is_file() else ""
+    # The title comes from a page we don't control, so never trust it as a filename.
+    name = secure_filename(title) or paper_id
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+
+    return send_file(pdf_path, as_attachment=True, download_name=name,
+                     mimetype="application/pdf")
+
 
 @app.route("/api/papers", methods=["POST"])
 def api_papers():
@@ -365,10 +505,11 @@ def api_papers():
             "https://api.tavily.com/search",
             json={
                 "api_key": tavily_key,
-                "query": f"{topic} past paper exam questions SAT A-level",
+                "query": f"{topic} past paper exam questions SAT A-level filetype:pdf",
                 "search_depth": "advanced",
                 "include_domains": PAPER_DOMAINS,
-                "max_results": 6,
+                "include_raw_content": True,
+                "max_results": 10,
             },
             timeout=20,
         )
@@ -380,9 +521,49 @@ def api_papers():
     if not results:
         return jsonify({"error": "No past paper content found for that topic. Try a more specific query."}), 404
 
-    content_parts = [r["content"] for r in results[:5] if r.get("content")]
+    # Real papers first: download what we can and use its actual text, which is
+    # far better grounding than a search snippet. Falls back to snippets when a
+    # topic turns up no usable PDFs.
+    papers, paper_texts = [], []
+    for r in results:
+        if len(papers) >= PAPER_MAX_FETCH:
+            break
+        url = r.get("url", "")
+        if not url.lower().endswith(".pdf"):
+            continue
+
+        data_bytes = _fetch_pdf(url)
+        if not data_bytes:
+            continue
+
+        title = r.get("title", "") or url.rsplit("/", 1)[-1]
+        try:
+            has_text, text = _question_pages(data_bytes)
+            text = text.strip()
+        except Exception:
+            has_text, text = False, ""
+
+        paper_id = _cache_paper(url, title, data_bytes)
+        papers.append({
+            "id": paper_id,
+            "title": title,
+            "url": url,
+            "download": f"/api/papers/download/{paper_id}",
+            # Still downloadable either way — the flags only describe whether we
+            # could read questions out of it.
+            "scanned": not has_text,
+            "no_questions": has_text and not text,
+        })
+        if text:
+            paper_texts.append(text)
+
+    if paper_texts:
+        combined = "\n\n---\n\n".join(paper_texts)[:7000]
+    else:
+        content_parts = [r["content"] for r in results[:5] if r.get("content")]
+        combined = "\n\n---\n\n".join(content_parts)[:7000]
+
     sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results[:5]]
-    combined = "\n\n---\n\n".join(content_parts)[:7000]
 
     prompt = PAPER_GEN_PROMPT.format(n=n_questions, content=combined)
     try:
@@ -393,7 +574,14 @@ def api_papers():
     except Exception as e:
         return jsonify({"error": f"Question generation failed: {e}"}), 500
 
-    return jsonify({"questions": raw, "sources": sources})
+    return jsonify({
+        "questions": raw,
+        "sources": sources,
+        "papers": papers,
+        # Lets the UI say where the questions came from, instead of implying
+        # they are straight off a real paper when they came from snippets.
+        "grounded": bool(paper_texts),
+    })
 
 
 @app.route("/api/papers/hint", methods=["POST"])
