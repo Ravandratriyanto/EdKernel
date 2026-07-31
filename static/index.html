@@ -1051,7 +1051,8 @@
     const topic     = document.getElementById('input-topic').value.trim();
     const tvlyKey   = tavilyKey();
     if (!topic || busy) return;
-    if (!tvlyKey) { alert('Enter a Tavily API key in the settings bar to search past papers.'); return; }
+    // No key check here — the server falls back to TAVILY_KEY in .env, and only
+    // it knows whether that fallback exists. It returns a clear error if not.
 
     busy = true;
     paperMode = true;
