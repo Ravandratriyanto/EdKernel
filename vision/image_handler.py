@@ -27,6 +27,20 @@ def _mime_for(name: str) -> str:
     ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
     return _MIME.get(ext, "image/png")
 
+def _drop_reasoning(text: str) -> str:
+    """Strip a reasoning model's <think> block from a transcription.
+
+    The default Groq vision model reasons out loud, and the visible answer is
+    whatever follows the final </think>. Without this the tutor receives ~3000
+    characters of the model talking to itself as the student's question.
+
+    Splitting on the closing tag rather than matching a <think>...</think> pair
+    also covers models that emit the closing tag with no opening one.
+    """
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[1]
+    return text.strip()
+
 def transcribe(b64: str, name: str = "image.png", provider: str = "ollama",
                model: str = "gemma4", host: str = "http://localhost:11434",
                api_key: str = "", vision_model: str = "") -> str:
@@ -37,7 +51,7 @@ def transcribe(b64: str, name: str = "image.png", provider: str = "ollama",
     from ollama import Client as OllamaClient
     client = OllamaClient(host=host)
     messages = [{"role": "user", "content": TRANSCRIBE_PROMPT, "images": [b64]}]
-    return client.chat(model=model, messages=messages).message.content.strip()
+    return _drop_reasoning(client.chat(model=model, messages=messages).message.content)
 
 def _groq_transcribe(b64: str, name: str, vision_model: str, api_key: str) -> str:
     from groq import Groq
@@ -53,4 +67,4 @@ def _groq_transcribe(b64: str, name: str, vision_model: str, api_key: str) -> st
             ],
         }],
     )
-    return response.choices[0].message.content.strip()
+    return _drop_reasoning(response.choices[0].message.content)

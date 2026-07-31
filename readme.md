@@ -112,10 +112,10 @@ locally.
 - [x] Phase 4: `python main.py learn --text "..."` walks through steps interactively
 - [x] Phase 5: three wrong answers in a row produce three *different*,
       increasingly specific hints
-- [ ] Phase 6: `--image` produces the same learn/check flow as `--text`
+- [x] Phase 6: `--image` produces the same learn/check flow as `--text`
       — done in the web app (`vision/image_handler.py`, wired into
-      `/api/start`, `/api/reply`, `/api/check`); the `--image` CLI flag
-      is still outstanding
+      `/api/start`, `/api/reply`, `/api/check`) and in the CLI via
+      `--image`, on both the Ollama and Groq providers
 - [ ] Phase 7: `--video` produces the same flow as `--image`
 
 

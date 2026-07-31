@@ -230,3 +230,22 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 2. Decide what past-papers mode should be: honest practice-question generator (rename it) or real paper retrieval (`include_raw_content`, then `.pdf` fetch + `pypdf` extraction). Right now the name promises the second and delivers the first
 3. Phase B — session logging, still the bottleneck for the fine-tuning dataset, metering, and auth
 4. Server-side session state + prompt caching; `/api/reply` still resends full history every turn
+
+### Phase 6 complete — `--image` in the CLI
+- `--text` and `--image` are now a `add_mutually_exclusive_group(required=True)`, so exactly one must be given and argparse produces both error messages for free
+- `question_from_image()` reads the file, base64-encodes it, and calls the existing `transcribe()`. `main()` resolves `question` once and everything downstream is untouched — the readme said "no new logic needed here" and that held
+- Added `--provider`, `--api-key`, `--vision-model` to the CLI. Ollama-only would have been fewer lines but the default `gemma4` has no vision, so the flag would have been a checkbox that could not be demoed. `--api-key` falls back to `API_KEY` in `.env`, same rule as the web app
+- Rejects unsupported extensions before the model call: `_mime_for()` silently falls back to `image/png`, so a `.md` would have been sent mislabelled rather than refused
+- Transcription is echoed before use — it is the one lossy step in the pipeline, and a misread exponent should be visible rather than debugged through a confusing lesson
+
+### Bug: reasoning models leaked `<think>` into every transcription
+- Found by running the first real image through the live Groq path. `GROQ_VISION_MODEL` is `qwen/qwen3.6-27b`, a **reasoning** model: it returned 3061 characters, ~2900 of which were the model talking to itself, with the real 63-character transcription after the final `</think>`
+- This was never CLI-specific — the web app has done this on every image it has ever transcribed, feeding the model's private reasoning into the tutor as if it were the student's question. Session 3's caveat that Phase 6 "has not been exercised against the live Groq API" is exactly why it survived this long
+- `_drop_reasoning()` in `vision/image_handler.py` takes everything after the last `</think>`, applied to both the Ollama and Groq return paths. Splitting on the closing tag rather than matching a `<think>...</think>` pair also covers models that emit the close with no open
+- After the fix the same image transcribes to `12. If $3x + 7 = 22$, what is the value of $x$?` plus its four options, and `check --answer B` correctly reasons to 5 and marks it right
+
+### Secret-scanning pre-commit hook
+- `hooks/pre-commit` blocks any commit whose **added** lines contain a Groq, Tavily, OpenAI, Anthropic, or AWS key pattern. Installed via `git config core.hooksPath hooks` so it is tracked rather than living in `.git/`
+- Scans added lines only, so deleting a key is never blocked; `--no-verify` bypasses; error output masks the key it found and names the file
+- Verified three ways: blocks a seeded key, ignores `placeholder="gsk_..."` in `index.html`, ignores key removals
+- Fresh clones need `git config core.hooksPath hooks` once — it is repo config, not something a clone inherits

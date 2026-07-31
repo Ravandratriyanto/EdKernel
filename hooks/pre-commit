@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Block commits containing live API keys.
+#
+# Three keys have leaked in three sessions (chat paste, .gitignore, .env.example),
+# each time because a key was pasted into whichever file was nearest. Two of those
+# files were tracked. This makes that a failed commit rather than a bad push.
+#
+# Scans ADDED lines only, so deleting a key from a file is never blocked.
+# Bypass with `git commit --no-verify` if you ever genuinely need to.
+
+set -uo pipefail
+
+# name<TAB>regex — anchored on the long random tail so short placeholders
+# like placeholder="gsk_..." don't trip it.
+PATTERNS=$'Groq\tgsk_[A-Za-z0-9]{20,}
+Tavily\ttvly-(dev-)?[A-Za-z0-9_-]{20,}
+OpenAI\tsk-(proj-)?[A-Za-z0-9_-]{20,}
+AWS access key\tAKIA[0-9A-Z]{16}
+Anthropic\tsk-ant-[A-Za-z0-9_-]{20,}'
+
+# Added lines in the staged diff, minus the +++ file headers.
+added=$(git diff --cached --unified=0 | grep '^+' | grep -v '^+++' || true)
+[[ -z "$added" ]] && exit 0
+
+found=0
+while IFS=$'\t' read -r name regex; do
+    [[ -z "$name" ]] && continue
+    if hits=$(printf '%s\n' "$added" | grep -Eo "$regex" | sort -u) && [[ -n "$hits" ]]; then
+        if (( found == 0 )); then
+            echo "COMMIT BLOCKED — live API key in staged changes:" >&2
+            echo >&2
+        fi
+        found=1
+        while IFS= read -r hit; do
+            # Show only enough to identify which key, never the whole thing.
+            echo "  $name: ${hit:0:8}...${hit: -4}" >&2
+            # Name the file so it can actually be found.
+            git diff --cached --name-only -S"$hit" | sed 's/^/    in /' >&2
+        done <<< "$hits"
+    fi
+done <<< "$PATTERNS"
+
+if (( found )); then
+    cat >&2 <<'EOF'
+
+Move the key into .env (gitignored) and leave the tracked file blank.
+Treat any key that got this far as burned — rotate it, don't just move it.
+
+Override with: git commit --no-verify
+EOF
+    exit 1
+fi
+
+exit 0
