@@ -398,6 +398,9 @@
   let filePicker_target = '';
   let provider = 'ollama';
   let wrongStreak = 0;
+  // Kept because the topic input is cleared and hidden once a lesson starts,
+  // but a mid-lesson "get me a past paper" still needs to know the subject.
+  let currentTopic = '';
 
   // past-papers quiz state
   let paperMode = false;
@@ -649,6 +652,7 @@
   async function startLearn() {
     const topic = document.getElementById('input-topic').value.trim();
     if (!topic || busy) return;
+    currentTopic = topic;
     busy = true;
     wrongStreak = 0;
     document.getElementById('btn-start').disabled = true;
@@ -701,7 +705,13 @@
       const res  = await fetch('/api/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, input, ...basePayload(), attachment: attach, wrong_streak: wrongStreak }),
+        body: JSON.stringify({
+          messages, input, ...basePayload(),
+          attachment: attach,
+          wrong_streak: wrongStreak,
+          topic: currentTopic,
+          tavily_key: tavilyKey(),
+        }),
       });
       const data = await res.json();
       removeThinking();
@@ -709,6 +719,8 @@
       if (data.correct === true)  wrongStreak = 0;
       if (data.correct === false) wrongStreak += 1;
       appendBubble('tutor', data.response);
+      // Papers fetched mid-lesson: show the downloads, leave the lesson alone.
+      if (data.papers && data.papers.length) showPapers(data.papers, null, 0);
 
       if (data.done) {
         appendDone();
@@ -930,6 +942,10 @@
       area.appendChild(bar);
     }
 
+    // Nothing was generated on a mid-lesson fetch, so there is no provenance to
+    // describe — the chips speak for themselves.
+    if (grounded === null) { area.scrollTop = area.scrollHeight; return; }
+
     // Be explicit about provenance: "past papers" must not imply these are the
     // real questions when they were generated from search snippets.
     const note = document.createElement('div');
@@ -1051,6 +1067,7 @@
     const topic     = document.getElementById('input-topic').value.trim();
     const tvlyKey   = tavilyKey();
     if (!topic || busy) return;
+    currentTopic = topic;
     // No key check here — the server falls back to TAVILY_KEY in .env, and only
     // it knows whether that fallback exists. It returns a clear error if not.
 

@@ -280,3 +280,17 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 - Live result on the same topic that previously produced 2 wrong keys out of 3: **2 questions dropped, and all 3 survivors independently check out** (`x+300` at 81 = 381 ✓, intersection of `x=5` and `y=4x-2` = (5,18) ✓, `xy+81=170` at `y=6` → `89/6` ✓). The UI now says how many were discarded
 - Cost: one extra call per search, on top of one generation call. Cheap next to serving a student a wrong mark scheme
 - Still open: PDF text extraction mangles notation — one surviving question renders `g(x)` as `gx^h`, because parentheses and ligatures are lost on extraction. The maths is right and the key is right, but it reads badly. Worth a cleanup pass over extracted text before it reaches the generator
+
+### Paper fetching from chat (intent detection)
+- Asking for papers mid-lesson now fetches them, instead of the tutor explaining that it cannot. `/api/reply` checks the message first and returns early, so the tutor model is never called for that turn
+- Detection is keyword-based, not a classifier: a classifier would cost a call on *every* tutor turn to catch something plain matching handles, and would add latency to the common path where the student is just answering a question
+- The rule is a fetch verb followed by a paper noun within ~40 characters, cancelled by a negation in the same breath. Bare `papers` counts only in the plural — "take some papers" is a request, "explain this paper I uploaded" is not, and the verb requirement rules out "explain these papers" as well
+- Topic comes from the message when named ("past papers on trigonometry"), otherwise from the lesson. Trailing politeness is trimmed, or the search ran for "trigonometry please"
+- **The lesson is not disturbed.** Reusing `startPapers()` would have called `clearChat()` and flipped `paperMode`, so a student mid-lesson asking for a paper would have lost the whole lesson to a quiz. The download chips render inline instead and the conversation just gains one exchange
+- The reply text is written in Python rather than by the model: the model cannot know whether the download succeeded, and this is precisely the turn that must not come back as another Socratic question
+- `_search_papers` and `_collect_papers` were lifted out of `api_papers` so both paths share one implementation
+- The tutor prompt said outright that it could not fetch PDFs. Left alone, the model would have refused in the same turn the chips appeared
+- Verified: 13 detection cases pass including both verbatim messages from the original screenshot; live run returns 3 papers with the lesson intact (2 messages → 4); a normal answer still reaches the tutor with no `papers` key
+
+### CLAUDE.md
+- Added, covering how to work here: ask before writing code that might be typed by hand, explain unfamiliar Python syntax, verify against live output rather than structurally, keys in `.env` only, and the recurring gotchas (`<think>` leakage, `pypdf` mangling notation, `_SIGNAL_RE` anchoring)

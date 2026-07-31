@@ -47,12 +47,13 @@ TUTOR_SYSTEM_PROMPT = (
     "End there — do not answer your own question, and do not announce that you are waiting.\n"
     "The ONLY bracketed markers you may ever write are [CORRECT] and [WRONG]. Never invent others such as "
     "[WAITING FOR RESPONSE] or [PAUSE] — they are shown to the student as raw text and look broken.\n"
-    "If the student asks for something that is not the lesson — a file, a download, a past paper, or a question about "
-    "what this app can do — answer plainly in one or two sentences and say honestly if you cannot do it. Never reply to "
-    "that kind of request with a Socratic question, and never attach options to it. Specifically: you cannot fetch, "
-    "attach, or produce PDF files. Past papers are a separate feature the student starts from the past-papers control, "
-    "and it generates practice questions rather than handing over the original paper. If they ask again after you have "
-    "said you cannot, say so once more in plain words — do not steer them back into the lesson as if they had not asked.\n"
+    "If the student asks for something that is not the lesson — a file, a download, or a question about what this app "
+    "can do — answer plainly in one or two sentences and say honestly if you cannot do it. Never reply to that kind of "
+    "request with a Socratic question, and never attach options to it. If they ask again after you have said you "
+    "cannot, say so once more in plain words — do not steer them back into the lesson as if they had not asked.\n"
+    "Past papers ARE available: asking for them is handled outside this conversation and real PDFs are fetched for the "
+    "student to download. So never tell them you cannot get past papers. If they ask for one and you are answering, "
+    "simply say they can ask for a past paper on a topic and it will be fetched.\n"
     "Multiple-choice options are OPTIONAL. Most turns should not have them. Offer them only when the answer really is "
     "a pick-one-of-a-few, or when the student is stuck and needs the field narrowed:\n"
     "- Offer options when: the answer is one of a few named things (which term, which rule applies, which step comes next, "
@@ -265,6 +266,24 @@ def api_reply():
     attachment   = data.get("attachment")
     vision_model = data.get("vision_model", "")
     wrong_streak = int(data.get("wrong_streak", 0))
+    tavily_key   = _key(data, "tavily_key", "TAVILY_KEY")
+    topic        = data.get("topic", "")
+
+    # "just give me the papers" — fetch them instead of tutoring at the student.
+    # The reply is written here rather than by the model: the model has no way to
+    # know whether the download actually succeeded, and this turn must not be
+    # answered with another Socratic question.
+    if _wants_papers(user_input):
+        reply, papers = _papers_for_chat(user_input, topic, tavily_key)
+        messages.append({"role": "user", "content": user_input})
+        messages.append({"role": "assistant", "content": reply})
+        return jsonify({
+            "response": reply,
+            "messages": _strip_images(messages),
+            "done": False,
+            "correct": None,
+            "papers": papers,
+        })
 
     hint_note = ""
     if wrong_streak == 1:
@@ -589,20 +608,7 @@ def api_papers():
         return jsonify({"error": "Tavily API key required"}), 400
 
     try:
-        resp = requests.post(
-            "https://api.tavily.com/search",
-            json={
-                "api_key": tavily_key,
-                "query": f"{topic} past paper exam questions SAT A-level filetype:pdf",
-                "search_depth": "advanced",
-                "include_domains": PAPER_DOMAINS,
-                "include_raw_content": True,
-                "max_results": 10,
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
+        results = _search_papers(topic, tavily_key)
     except Exception as e:
         return jsonify({"error": f"Search failed: {e}"}), 500
 
@@ -612,38 +618,7 @@ def api_papers():
     # Real papers first: download what we can and use its actual text, which is
     # far better grounding than a search snippet. Falls back to snippets when a
     # topic turns up no usable PDFs.
-    papers, paper_texts = [], []
-    for r in results:
-        if len(papers) >= PAPER_MAX_FETCH:
-            break
-        url = r.get("url", "")
-        if not url.lower().endswith(".pdf"):
-            continue
-
-        data_bytes = _fetch_pdf(url)
-        if not data_bytes:
-            continue
-
-        title = r.get("title", "") or url.rsplit("/", 1)[-1]
-        try:
-            has_text, text = _question_pages(data_bytes)
-            text = text.strip()
-        except Exception:
-            has_text, text = False, ""
-
-        paper_id = _cache_paper(url, title, data_bytes)
-        papers.append({
-            "id": paper_id,
-            "title": title,
-            "url": url,
-            "download": f"/api/papers/download/{paper_id}",
-            # Still downloadable either way — the flags only describe whether we
-            # could read questions out of it.
-            "scanned": not has_text,
-            "no_questions": has_text and not text,
-        })
-        if text:
-            paper_texts.append(text)
+    papers, paper_texts = _collect_papers(results)
 
     if paper_texts:
         combined = "\n\n---\n\n".join(paper_texts)[:7000]
@@ -718,6 +693,125 @@ def api_papers_hint():
     response = chat(messages, model=model_name, host=host, provider=provider, api_key=api_key)
     response, _ = _strip_signal(response)
     return jsonify({"response": response})
+
+def _search_papers(topic: str, tavily_key: str) -> list[dict]:
+    """Ask Tavily for past papers on a topic. Raises on failure."""
+    resp = requests.post(
+        "https://api.tavily.com/search",
+        json={
+            "api_key": tavily_key,
+            "query": f"{topic} past paper exam questions SAT A-level filetype:pdf",
+            "search_depth": "advanced",
+            "include_domains": PAPER_DOMAINS,
+            "include_raw_content": True,
+            "max_results": 10,
+        },
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json().get("results", [])
+
+
+def _collect_papers(results: list[dict]) -> tuple[list[dict], list[str]]:
+    papers, paper_texts = [], []
+    for r in results:
+        if len(papers) >= PAPER_MAX_FETCH:
+            break
+        url = r.get("url", "")
+        if not url.lower().endswith(".pdf"):
+            continue
+        data_bytes = _fetch_pdf(url)
+        if not data_bytes:
+            continue
+        title = r.get("title", "") or url.rsplit("/", 1)[-1]
+        try:
+            has_text, text = _question_pages(data_bytes)
+            text = text.strip()
+        except Exception:
+            has_text, text = False, ""
+        paper_id = _cache_paper(url, title, data_bytes)
+        papers.append({
+            "id": paper_id,
+            "title": title,
+            "url": url,
+            "download": f"/api/papers/download/{paper_id}",
+            "scanned": not has_text,
+            "no_questions": has_text and not text,
+        })
+        if text:
+            paper_texts.append(text)
+    return papers, paper_texts
+
+
+# ── "just give me the papers" detection ─────────────────────────────────────
+# Keywords rather than a classifier: a classifier would cost a call on every
+# tutor turn to catch something plain matching handles, and it would add latency
+# to the common path where the student is just answering a question.
+
+# Bare "papers" is included but only in the plural: "take some papers" is a
+# request, while "explain this paper I uploaded" is not — and the fetch-verb
+# requirement rules out "explain these papers" anyway.
+_PAPER_NOUN = r"(?:past[\s-]?papers?|exam papers?|pdfs?|mark schemes?|real (?:exam )?questions?|papers)"
+_FETCH_VERB = r"(?:get|give|fetch|find|download|send|show|grab|take|provide|need|want|have)"
+_NEGATION   = r"(?:don'?t|do not|not|no need|nope|never|rather not|without)"
+
+# A verb, then the noun within a short window — "give me some past papers" hits,
+# "what is a past paper?" does not.
+_WANTS_PAPERS_RE = re.compile(
+    rf"\b{_FETCH_VERB}\b[^.?!]{{0,40}}?\b{_PAPER_NOUN}\b", re.IGNORECASE)
+# Negation anywhere before the noun in the same breath cancels it.
+_NOT_PAPERS_RE = re.compile(
+    rf"\b{_NEGATION}\b[^.?!]{{0,40}}?\b{_PAPER_NOUN}\b", re.IGNORECASE)
+
+
+def _wants_papers(text: str) -> bool:
+    """True when the student is asking for actual paper files."""
+    if not text or _NOT_PAPERS_RE.search(text):
+        return False
+    return bool(_WANTS_PAPERS_RE.search(text))
+
+
+# "past papers on trigonometry" / "a paper for calculus" — an explicit subject in
+# the request beats the lesson topic.
+_TOPIC_IN_REQUEST_RE = re.compile(
+    rf"{_PAPER_NOUN}\s+(?:on|for|about|in)\s+([a-z0-9][a-z0-9 '\-]{{2,50}})", re.IGNORECASE)
+
+
+# "past papers for trigonometry please" — the politeness is not part of the topic.
+_TOPIC_TRAIL_RE = re.compile(r"\b(?:please|pls|thanks|thank you|now|asap|ok)\b\s*$", re.IGNORECASE)
+
+
+def _papers_for_chat(user_input: str, lesson_topic: str, tavily_key: str) -> tuple[str, list]:
+    """Fetch papers for a mid-lesson request. Returns (reply text, papers)."""
+    match = _TOPIC_IN_REQUEST_RE.search(user_input)
+    topic = _TOPIC_TRAIL_RE.sub("", match.group(1)).strip() if match else ""
+    topic = topic or lesson_topic.strip()
+
+    if not topic:
+        return ("Which topic should I look for? Tell me the subject and I'll find papers on it.", [])
+    if not tavily_key:
+        return ("I can't search for papers — no Tavily API key is set. "
+                "Add one in the settings bar or in the .env file.", [])
+
+    try:
+        results = _search_papers(topic, tavily_key)
+    except Exception as e:
+        return (f"The search for papers failed: {e}", [])
+
+    papers, _ = _collect_papers(results)
+    if not papers:
+        return (f"I couldn't find a downloadable paper on {topic}. "
+                "Try naming the exam board or a narrower subject.", [])
+
+    # Say plainly what they got, including what is not usable and why.
+    plural = "paper" if len(papers) == 1 else "papers"
+    reply = f"Here {'is' if len(papers) == 1 else 'are'} {len(papers)} {plural} on {topic} — click to download."
+    scans = sum(1 for p in papers if p["scanned"])
+    if scans:
+        reply += (f" {scans} of them {'is a scan' if scans == 1 else 'are scans'}, "
+                  "so the text can't be read out of it — but it still downloads.")
+    reply += " Your lesson is still here whenever you want to carry on."
+    return reply, papers
 
 
 if __name__ == "__main__":
