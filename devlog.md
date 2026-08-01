@@ -304,7 +304,9 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 ## Session 5 — 2026-08-01
 
 No new phase. A screenshot-paste problem in the dev environment, then a full read
-of `app.py` that turned up one blocker and two real bugs, all three fixed.
+of `app.py` that turned up one blocker and two real bugs, all three fixed. Then a
+screenshot of a real lesson going wrong, which turned out to be four separate
+routing failures and sent paper intent detection to a structured call.
 
 ### Screenshot paste into Claude Code (environment, not the product)
 - `Meta+Shift+S` ran `spectacle --region --background --copy-image --nonotify --release-capture`. Pasting was intermittent, and pasting into a terminal never worked at all
@@ -353,10 +355,44 @@ of `app.py` that turned up one blocker and two real bugs, all three fixed.
 - The prompts have drifted further: `main.py` is still essentially the Phase-1 prompt, sharing only the plain-English rules and `Topic complete.`
 - Worth recording because the obvious fix is a trap: copying `app.py`'s prompt across would have the CLI promise *"ask for a past paper and it will be fetched"*, which it cannot do. The CLI is currently honest only because it does not mention papers
 
+### A real lesson going wrong — four failures in one screenshot
+- Lesson topic was set to the whole sentence `Can you please help me fetch AS level papers of Computer Science`. The student asked twice for **SAT** papers and got **AS level Computer Science** both times
+- Asked whether this needed a prompt change or retraining. Neither, mostly: **three of the four failures were Python routing, and the model never saw the question**. `llama-3.3-70b` can obviously tell that "can you fetch SAT papers" wants SAT papers — a regex decided the topic and never asked it
+- `can you not fetch the entire pdf` — `_NOT_PAPERS_RE` matched `not` … `pdf`, so a request was read as a refusal and the turn went to the tutor
+- `can you fetch SAT papers please` — `_TOPIC_IN_REQUEST_RE` only matches a qualifier *after* the noun. `past papers on SAT` extracts `SAT`; `SAT papers` extracts nothing. So it fell back to the lesson topic
+- The lesson topic is a whole sentence, and `_looks_like_topic` passes it — it is not a greeting and has real words. Last session's guard does not catch this shape, and the reply printed it verbatim as a subject
+- Confirmed each one against the code rather than reasoning about it, before changing anything
+
+### The tutor denied it could fetch past papers
+- `TUTOR_SYSTEM_PROMPT` contradicted itself. One rule covers *"a file, a download, or a question about what this app can do"* and says to admit honestly when it cannot do something; the next says never to claim it cannot get past papers. **A past paper is a file download, so both rules matched** and the model took the first
+- The detail that matters: it never said it could not get past papers. It said *"I don't have the ability to send or download files directly"* — it slid out through the *file* wording. Naming past papers alone would not have fixed it
+- Fix states the exception as taking precedence, closes the file wording by name (`send, download, access or attach files`), and calls out rhetorical phrasings as requests rather than questions about its limits
+- Verified live, six turns through `llama-3.3-70b-versatile`. `can you not fetch the entire pdf` ×3 and `why won't you give me the paper` all offer to fetch with no denial
+- **Regression-tested in the other direction too**, which was the real risk: `can you email this to my teacher` and `can you print this page` are still refused honestly. Loosening a rule about admitting limits could easily have made the tutor claim it can do anything
+
+### Paper intent moved to a structured call
+- The keyword rules are now a **prefilter** that only decides whether a turn is worth asking about. `_paper_intent()` then makes one structured call returning `{"wants_papers": bool, "topic": str}`
+- This does not contradict the Session 4 decision. That rejected a classifier because it would cost a call on *every* tutor turn; it does not, because a message that never mentions papers never reaches it. Ordinary answers cost nothing
+- One call resolves intent **and** topic together, so a sentence-length lesson topic gets shortened to a real subject in the same step. That is what kills the fourth failure without a separate fix
+- The prefilter is deliberately far wider than `_wants_papers`: no verb requirement and **no negation cancel**, because the negation rule is exactly what got `can you not just fetch the whole pdf` backwards. The regex stops adjudicating and only decides whether a question is worth asking
+- It needed its own noun pattern. `_PAPER_NOUN` keeps bare `paper` plural-only so the fallback behaves as before, but that meant `why won't you give me the paper` never reached the classifier. Caught by the offline tests before a single live call was spent
+- Every failure path falls back to the keyword rules — raised exception, unparseable reply, or wrong-shaped JSON. A flaky model must not cost the student the feature, same policy as `_verify_questions`
+- `_papers_for_chat` now takes an already-resolved topic and does no extraction. `_looks_like_topic` stays as a backstop, because the fallback path can still hand over a raw lesson topic
+- A classifier "no" falls **through** to the tutor rather than dead-ending — with a wide prefilter that matters, or `explain this paper I uploaded` would end the turn with nothing
+- Live: 7/7 on the classifier including both negatives, and end to end `can you fetch SAT papers please` now returns **SAT** papers from a Computer Science lesson topic
+- The reply sentence was interpolating whatever topic it was handed, so a long one read as *"Here are 3 papers on Can you please help me fetch AS level papers of Computer Science"*. `_topic_phrase()` now drops the clause past 6 words or 40 characters rather than swallowing a sentence — truncating with an ellipsis still reads broken, no clause reads like a normal sentence. Applies to the no-results message too. The classifier fixes this case at source; this is the guard for when the fallback path supplies the topic
+
+### `design.md`
+- Added, for proposals that are not built yet; entries move to this file once they ship and come out of `design.md`
+- First entry was the structured call above, written up before building it, including the evidence, the cost argument, and what it explicitly does not fix
+- Now stale by its own rule, since that entry shipped the same day
+
 ### Current state
-- Everything this session is **uncommitted, working tree only**, on top of `04319a7`
-- Three `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, and the papers topic-reuse bug. Plus the `_ABOUT_RE` blocker introduced and fixed within the session
-- Chat intent detection went from 5/14 to 14/14 on realistic phrasings
+- Everything this session is committed and pushed: `a3593b2`, `854070e`, `aaf7327`, `c10fe69`, `9b63b6c`
+- Everything below the screenshot-paste entry is on top of `04319a7`
+- Five `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, the papers topic-reuse bug, the prompt contradiction, and paper intent detection. Plus the `_ABOUT_RE` blocker introduced and fixed within the session
+- **Paper requests are decided by the model now, not a regex.** Keywords survive as a prefilter and as the fallback when the call fails
+- Chat intent detection went from 5/14 to 14/14 on realistic phrasings, then to 7/7 live on the classifier including the phrasings no regex was going to catch
 - `app.py` compiles, all 9 routes present, and every prior fix still passes after each subsequent change
 - The running server spent the session on stale code (`use_reloader=False`); it needs a restart to pick any of this up
 - No phase moved. Phase 7 (video) is still the next unbuilt phase
@@ -365,16 +401,21 @@ of `app.py` that turned up one blocker and two real bugs, all three fixed.
 - **The 📄 Papers button still silently does nothing on an empty topic**, and a finished quiz still leaves `topic-row` hidden with both buttons disabled. Both diagnosed with exact line numbers, neither fixed — the frontend was not touched this session
 - **`/api/papers` takes 100 seconds** and says nothing while it works. Measured, not estimated. The single most likely thing to read as "broken" to a student
 - **The graph sandbox has no timeout.** `for i in range(10**9)` passes validation and hangs the request. Only a subprocess fixes that, and in-process restricted execution is never airtight regardless — the AST allowlist is doing the real work, not the builtins trimming
+- **The tutor claims it cannot receive uploaded files.** Surfaced while testing the classifier fall-through: `explain this paper I uploaded` reached the tutor, which replied *"As a text-based AI model, I don't have the capability to receive or access files"*. That is false — `/api/upload` handles PDFs and images. Same shape as the past-papers denial fixed this session, different subject, not yet fixed
+- **`design.md` is stale.** The structured call shipped the same day it was written up, so by that file's own rule the entry should have moved here and come out of it
 - Check mode still uses `TUTOR_SYSTEM_PROMPT`, so a prompt that says *"never give the full answer unprompted"* is being asked for a verdict. Stripping hides the marker; it does not resolve the mismatch. The two branches also differ in tone, since only one has a system prompt
-- `_looks_like_topic` is a heuristic. `high there` is caught as a greeting, but both its words are ordinary English and a generic stopword check would let it through. Anything not recognisably a greeting or filler still passes
-- Nothing validates the lesson topic at `startLearn`, which is where `high there` got in. The guard fixes the reuse, not the source
+- The structured call adds a model call to paper-request turns. Cheap next to a 20–100s search, but it is a second thing that can fail on that path, and the fallback is the same keyword rules that got these cases wrong in the first place
+- `_looks_like_topic` is a heuristic and now matters less, since the classifier resolves the topic first. It is still the backstop on the fallback path
+- Nothing validates the lesson topic at `startLearn`, which is where the junk gets in both times — `high there` and the full sentence. Two guards downstream now cope with a bad topic; neither stops one being set
 - Prompt drift is now flagged for a **fourth** session and has got worse, not better
 - Carried over untouched: `pypdf` mangles notation, scanned papers download but are never transcribed, answer verification catches disagreement rather than shared error, `data/papers/` still grows without bound, and Phase B session logging is still the bottleneck
 
 ### Next
 1. **Phase B — session logging.** Fourth session running. Still blocking the Phase C dataset, per-student metering, and the school-subscription auth model
 2. The three frontend papers bugs — empty-topic feedback, quiz-end UI restore, and something on screen during the 100s wait
-3. Unify the two tutor prompts, and give check mode its own prompt rather than the Socratic one
-4. Clean up extracted PDF text so notation survives, then vision transcription for scans
-5. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn
-6. Then Phase 7 (video) and Phase C (LoRA fine-tune)
+3. Stop the tutor denying it can receive uploaded files, the same way past papers was fixed
+4. Validate the topic at `startLearn`, so junk never enters the session in the first place
+5. Unify the two tutor prompts, and give check mode its own prompt rather than the Socratic one
+6. Clean up extracted PDF text so notation survives, then vision transcription for scans
+7. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn
+8. Then Phase 7 (video) and Phase C (LoRA fine-tune)

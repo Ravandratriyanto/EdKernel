@@ -7,7 +7,15 @@ Proposals that are not built yet. Once something here ships, it moves to
 
 ## Paper intent + topic extraction as a structured call
 
-**Status:** proposed 2026-08-01, not built. Nothing in `app.py` implements this.
+**Status: SHIPPED 2026-08-01 in `9b63b6c`.** Written up here, built the same day.
+The full account is in `devlog.md` under Session 5 — read that, not this. Kept
+below only because the reasoning is worth having, in particular why a classifier
+here does not contradict the Session 4 decision against one.
+
+**One change from what is written below.** The prefilter needed its own noun
+pattern rather than reusing `_PAPER_NOUN`, which keeps bare `paper` plural-only
+so the fallback behaves as before. Without that, `why won't you give me the
+paper` never reached the classifier.
 
 ### The problem
 
@@ -270,6 +278,12 @@ Computer Science.
 
 ## Also outstanding, not designed yet
 
+- **The tutor denies it can receive uploaded files.** Found while testing the
+  classifier fall-through: `explain this paper I uploaded` reaches the tutor,
+  which answers *"As a text-based AI model, I don't have the capability to
+  receive or access files"*. That is false — `/api/upload` handles PDFs and
+  images. Same shape as the past-papers denial fixed in `c10fe69`, and probably
+  the same fix: the honesty rule needs to know what the app can actually do.
 - **Check mode has no prompt of its own.** `api_check` hands
   `TUTOR_SYSTEM_PROMPT` to a task that is not Socratic, so a prompt saying
   *never give the full answer unprompted* is asked for a verdict. The two
