@@ -952,6 +952,22 @@ def _paper_intent(user_input: str, lesson_topic: str, **llm) -> dict:
     return {"wants_papers": data["wants_papers"], "topic": topic}
 
 
+# A topic can still arrive as a whole sentence through the fallback path, and
+# "3 papers on Can you please help me fetch AS level papers of Computer Science"
+# reads like a bug. Past a certain length it has stopped being a subject, so the
+# sentence drops the clause rather than swallowing it whole.
+_TOPIC_PHRASE_MAX_WORDS = 6
+_TOPIC_PHRASE_MAX_CHARS = 40
+
+
+def _topic_phrase(topic: str) -> str:
+    """' on <subject>' when the topic reads like one, otherwise empty."""
+    t = " ".join((topic or "").split())
+    if not t or len(t) > _TOPIC_PHRASE_MAX_CHARS or len(t.split()) > _TOPIC_PHRASE_MAX_WORDS:
+        return ""
+    return f" on {t}"
+
+
 def _papers_for_chat(topic: str, tavily_key: str) -> tuple[str, list]:
     """Fetch papers for an already-resolved topic. Returns (reply text, papers).
 
@@ -977,12 +993,13 @@ def _papers_for_chat(topic: str, tavily_key: str) -> tuple[str, list]:
 
     papers, _ = _collect_papers(results)
     if not papers:
-        return (f"I couldn't find a downloadable paper on {topic}. "
+        return (f"I couldn't find a downloadable paper{_topic_phrase(topic)}. "
                 "Try naming the exam board or a narrower subject.", [])
 
     # Say plainly what they got, including what is not usable and why.
     plural = "paper" if len(papers) == 1 else "papers"
-    reply = f"Here {'is' if len(papers) == 1 else 'are'} {len(papers)} {plural} on {topic} — click to download."
+    reply = (f"Here {'is' if len(papers) == 1 else 'are'} {len(papers)} {plural}"
+             f"{_topic_phrase(topic)} — click to download.")
     scans = sum(1 for p in papers if p["scanned"])
     if scans:
         reply += (f" {scans} of them {'is a scan' if scans == 1 else 'are scans'}, "
