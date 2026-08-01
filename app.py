@@ -1,6 +1,7 @@
 import io
 import os
 import re
+import ast
 import json
 import base64
 import hashlib
@@ -94,6 +95,65 @@ GRAPH_SYSTEM_PROMPT = (
     "- End with plt.tight_layout()."
 )
 
+# Generated plotting code is checked against an allowlist before it runs, so a
+# construct nobody thought of is blocked by default rather than allowed by
+# default. The abstract bases (ast.operator and friends) cover every arithmetic
+# and comparison operator without listing them one by one.
+_GRAPH_ALLOWED_NODES = (
+    ast.Module, ast.Expr, ast.Assign, ast.AugAssign, ast.For, ast.If, ast.Pass,
+    ast.Call, ast.keyword, ast.Name, ast.Attribute, ast.Subscript, ast.Slice, ast.Starred,
+    ast.Constant, ast.Tuple, ast.List, ast.Dict, ast.Set,
+    ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.comprehension,
+    ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare, ast.IfExp,
+    ast.operator, ast.unaryop, ast.boolop, ast.cmpop, ast.expr_context,
+)
+
+# These write files or open windows — the route renders the figure itself.
+_GRAPH_BANNED_ATTRS = {"savefig", "show", "close", "imsave"}
+
+# None of these are in _GRAPH_BUILTINS, so they would already die with a
+# NameError. Naming them here rejects the code before it runs and says why.
+_GRAPH_BANNED_NAMES = {
+    "exec", "eval", "compile", "open", "input", "breakpoint", "help",
+    "globals", "locals", "vars", "dir", "getattr", "setattr", "delattr",
+}
+
+# exec() with no "__builtins__" key gets the real builtins injected, which is
+# what left __import__ reachable. An explicit minimal set closes that.
+_GRAPH_BUILTINS = {
+    "abs": abs, "min": min, "max": max, "sum": sum, "round": round, "pow": pow,
+    "range": range, "len": len, "enumerate": enumerate, "zip": zip,
+    "sorted": sorted, "reversed": reversed,
+    "int": int, "float": float, "str": str, "bool": bool,
+    "list": list, "tuple": tuple, "dict": dict, "set": set,
+}
+
+
+def _check_graph_code(code: str) -> str | None:
+    """Return why generated plotting code is unsafe, or None if it's fine."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return f"it did not parse: {e.msg}"
+
+    for node in ast.walk(tree):
+        if not isinstance(node, _GRAPH_ALLOWED_NODES):
+            return f"{type(node).__name__} is not allowed"
+        # Leading underscores are how you climb out of a restricted namespace,
+        # e.g. ().__class__.__base__.__subclasses__().
+        if isinstance(node, ast.Attribute):
+            if node.attr.startswith("_"):
+                return f"attribute {node.attr!r} is not allowed"
+            if node.attr in _GRAPH_BANNED_ATTRS:
+                return f"{node.attr}() is not allowed — the server renders the figure"
+        if isinstance(node, ast.Name):
+            if node.id.startswith("_"):
+                return f"name {node.id!r} is not allowed"
+            if node.id in _GRAPH_BANNED_NAMES:
+                return f"{node.id}() is not allowed"
+    return None
+
+
 ALLOWED_IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 PDF_TEXT_LIMIT  = 8000
 
@@ -104,7 +164,12 @@ PAPER_MAX_BYTES = 20 * 1024 * 1024   # a scanned A-level paper can be big; 20MB 
 PAPER_MAX_FETCH = 3                  # per search, to keep the request from crawling
 VERIFY_OVERSHOOT = 3                 # spare questions, since the answer check drops some
 _PAPER_ID_RE    = re.compile(r'^[0-9a-f]{16}$')
+_GREETING_RE = re.compile(
+    r"^\s*(?:h(?:i|ey|ello|igh)|yo|sup|good\s+(?:morning|afternoon|evening))"
+    r"(?:\s+there)?\s*[!.?]*\s*$", re.IGNORECASE)
 
+_FILLER_WORDS = {"test", "testing", "asdf", "abc", "stuff", "thing", "things",
+                 "anything", "something", "idk", "none", "na"}
 
 def _pdf_text(data: bytes) -> str:
     """Extract the text layer from PDF bytes. Empty string if it has none."""
@@ -210,12 +275,16 @@ def api_graph():
     # Strip accidental markdown fences and any savefig/show/close calls
     code = re.sub(r"^```(?:python)?\n?", "", raw_code.strip())
     code = re.sub(r"\n?```$", "", code)
-    code = re.sub(r"plt\.(savefig|show|close)\([^)]*\)\n?", "", code)
-    code = re.sub(r"^import .*$", "", code, flags=re.MULTILINE)
+    code = re.sub(r"plt\.(savefig|show|close)\(.*?\)\n?", "", code)
+    code = re.sub(r"^\s*(?:import|from)\s+.*$", "", code, flags=re.MULTILINE)
+
+    err = _check_graph_code(code)
+    if err:
+        return jsonify({"error": f"Refused to run the generated graph code — {err}"}), 400
 
     try:
         plt.close("all")
-        exec(code, {"plt": plt, "np": np})  # noqa: S102
+        exec(code, {"__builtins__": _GRAPH_BUILTINS, "plt": plt, "np": np})  # noqa: S102
         buf = io.BytesIO()
         plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
         plt.close("all")
@@ -341,7 +410,8 @@ def api_check():
                 "images": [attachment["b64"]],
             },
         ]
-        return jsonify({"response": chat(messages, model=model, host=host, provider=provider, api_key=api_key)})
+        raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+        return jsonify({"response": _strip_signal(raw)[0]})
 
     pdf_context = f"Attached document:\n{attachment['text']}\n\n" if attachment and attachment.get("type") == "pdf" else ""
 
@@ -356,7 +426,8 @@ def api_check():
         f"Student's answer: {answer}\n\n"
         "Is the student's answer correct? Explain briefly."
     )
-    return jsonify({"response": generate(prompt, model=model, host=host, provider=provider, api_key=api_key)})
+    raw = generate(prompt, model=model, host=host, provider=provider, api_key=api_key)
+    return jsonify({"response": _strip_signal(raw)[0]})
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -754,7 +825,7 @@ def _collect_papers(results: list[dict]) -> tuple[list[dict], list[str]]:
 _PAPER_NOUN = r"(?:past[\s-]?papers?|exam papers?|pdfs?|mark schemes?|real (?:exam )?questions?|papers)"
 _FETCH_VERB = r"(?:get|give|fetch|find|download|send|show|grab|take|provide|need|want|have)"
 _NEGATION   = r"(?:don'?t|do not|not|no need|nope|never|rather not|without)"
-
+_ABOUT_RE = re.compile(r"^\s*(?:what|why|how|explain|describe|tell me about)\b", re.IGNORECASE)
 # A verb, then the noun within a short window — "give me some past papers" hits,
 # "what is a past paper?" does not.
 _WANTS_PAPERS_RE = re.compile(
@@ -768,8 +839,13 @@ def _wants_papers(text: str) -> bool:
     """True when the student is asking for actual paper files."""
     if not text or _NOT_PAPERS_RE.search(text):
         return False
-    return bool(_WANTS_PAPERS_RE.search(text))
-
+    if _WANTS_PAPERS_RE.search(text):
+        return True
+    # No fetch verb. On a short message the noun is the whole request, but a
+    # question *about* papers is not a request for one.
+    if _ABOUT_RE.search(text):
+        return False
+    return len(text.split()) <= 8 and bool(re.search(_PAPER_NOUN, text, re.I))
 
 # "past papers on trigonometry" / "a paper for calculus" — an explicit subject in
 # the request beats the lesson topic.
@@ -783,9 +859,19 @@ _TOPIC_TRAIL_RE = re.compile(r"\b(?:please|pls|thanks|thank you|now|asap|ok)\b\s
 
 def _papers_for_chat(user_input: str, lesson_topic: str, tavily_key: str) -> tuple[str, list]:
     """Fetch papers for a mid-lesson request. Returns (reply text, papers)."""
-    match = _TOPIC_IN_REQUEST_RE.search(user_input)
-    topic = _TOPIC_TRAIL_RE.sub("", match.group(1)).strip() if match else ""
-    topic = topic or lesson_topic.strip()
+    match  = _TOPIC_IN_REQUEST_RE.search(user_input)
+    stated = _TOPIC_TRAIL_RE.sub("", match.group(1)).strip() if match else ""
+
+    # A topic named in the request is trusted — the student chose it just now.
+    # The lesson topic is not: it is typed once and then reused for every papers
+    # request in the session, so a junk one silently poisons all of them.
+    if stated:
+        topic = stated
+    else:
+        topic = lesson_topic.strip()
+        if topic and not _looks_like_topic(topic):
+            return (f'I\'d be searching for "{topic}", which doesn\'t look like a '
+                    "subject. Which topic should I find papers on?", [])
 
     if not topic:
         return ("Which topic should I look for? Tell me the subject and I'll find papers on it.", [])
@@ -812,6 +898,20 @@ def _papers_for_chat(user_input: str, lesson_topic: str, tavily_key: str) -> tup
                   "so the text can't be read out of it — but it still downloads.")
     reply += " Your lesson is still here whenever you want to carry on."
     return reply, papers
+
+
+def _looks_like_topic(text: str) -> bool:
+    """Rough check that a string names a subject rather than a greeting.
+
+    Deliberately conservative: it rejects only what is clearly not a subject.
+    Anything uncertain passes, because blocking a real topic is worse than
+    running one useless search.
+    """
+    t = text.strip()
+    if len(t) < 3 or _GREETING_RE.match(t):
+        return False
+    words = re.findall(r"[a-z0-9']+", t.lower())
+    return bool(words) and any(w not in _FILLER_WORDS for w in words)
 
 
 if __name__ == "__main__":
