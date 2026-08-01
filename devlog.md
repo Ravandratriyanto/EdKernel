@@ -317,7 +317,7 @@ routing failures and sent paper intent detection to a structured call.
 - Konsole's menubar claims `Alt+V` for its View menu; `Ctrl+Shift+M` hides it
 
 ### The 📄 Papers button did nothing
-- Diagnosed, **not fixed** — the frontend was left alone this session
+- Diagnosed here, fixed later in the session — see *The three frontend papers bugs* below
 - `startPapers()` bails on `if (!topic || busy) return;` with no message, no bubble, no indicator. An empty topic box makes the button look dead. `resetLearnUI()` clears `input-topic`, so switching modes is an easy way to land there without noticing
 - The backend is healthy: a live `/api/papers` call returned 200 with 3 real PDFs, `grounded: true`, 0 dropped
 - That live call also measured the cost: **1m40s**, with three animated dots as the only feedback for the whole wait
@@ -387,10 +387,27 @@ routing failures and sent paper intent detection to a structured call.
 - First entry was the structured call above, written up before building it, including the evidence, the cost argument, and what it explicitly does not fix
 - Now stale by its own rule, since that entry shipped the same day
 
+### The tutor denied it could read uploaded files
+- Found while testing the classifier's fall-through, not by looking for it: `explain this paper I uploaded` reached the tutor, which answered *"As a text-based AI model, I don't have the capability to receive or access files"*. That is false — `/api/upload` handles PDFs and images and `_apply_attachment` puts the content into the conversation
+- Same shape as the past-papers denial: the honesty rule covers *"a file, a download"*, an upload is a file, so the model admitted a limit it does not have. **Second time one blanket honesty rule has swallowed a real capability** — worth remembering if a third capability is ever added
+- The claim was wrong in two different ways depending on whether anything was attached, so the clause covers both. With a file attached the content really is there to read; with none, that is a *missing attachment* rather than a limit, so it asks for the paperclip button instead of explaining what it cannot do
+- Worded against how attachments actually arrive — a PDF as extracted text, an image either as an image or as a transcription depending on provider — so the prompt does not promise more than `_apply_attachment` delivers
+- Live: three no-attachment phrasings all ask for the file rather than denying; with a PDF attached it uses the content and asks a question about it; email, printing and past papers all still behave as before
+
+### The three frontend papers bugs
+- All three closed, and the frontend was found to be **completely dead** on the way in: the `function showPaperQuestion() {` line had been lost, leaving its body at top level with a bare `return`. That is a SyntaxError, so no script on the page ran and every button was broken, not just Papers
+- Caught by extracting the `<script>` block and running `node --check` on it. Worth keeping as a habit — this file has no build step, so nothing else would have told us
+- Empty topic now says so instead of returning silently. The `busy` guard stays separate: that one really is "ignore this click", an empty topic is a user error
+- Quiz end calls `resetLearnUI()`, which unhides `topic-row`, re-enables both buttons and hides `answer-row` in one go
+- The 100s wait now shows an elapsed clock, reusing the existing `.paper-progress` style. **Teardown is called from inside `removeThinking()`** rather than at each exit site — `startPapers` has two, and a leaked `setInterval` keeps ticking against a removed node forever. Slight coupling, but a helper that cannot be forgotten was worth it in a file that had a defined-but-never-called helper twice this session
+- Verified by driving the script through a stubbed DOM in node, 11 checks. The timer leak is the one that is invisible by eye
+- Two things that were not typos: the status pill had been wired into the *hint* path, which takes ~2s and would have said "Searching past papers and downloading PDFs" while fetching a hint, and never into `startPapers` where the wait actually is. And `currentTopic = topic` had been dropped, which is what a mid-lesson paper request reads the subject from
+
 ### Current state
-- Everything this session is committed and pushed: `a3593b2`, `854070e`, `aaf7327`, `c10fe69`, `9b63b6c`
+- Everything this session is committed and pushed, `a3593b2` through `330ebcf` — nine commits
 - Everything below the screenshot-paste entry is on top of `04319a7`
-- Five `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, the papers topic-reuse bug, the prompt contradiction, and paper intent detection. Plus the `_ABOUT_RE` blocker introduced and fixed within the session
+- Six `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, the papers topic-reuse bug, the prompt contradiction, paper intent detection, and the uploaded-files denial. Plus the reply sentence swallowing a whole topic, and the `_ABOUT_RE` blocker introduced and fixed within the session
+- **The frontend was touched after all**, and all three papers bugs are closed. It was also found dead on arrival with a SyntaxError that killed every button on the page
 - **Paper requests are decided by the model now, not a regex.** Keywords survive as a prefilter and as the fallback when the call fails
 - Chat intent detection went from 5/14 to 14/14 on realistic phrasings, then to 7/7 live on the classifier including the phrasings no regex was going to catch
 - `app.py` compiles, all 9 routes present, and every prior fix still passes after each subsequent change
@@ -398,11 +415,12 @@ routing failures and sent paper intent detection to a structured call.
 - No phase moved. Phase 7 (video) is still the next unbuilt phase
 
 ### Known issues / caveats
-- **The 📄 Papers button still silently does nothing on an empty topic**, and a finished quiz still leaves `topic-row` hidden with both buttons disabled. Both diagnosed with exact line numbers, neither fixed — the frontend was not touched this session
-- **`/api/papers` takes 100 seconds** and says nothing while it works. Measured, not estimated. The single most likely thing to read as "broken" to a student
+- **`/api/papers` still takes 100 seconds.** The elapsed clock makes the wait legible; it does not make it shorter, and search plus download plus generate plus verify is four sequential steps that could report progress instead of one opaque block
+- **Asking for papers mid-lesson still shows bare dots.** That path goes through `sendAnswer`, which cannot know in advance the turn will fetch, so it gets no clock. Fixing it properly needs the server to stream progress
+- **The frontend has no syntax check and no build step.** A lost `function` line took the entire page down this session and nothing surfaced it — extracting the `<script>` block and running `node --check` was the only thing that caught it. Worth wiring into `hooks/pre-commit`
 - **The graph sandbox has no timeout.** `for i in range(10**9)` passes validation and hangs the request. Only a subprocess fixes that, and in-process restricted execution is never airtight regardless — the AST allowlist is doing the real work, not the builtins trimming
-- **The tutor claims it cannot receive uploaded files.** Surfaced while testing the classifier fall-through: `explain this paper I uploaded` reached the tutor, which replied *"As a text-based AI model, I don't have the capability to receive or access files"*. That is false — `/api/upload` handles PDFs and images. Same shape as the past-papers denial fixed this session, different subject, not yet fixed
-- **`design.md` is stale.** The structured call shipped the same day it was written up, so by that file's own rule the entry should have moved here and come out of it
+- **Two capability denials have now been patched one at a time.** Past papers and uploaded files were the same bug wearing different clothes: one blanket honesty rule that does not know what the app can actually do. A third capability will hit it again. The rule wants rewriting around a list of what *is* possible, rather than another exception bolted on
+- `design.md` keeps the structured-call entry marked **SHIPPED** rather than deleted, against its own rule that entries move out once built. The cost argument for why a classifier here does not contradict the Session 4 decision is worth keeping, and it is exactly the sort of thing that gets re-litigated later
 - Check mode still uses `TUTOR_SYSTEM_PROMPT`, so a prompt that says *"never give the full answer unprompted"* is being asked for a verdict. Stripping hides the marker; it does not resolve the mismatch. The two branches also differ in tone, since only one has a system prompt
 - The structured call adds a model call to paper-request turns. Cheap next to a 20–100s search, but it is a second thing that can fail on that path, and the fallback is the same keyword rules that got these cases wrong in the first place
 - `_looks_like_topic` is a heuristic and now matters less, since the classifier resolves the topic first. It is still the backstop on the fallback path
@@ -412,8 +430,8 @@ routing failures and sent paper intent detection to a structured call.
 
 ### Next
 1. **Phase B — session logging.** Fourth session running. Still blocking the Phase C dataset, per-student metering, and the school-subscription auth model
-2. The three frontend papers bugs — empty-topic feedback, quiz-end UI restore, and something on screen during the 100s wait
-3. Stop the tutor denying it can receive uploaded files, the same way past papers was fixed
+2. Add a `node --check` on the `<script>` block to `hooks/pre-commit`. A lost `function` line took the whole page down this session and nothing caught it
+3. Rewrite the capability rule around what the app *can* do, instead of adding a third exception the next time this bites
 4. Validate the topic at `startLearn`, so junk never enters the session in the first place
 5. Unify the two tutor prompts, and give check mode its own prompt rather than the Socratic one
 6. Clean up extracted PDF text so notation survives, then vision transcription for scans
