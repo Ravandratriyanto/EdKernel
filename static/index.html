@@ -398,6 +398,7 @@
   let filePicker_target = '';
   let provider = 'ollama';
   let wrongStreak = 0;
+  let paperTimer = null;
   // Kept because the topic input is cleared and hidden once a lesson starts,
   // but a mid-lesson "get me a past paper" still needs to know the subject.
   let currentTopic = '';
@@ -635,6 +636,7 @@
   }
 
   function removeThinking() {
+    removeSearchStatus();
     const el = document.getElementById('thinking-indicator');
     if (el) el.remove();
   }
@@ -918,6 +920,32 @@
     }
     return questions;
   }
+  // The papers request takes 20-100s — search, download, generate, verify — and
+  // three dots for that long reads as hung. An elapsed clock shows it is alive.
+  function showSearchStatus() {
+    const area = document.getElementById('chat-area');
+    const el = document.createElement('div');
+    el.id = 'paper-search-status';
+    el.className = 'paper-progress';
+    area.appendChild(el);
+
+    const started = Date.now();
+    const tick = () => {
+      const s = Math.round((Date.now() - started) / 1000);
+      el.textContent = 'Searching past papers and downloading PDFs — '
+                     + `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
+    tick();
+    paperTimer = setInterval(tick, 1000);
+    area.scrollTop = area.scrollHeight;
+  }
+
+  function removeSearchStatus() {
+    if (paperTimer) { clearInterval(paperTimer); paperTimer = null; }
+    const el = document.getElementById('paper-search-status');
+    if (el) el.remove();
+  }
+
 
   function showPapers(papers, grounded, dropped) {
     const area = document.getElementById('chat-area');
@@ -991,7 +1019,8 @@
   function showPaperQuestion() {
     if (paperIndex >= paperQuestions.length) {
       appendDone();
-      document.getElementById('answer-row').classList.add('hidden');
+      paperMode = false;
+      resetLearnUI();
       return;
     }
     showPaperProgress();
@@ -1066,7 +1095,11 @@
   async function startPapers() {
     const topic     = document.getElementById('input-topic').value.trim();
     const tvlyKey   = tavilyKey();
-    if (!topic || busy) return;
+    if (busy) return;
+    if (!topic) {
+      appendBubble('tutor', 'Type a topic in the box first, then press Papers.');
+      return;
+    }
     currentTopic = topic;
     // No key check here — the server falls back to TAVILY_KEY in .env, and only
     // it knows whether that fallback exists. It returns a clear error if not.
@@ -1083,6 +1116,7 @@
     clearChat();
 
     appendThinking();
+    showSearchStatus();
     try {
       const res  = await fetch('/api/papers', {
         method: 'POST',
