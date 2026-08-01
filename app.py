@@ -346,17 +346,21 @@ def api_reply():
     # The reply is written here rather than by the model: the model has no way to
     # know whether the download actually succeeded, and this turn must not be
     # answered with another Socratic question.
-    if _wants_papers(user_input):
-        reply, papers = _papers_for_chat(user_input, topic, tavily_key)
-        messages.append({"role": "user", "content": user_input})
-        messages.append({"role": "assistant", "content": reply})
-        return jsonify({
-            "response": reply,
-            "messages": _strip_images(messages),
-            "done": False,
-            "correct": None,
-            "papers": papers,
-        })
+    if _mentions_papers(user_input):
+        intent = _paper_intent(user_input, topic, model=model, host=host,
+                               provider=provider, api_key=api_key)
+        if intent["wants_papers"]:
+            reply, papers = _papers_for_chat(intent["topic"], tavily_key)
+            messages.append({"role": "user", "content": user_input})
+            messages.append({"role": "assistant", "content": reply})
+            return jsonify({
+                "response": reply,
+                "messages": _strip_images(messages),
+                "done": False,
+                "correct": None,
+                "papers": papers,
+            })
+        # Not a papers request after all — fall through to the tutor as normal.
 
     hint_note = ""
     if wrong_streak == 1:
@@ -819,9 +823,14 @@ def _collect_papers(results: list[dict]) -> tuple[list[dict], list[str]]:
 
 
 # ── "just give me the papers" detection ─────────────────────────────────────
-# Keywords rather than a classifier: a classifier would cost a call on every
-# tutor turn to catch something plain matching handles, and it would add latency
-# to the common path where the student is just answering a question.
+# Two stages. The keyword rules below are a cheap prefilter that decides whether
+# a turn is worth asking about; _paper_intent() then makes one structured call to
+# decide intent and topic together. The original objection to a classifier was
+# that it would cost a call on every tutor turn — it does not, because a message
+# that never mentions papers never gets that far.
+#
+# The regexes stay as the fallback for when that call fails, so a flaky model
+# cannot cost the student the feature.
 
 # Bare "papers" is included but only in the plural: "take some papers" is a
 # request, while "explain this paper I uploaded" is not — and the fetch-verb
@@ -861,21 +870,99 @@ _TOPIC_IN_REQUEST_RE = re.compile(
 _TOPIC_TRAIL_RE = re.compile(r"\b(?:please|pls|thanks|thank you|now|asap|ok)\b\s*$", re.IGNORECASE)
 
 
-def _papers_for_chat(user_input: str, lesson_topic: str, tavily_key: str) -> tuple[str, list]:
-    """Fetch papers for a mid-lesson request. Returns (reply text, papers)."""
-    match  = _TOPIC_IN_REQUEST_RE.search(user_input)
-    stated = _TOPIC_TRAIL_RE.sub("", match.group(1)).strip() if match else ""
+def _stated_topic(user_input: str) -> str:
+    """The subject named in the request itself, or empty."""
+    m = _TOPIC_IN_REQUEST_RE.search(user_input)
+    return _TOPIC_TRAIL_RE.sub("", m.group(1)).strip() if m else ""
 
-    # A topic named in the request is trusted — the student chose it just now.
-    # The lesson topic is not: it is typed once and then reused for every papers
-    # request in the session, so a junk one silently poisons all of them.
-    if stated:
-        topic = stated
-    else:
-        topic = lesson_topic.strip()
-        if topic and not _looks_like_topic(topic):
-            return (f'I\'d be searching for "{topic}", which doesn\'t look like a '
-                    "subject. Which topic should I find papers on?", [])
+
+# The prefilter. Deliberately far wider than _wants_papers: no verb requirement
+# and no negation cancel, because "can you not just fetch the whole pdf" is a
+# request and the negation rule got that exactly backwards. The regex stops
+# adjudicating and only decides whether a question is worth asking.
+#
+# Bare "paper" is singular here, unlike _PAPER_NOUN, which keeps it plural-only
+# so the fallback behaves as it always has. "why won't you give me the paper" is
+# a real request and has to reach the classifier; "explain this paper I uploaded"
+# reaches it too and comes back false, which costs one call and gets the right
+# answer instead of a lucky one.
+_MENTIONS_PAPERS_RE = re.compile(rf"\b(?:{_PAPER_NOUN}|paper)\b", re.IGNORECASE)
+
+
+def _mentions_papers(text: str) -> bool:
+    """Cheap gate — only messages that mention papers cost an intent call."""
+    return bool(text) and bool(_MENTIONS_PAPERS_RE.search(text))
+
+
+PAPER_INTENT_PROMPT = (
+    "You decide whether a student is asking to be given past exam paper files, "
+    "and what subject those papers should be about.\n\n"
+    "Return ONLY a JSON object. No prose, no code fences:\n"
+    '{{"wants_papers": true or false, "topic": "subject" or null}}\n\n'
+    "wants_papers is true when the student wants actual paper files handed to them, "
+    "including when it is phrased as a complaint or a rhetorical question "
+    '("can you not just fetch the whole pdf", "why won\'t you give me the paper").\n'
+    "wants_papers is false when they ask what a past paper is, discuss a paper they "
+    "already uploaded, or are simply answering a lesson question.\n\n"
+    "topic is the exam subject to search for, as a short phrase a search engine would "
+    'accept: "SAT", "trigonometry", "AS level Computer Science". '
+    "Take it from the student's message when they name one. Otherwise fall back to the "
+    "lesson topic below, shortened to just the subject — the lesson topic may be a full "
+    "sentence, so strip it down to the subject. Use null only if neither gives a subject.\n\n"
+    "Lesson topic: {lesson_topic}\n"
+    "Student message: {message}"
+)
+
+# Greedy on purpose: models wrap JSON in fences and prose, and the outermost
+# {...} is the object we want.
+_JSON_OBJ_RE = re.compile(r'\{.*\}', re.DOTALL)
+
+
+def _paper_intent(user_input: str, lesson_topic: str, **llm) -> dict:
+    """Decide whether this turn is a papers request, and for what subject.
+
+    Falls back to the keyword rules on any failure. A flaky model must not cost
+    the student the feature — the same policy as _verify_questions.
+    """
+    fallback = {
+        "wants_papers": _wants_papers(user_input),
+        "topic": _stated_topic(user_input) or lesson_topic.strip(),
+    }
+
+    try:
+        raw = chat([{"role": "user", "content": PAPER_INTENT_PROMPT.format(
+            lesson_topic=lesson_topic.strip() or "(none)", message=user_input)}], **llm)
+    except Exception:
+        return fallback
+
+    m = _JSON_OBJ_RE.search(raw or "")
+    if not m:
+        return fallback
+    try:
+        data = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return fallback
+
+    # A model that returns the wrong shape is a failed call, not a "no".
+    if not isinstance(data.get("wants_papers"), bool):
+        return fallback
+
+    topic = data.get("topic")
+    topic = topic.strip() if isinstance(topic, str) else ""
+    return {"wants_papers": data["wants_papers"], "topic": topic}
+
+
+def _papers_for_chat(topic: str, tavily_key: str) -> tuple[str, list]:
+    """Fetch papers for an already-resolved topic. Returns (reply text, papers).
+
+    The topic is decided by _paper_intent() before this is called. _looks_like_topic
+    stays as a backstop, because the fallback path can still hand over a raw
+    lesson topic that was never a subject.
+    """
+    topic = (topic or "").strip()
+    if topic and not _looks_like_topic(topic):
+        return (f'I\'d be searching for "{topic}", which doesn\'t look like a '
+                "subject. Which topic should I find papers on?", [])
 
     if not topic:
         return ("Which topic should I look for? Tell me the subject and I'll find papers on it.", [])
