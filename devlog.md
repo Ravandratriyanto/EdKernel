@@ -300,3 +300,81 @@ Started by pulling `8ef028e` (past-papers mode + multiple-choice option buttons)
 3. Clean up extracted PDF text so notation survives, then consider vision transcription for scans
 4. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn
 5. Then Phase 7 (video) and Phase C (LoRA fine-tune)
+
+## Session 5 — 2026-08-01
+
+No new phase. A screenshot-paste problem in the dev environment, then a full read
+of `app.py` that turned up one blocker and two real bugs, all three fixed.
+
+### Screenshot paste into Claude Code (environment, not the product)
+- `Meta+Shift+S` ran `spectacle --region --background --copy-image --nonotify --release-capture`. Pasting was intermittent, and pasting into a terminal never worked at all
+- **`--release-capture` is not a Spectacle flag.** It is not in `--help` and Spectacle silently ignores it — capture still succeeds, exit 0, no error to tip you off. The real setting is `useReleaseToCapture`, a `spectaclerc` key, and it was unset. So the drag was waiting for a confirmation click that sometimes happened by accident. Set explicitly in `[General]`
+- The terminal failure was separate and stranger. **Spectacle's `--copy-image` never publishes an `image/png` offer to the Wayland clipboard** — after a snip, `wl-paste --list-types` shows only `application/x-kde-onlyReplaceEmpty`. KDE/Qt apps still paste it via Klipper's internal history, which is why browsers and WhatsApp worked and only the terminal did not
+- Ruled out first, by measurement, not by guessing: Klipper handoff is not a race (image lands ~15ms after Spectacle exits, 8/8 runs), `IgnoreImages` was already `false`, and DBus single-instance forwarding does not swallow `--copy-image`
+- Fixed with `~/.local/bin/copyshot-region`: capture to a temp file, then `wl-copy --type image/png`, which forks a holder process advertising a proper offer. Cancelling with Escape leaves the clipboard untouched. Paste bound to `alt+v` in `~/.claude/keybindings.json`
+- Konsole's menubar claims `Alt+V` for its View menu; `Ctrl+Shift+M` hides it
+
+### The 📄 Papers button did nothing
+- Diagnosed, **not fixed** — the frontend was left alone this session
+- `startPapers()` bails on `if (!topic || busy) return;` with no message, no bubble, no indicator. An empty topic box makes the button look dead. `resetLearnUI()` clears `input-topic`, so switching modes is an easy way to land there without noticing
+- The backend is healthy: a live `/api/papers` call returned 200 with 3 real PDFs, `grounded: true`, 0 dropped
+- That live call also measured the cost: **1m40s**, with three animated dots as the only feedback for the whole wait
+- Separate bug in the same flow: `showPaperQuestion()` ends a finished quiz with `appendDone()` and a bare `return`, never restoring `topic-row` or re-enabling either button. The three error paths restore them; the success path does not
+
+### Chat intent detection widened
+- Session 4's rule required a fetch verb before the paper noun. Tested against realistic phrasings: **9 of 14 missed** — `past papers please`, `any past papers?`, `got any past papers`, `gimme past papers`, and `past paper on trigonometry`, which is the exact shape `_TOPIC_IN_REQUEST_RE` exists to parse
+- Fix keeps the verb rule as the fast path, then allows a bare noun on a message of 8 words or fewer, guarded by `_ABOUT_RE` so `what is a past paper?` stays a question. No extra model call, so the design note about avoiding a classifier still holds
+- 14/14 after the change, including all six negative cases
+- **A `NameError` shipped in the working tree in the middle of this.** `_ABOUT_RE` was used but never defined, and `_wants_papers` runs at the top of `/api/reply` on every turn — so every ordinary student answer 500'd. Paper requests still worked, because they return before reaching the undefined name, which is the worst possible way for it to fail. Not noticed live because the running server had `use_reloader=False` and was still serving pre-edit code
+
+### Papers always came back as SAT Practice Test #6, #10 and #9
+- Not a cache and not a dedup bug. The search was being asked for `high there`
+- `_papers_for_chat` did `topic = topic or lesson_topic.strip()`. The lesson topic is typed once and reused for every papers request in the session, so one junk topic poisons all of them — hence "still"
+- Confirmed by running the same search across topics: `photosynthesis` returns A-level Biology papers, `trigonometry` returns SAT/A-level maths, `high there` returns exactly #6, #10 and #9. With a meaningless topic the hardcoded `past paper exam questions SAT A-level filetype:pdf` in the query does all the work and College Board's generic practice tests win every time
+- `_looks_like_topic()` now vets the fallback. A topic named in the request is trusted — the student chose it just now; only the silently-reused lesson topic is checked. Rejection names the offending string rather than searching anyway
+- Conservative on purpose: it rejects greetings and filler and passes anything it is unsure about, because blocking a real topic is worse than one wasted search
+- Verified 12/12 on the guard, 4/4 on routing, and live: junk topic returns the question with no Tavily call spent; `trigonometry` returns 3 real maths papers in 21s
+
+### `/api/check` leaked `[CORRECT]` to the student
+- Both return paths returned raw model output. `/api/start` and `/api/reply` both call `_strip_signal`; check was the only one that did not
+- The image branch is handed `TUTOR_SYSTEM_PROMPT`, which *mandates* `[CORRECT]`/`[WRONG]`, and `submitCheck` renders `data.response` straight into a bubble. The `generate` branch has no system prompt at all, so it needed the `_STRAY_MARKER_RE` half for invented markers like `[WAITING FOR RESPONSE]`
+- Both paths now strip. Verified with patched `chat`/`generate` so a marker appears deterministically — a live model only emits one sometimes, which would have been a weaker test. Also checked the reverse: a normal multi-line answer passes through byte-identical
+
+### `/api/graph` executed model-written code unsandboxed
+- `exec(code, {"plt": plt, "np": np})`. A globals dict with no `__builtins__` key **gets the real builtins injected automatically**, so `__import__` was reachable the whole time and the `^import` regex never mattered. Confirmed by running it
+- There is a path in from outside: fetched past-paper text → tutor → a ```graph block → generated code → `exec`
+- Now two layers. `_check_graph_code()` walks the AST against an allowlist, so `Import`, `While`, `Lambda`, `FunctionDef` and everything else unlisted is rejected by construction rather than by being thought of; leading-underscore names and attributes are blocked, which closes `().__class__.__base__.__subclasses__()`. Then `exec` runs with an explicit minimal `__builtins__`
+- `_GRAPH_BANNED_NAMES` was added after testing: `exec('print(1)')` passed the AST check, since `exec` is an ordinary undotted name. It would have died as a `NameError`, but a clear refusal beats an obscure error
+- The old `savefig|show|close` strip used `[^)]*` and stopped at the first `)`; widened, with an AST ban as backstop. The import strip only caught `^import`, so `from os import system` sailed through
+- 15/15 on the validator. Live through the route: benign code still renders a real 34KB PNG, the `__import__` payload is refused with a 400, and the side-effect file it tried to touch was never created
+
+### Reading `main.py` while there
+- The past-papers feature is **entirely absent from the CLI** — no detection, no fetching, no Tavily. So none of the above needed a CLI counterpart
+- The prompts have drifted further: `main.py` is still essentially the Phase-1 prompt, sharing only the plain-English rules and `Topic complete.`
+- Worth recording because the obvious fix is a trap: copying `app.py`'s prompt across would have the CLI promise *"ask for a past paper and it will be fetched"*, which it cannot do. The CLI is currently honest only because it does not mention papers
+
+### Current state
+- Everything this session is **uncommitted, working tree only**, on top of `04319a7`
+- Three `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, and the papers topic-reuse bug. Plus the `_ABOUT_RE` blocker introduced and fixed within the session
+- Chat intent detection went from 5/14 to 14/14 on realistic phrasings
+- `app.py` compiles, all 9 routes present, and every prior fix still passes after each subsequent change
+- The running server spent the session on stale code (`use_reloader=False`); it needs a restart to pick any of this up
+- No phase moved. Phase 7 (video) is still the next unbuilt phase
+
+### Known issues / caveats
+- **The 📄 Papers button still silently does nothing on an empty topic**, and a finished quiz still leaves `topic-row` hidden with both buttons disabled. Both diagnosed with exact line numbers, neither fixed — the frontend was not touched this session
+- **`/api/papers` takes 100 seconds** and says nothing while it works. Measured, not estimated. The single most likely thing to read as "broken" to a student
+- **The graph sandbox has no timeout.** `for i in range(10**9)` passes validation and hangs the request. Only a subprocess fixes that, and in-process restricted execution is never airtight regardless — the AST allowlist is doing the real work, not the builtins trimming
+- Check mode still uses `TUTOR_SYSTEM_PROMPT`, so a prompt that says *"never give the full answer unprompted"* is being asked for a verdict. Stripping hides the marker; it does not resolve the mismatch. The two branches also differ in tone, since only one has a system prompt
+- `_looks_like_topic` is a heuristic. `high there` is caught as a greeting, but both its words are ordinary English and a generic stopword check would let it through. Anything not recognisably a greeting or filler still passes
+- Nothing validates the lesson topic at `startLearn`, which is where `high there` got in. The guard fixes the reuse, not the source
+- Prompt drift is now flagged for a **fourth** session and has got worse, not better
+- Carried over untouched: `pypdf` mangles notation, scanned papers download but are never transcribed, answer verification catches disagreement rather than shared error, `data/papers/` still grows without bound, and Phase B session logging is still the bottleneck
+
+### Next
+1. **Phase B — session logging.** Fourth session running. Still blocking the Phase C dataset, per-student metering, and the school-subscription auth model
+2. The three frontend papers bugs — empty-topic feedback, quiz-end UI restore, and something on screen during the 100s wait
+3. Unify the two tutor prompts, and give check mode its own prompt rather than the Socratic one
+4. Clean up extracted PDF text so notation survives, then vision transcription for scans
+5. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn
+6. Then Phase 7 (video) and Phase C (LoRA fine-tune)
