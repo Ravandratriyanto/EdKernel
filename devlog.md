@@ -537,4 +537,13 @@ strength of code that runs, returns nothing, and fails silently.
 2. Measure `retrieve()`'s per-call cost, and hold the client and embedding function open if it is not free
 3. Log the retrieved sources per turn, so a bad lesson can be traced to the chunks that caused it
 4. Feed the resumed-lesson path some context, or say plainly in the UI that a replay is thinner than the original
-5. Everything still open from Session 5: auth first, then the rest of Phase B, `node --check` in the pre-commit hook, the capability rule, topic validation, prompt unification, prompt caching, then Phase 7 and Phase C
+5. **PDF text cleanup**, promoted out of the carried-over list. It pays twice: better lessons now, and it is a hard prerequisite for Phase C, because the logs that become training data carry whatever notation the extraction produced. Designed in `design.md`
+6. A syntax check in `hooks/pre-commit` — `python -m compileall` plus `node --check` on the extracted `<script>` block. The hook exists and only scans for API keys. Five sessions running, the dominant failure has been a transcription typo, not a design error
+7. Everything still open from Session 5: the rest of Phase B, the capability rule, topic validation, prompt unification, prompt caching, then Phase 7 and Phase C
+
+**Priority correction, made at the end of this session.** Auth was ranked first
+earlier today on the assumption this was heading for deployment. It is a
+personal side project run on localhost, so auth, rate limiting and retention
+are not blockers — they are what would be needed *if* that changes, and they
+stay recorded for then rather than sitting at the top of the list. What matters
+instead is lesson quality: grounding, notation, and the prompts.

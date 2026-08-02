@@ -295,3 +295,71 @@ Computer Science.
   module first.
 - **No timeout on the graph sandbox.** `for i in range(10**9)` passes AST
   validation and hangs the request. Only a subprocess fixes that.
+
+---
+
+## Phase C: what to copy from MathGPT, and what has to be fixed first
+
+Not a code proposal. An ordering argument, written down because it will be
+re-litigated when Phase C comes up and the evidence is easy to lose.
+
+### The reference point
+
+**Mathpresso** (Seoul), with **Upstage** and **KT**, built **MathGPT** on
+**Llama 2**, documented on Meta's own blog. Supervised fine-tuning on
+proprietary question-and-solution pairs from **QANDA**, their existing math app
+running across 50 countries, plus data augmentation and deliberately added
+maths-expression data to strengthen LaTeX interpretation. They claim a record on
+primary and secondary school maths benchmarks.
+
+That is Phase C, already done by someone else, and it worked. The pattern —
+open base model, fine-tuned on solution traces logged from your own tutoring
+platform — is the one this project's readme describes.
+
+### Two things worth taking from it
+
+**Their stated reason for choosing open weights was data control.** A hosted
+model would have meant handing proprietary problem-solution pairs to someone
+else. The equivalent here is student text, from minors, currently posted to
+Groq with no consent flow and no retention policy. If the privacy issue in the
+Session 5 known-issues list ever becomes real, this is the argument for the
+Ollama path that is already the default.
+
+**They trained on maths-expression data on purpose**, because notation is where
+a general model degrades first.
+
+### The ordering argument, which is the point of this entry
+
+`pypdf` turns `g(x)` into `gx^h`. That is currently filed as a lesson-quality
+problem. It is not — it is a **Phase C prerequisite**.
+
+Phase C trains on `.logs/sessions.jsonl`. Those logs contain tutor turns about
+uploaded PDFs and generated past-paper questions, and the mangled notation goes
+into the log exactly as the model saw it. Bad extraction does not just degrade
+one lesson, **it poisons the training set**, and it does so invisibly — the
+damage is in the data long before anyone runs a training job.
+
+So the sequence has to be:
+
+1. Clean up extracted PDF text so notation survives
+2. Vision transcription for the 4 scanned papers that currently contribute nothing
+3. *Then* accumulate logged sessions worth training on
+4. *Then* Phase C
+
+Doing 3 before 1 means throwing away however many months of logs it took to
+collect, or training on corrupted maths and not finding out until the adapter
+is worse than the base model.
+
+### Corollary for the log
+
+Nothing currently records **which retrieved chunks** produced a tutor turn, or
+whether a turn was grounded at all. For fine-tuning, an ungrounded turn and a
+grounded one are different kinds of example, and there is no way to tell them
+apart after the fact. Worth logging the retrieval sources before the log becomes
+training data, not after.
+
+### Not the same as competing with MathGPT
+
+Mathpresso had QANDA's existing user base across 50 countries feeding it data.
+This project has `.logs/sessions.jsonl` with tens of turns. The gap is data, not
+code, and no amount of building closes it. Phase C stays last for that reason.
