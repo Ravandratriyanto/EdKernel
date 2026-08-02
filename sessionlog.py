@@ -51,3 +51,55 @@ def attachment_meta(attachment: dict | None) -> dict | None:
     elif kind == "pdf":
         meta["text_chars"] = len(attachment.get("text") or "")
     return meta
+
+
+def read_records() -> list[dict]:
+    """Every record in the log, oldest first. Unparseable lines are skipped.
+
+    Takes the same lock as the writer so a half-written final line can't be
+    read mid-append.
+    """
+    if not LOG_PATH.exists():
+        return []
+    records = []
+    with _lock, LOG_PATH.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except ValueError:
+                continue          # one bad line is not worth losing the history over
+    return records
+
+
+def list_sessions(limit: int = 50) -> list[dict]:
+    """One summary per session id, newest first."""
+    sessions = {}
+    for rec in read_records():
+        sid = rec.get("session_id") or ""
+        if not sid:
+            continue              # pre-sidebar rows — nothing to open them by
+        s = sessions.get(sid)
+        if s is None:
+            s = sessions[sid] = {
+                "session_id": sid,
+                "mode":    rec.get("mode", "learn"),
+                "title":   "",
+                "turns":   0,
+                "started": rec.get("ts", ""),
+                "updated": rec.get("ts", ""),
+            }
+        s["turns"] += 1
+        s["updated"] = rec.get("ts", s["updated"])
+        if not s["title"]:
+            s["title"] = (rec.get("topic") or rec.get("input") or "").strip()
+    # ISO-8601 timestamps sort correctly as plain strings, so no date parsing.
+    return sorted(sessions.values(),
+                  key=lambda s: s["updated"], reverse=True)[:limit]
+
+
+def session_turns(session_id: str) -> list[dict]:
+    """Every turn of one session, oldest first."""
+    return [r for r in read_records() if r.get("session_id") == session_id]

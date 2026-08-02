@@ -20,7 +20,7 @@ from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
-from sessionlog import log_turn, attachment_meta
+from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 load_dotenv()
 
 _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
@@ -367,12 +367,25 @@ def api_reply():
     # know whether the download actually succeeded, and this turn must not be
     # answered with another Socratic question.
     if _mentions_papers(user_input):
+        started = time.monotonic()
         intent = _paper_intent(user_input, topic, model=model, host=host,
                                provider=provider, api_key=api_key)
         if intent["wants_papers"]:
             reply, papers = _papers_for_chat(intent["topic"], tavily_key)
             messages.append({"role": "user", "content": user_input})
             messages.append({"role": "assistant", "content": reply})
+            # This branch used to return without logging, which left a hole in
+            # the middle of any session that fetched papers.
+            log_turn("papers",
+                     session_id=data.get("session_id", ""),
+                     user_id=None,
+                     mode="learn", topic=intent["topic"] or topic,
+                     provider=provider, model=model,
+                     input=user_input, output=reply,
+                     correct=None, wrong_streak=wrong_streak,
+                     attachment=attachment_meta(attachment),
+                     tokens={},          # _paper_intent's usage is not metered yet
+                     latency_ms=round((time.monotonic() - started) * 1000))
             return jsonify({
                 "response": reply,
                 "messages": _strip_images(messages),
@@ -416,6 +429,70 @@ def api_reply():
         "messages": _strip_images(messages),
         "done": "Topic complete." in response,
         "correct": correct,
+    })
+
+# ── session history ──────────────────────────────────────────────────────────
+
+_SESSION_ID_MAX = 64
+# The events that make up a lesson. A "check" is a one-shot, not a conversation.
+_REPLAYABLE = ("start", "reply", "papers")
+
+
+def _rebuild_messages(turns: list[dict]) -> list[dict]:
+    """Turn logged rows back into a messages array the tutor can continue from.
+
+    The log stores the student's raw input, not the message actually sent, so
+    the RAG context and the [Tutor note: ...] nudge are both dropped. Losing the
+    note is right — it applied to one turn. Losing the context is a real gap:
+    a resumed lesson has no reference material behind its opening question.
+    """
+    messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}]
+    for turn in turns:
+        if turn.get("event") not in _REPLAYABLE:
+            continue
+        text = (turn.get("input") or "").strip()
+        if turn.get("event") == "start":
+            text = f"Teach me about: {text}"
+        meta = turn.get("attachment")
+        if meta:
+            # The bytes were never logged, by design. Name the file so the tutor
+            # does not answer as if the student had sent nothing at all.
+            text += (f"\n\n[The student attached a {meta.get('type', 'file')}: "
+                     f"{meta.get('name', '')}. It is not available in this "
+                     f"resumed session.]")
+        messages.append({"role": "user", "content": text})
+        messages.append({"role": "assistant", "content": turn.get("output") or ""})
+    return messages
+
+
+@app.route("/api/sessions")
+def api_sessions():
+    return jsonify({"sessions": list_sessions()})
+
+
+@app.route("/api/sessions/<session_id>")
+def api_session(session_id: str):
+    if len(session_id) > _SESSION_ID_MAX:
+        return jsonify({"error": "bad session id"}), 400
+    turns = session_turns(session_id)
+    if not turns:
+        return jsonify({"error": "no such session"}), 404
+
+    # Show exactly the turns the rebuild used, so the transcript on screen can
+    # never disagree with the history the model is given.
+    lesson = [t for t in turns if t.get("event") in _REPLAYABLE]
+    shown  = lesson or turns            # a check-only session still shows its turns
+
+    return jsonify({
+        "session_id": session_id,
+        "mode":  turns[0].get("mode", "learn"),
+        "topic": turns[0].get("topic", ""),
+        "turns": [{"event":   t.get("event", ""),
+                   "input":   t.get("input", ""),
+                   "output":  t.get("output", ""),
+                   "correct": t.get("correct")} for t in shown],
+        "messages":  _rebuild_messages(lesson),
+        "resumable": bool(lesson),
     })
 
 # ── check endpoint ───────────────────────────────────────────────────────────

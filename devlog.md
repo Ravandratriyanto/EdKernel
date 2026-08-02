@@ -416,8 +416,20 @@ routing failures and sent paper intent detection to a structured call.
 - **A bug in the first wiring, caught by the regression rather than by review:** `tokens=raw.usage` is evaluated *before* `log_turn` runs, so the `try/except` inside it could not protect the call, and anything returning a plain `str` 500'd the route. That defeats the entire fail-open promise. Now `getattr(raw, "usage", {})` at all four sites — the guarantee has to hold at the call site, not just inside the function
 - Verified live through Groq: `start` 1316+12 tokens, `reply` 1341+32, `check` 61+25; three valid JSON lines, no `b64` anywhere, and replaying them rebuilds the conversation in order. Then confirmed again from a real browser session, where the UUID ties both turns together
 
+### Chat history sidebar
+- **The log was already the history store.** Nothing new to persist: group `.logs/sessions.jsonl` by `session_id` and the sidebar is a read of that file. Phase B paid for a feature it was not built for, one session after landing
+- **Resume is the whole difficulty.** `messages` lives in the browser and the system prompt was never logged, so the server rebuilds the array: `TUTOR_SYSTEM_PROMPT` plus alternating `input`/`output`. It has to be the server that does this — the client rebuilding it would mean shipping the prompt to the browser and letting the two drift, which is the same class of problem as the two tutor prompts already drifting
+- Three things resume genuinely loses. **RAG context**: `/api/start` sends `f"{context_prefix}Teach me about: {topic}"` and logs only `topic`, so a resumed lesson has no reference material behind its opening question. **Images**: the log holds metadata by design, so the rebuild inserts a bracketed note naming the file rather than letting the tutor answer as if nothing was sent. **The hint nudge**: `[Tutor note: ...]` was never logged, and that one is correct to lose — it applied to a single turn
+- The route returns exactly the turns the rebuild used, so the transcript on screen can never disagree with the history the model is given. A check is a one-shot, not a conversation, so `resumable` is false for those and the answer row stays shut
+- **Found while designing it: the papers branch in `/api/reply` returns before `log_turn`.** Papers turns were not logged at all. Today that understates metering; with a sidebar it puts a hole in the middle of a resumed transcript. Now logged as its own `papers` event, with `started` set inside the branch so a misfiring prefilter does not charge the tutor path for the intent call
+- **The typing pass came back with the backend ~70% done and the frontend at 0%** — no sidebar markup, no CSS, no JS. `node --check` passed because there was nothing new to check, which is the second time this session a green check meant "nothing landed" rather than "it works"
+- Two of the eight `sessionlog.py` typos were silent rather than loud. `rec.get("sessions_id")` returns an empty sidebar forever with no error anywhere. Two missing commas in a dict literal put adjacent string literals next to each other, which Python concatenates — `"learn""title"` is valid syntax, so it compiles and produces a key nobody ever reads
+- `_rebuild_messages` had lost three lines: the `continue`, the line defining `text`, and the `start` guard. What survived ran `text = f"Teach me about: {text}"` on events it was supposed to skip, with `text` undefined. **This is the fourth appearance this session of one bug shape — code written and never wired, or wired and never called**
+- Verified live end to end: started a real lesson through Groq, answered once, then discarded the browser state and continued from the rebuilt array. `"so what happens to it after that?"` came back `"It forms clouds."`, which follows the previous turn's question rather than restarting the lesson. That reference is the only thing that proves the history survived the round trip — a rendered transcript proves nothing
+- Also checked live: the papers session now logs `['start', 'papers']`, 404 on an unknown id, 400 on an oversized one, and four sessions listing newest-first
+
 ### Current state
-- Phase B is built but **uncommitted**: `sessionlog.py` is new and untracked, with changes in `app.py`, `llm/client.py`, `readme.md` and `static/index.html`
+- Phase B and the history sidebar are built but **uncommitted**: `sessionlog.py` is new and untracked, with changes in `app.py`, `llm/client.py`, `readme.md` and `static/index.html`
 - Everything before it is committed and pushed, `a3593b2` through `4f62c30` — ten commits
 - Everything below the screenshot-paste entry is on top of `04319a7`
 - Six `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, the papers topic-reuse bug, the prompt contradiction, paper intent detection, and the uploaded-files denial. Plus the reply sentence swallowing a whole topic, and the `_ABOUT_RE` blocker introduced and fixed within the session
@@ -427,6 +439,7 @@ routing failures and sent paper intent detection to a structured call.
 - `app.py` compiles, all 9 routes present, and every prior fix still passes after each subsequent change
 - The running server spent most of the session on stale code (`use_reloader=False`); it was restarted once Phase B landed, and the first real browser lesson is in the log
 - **Phase B moved**, four sessions after it was first flagged. Phase 7 (video) is still the next unbuilt numbered phase, and Phase C is now unblocked in principle — it needs logged volume, not more code
+- Two new routes, `GET /api/sessions` and `GET /api/sessions/<id>`, take `app.py` to 11. Past lessons are listed and resumable from a sidebar, and the log now has a second consumer, which is the first thing that has ever read it back
 
 ### Known issues / caveats
 - **`/api/papers` still takes 100 seconds.** The elapsed clock makes the wait legible; it does not make it shorter, and search plus download plus generate plus verify is four sequential steps that could report progress instead of one opaque block
@@ -435,6 +448,10 @@ routing failures and sent paper intent detection to a structured call.
 - **Phase B's definition of done is not fully met: Ollama token counts have never run live.** Ollama is not running on this box, so `_ollama_usage` was only unit-tested against the real field names plus missing and `None` cases. A wrong field name there reads as zero rather than raising, which is exactly the failure that hides
 - **Metering is a lower bound.** `_verify_questions` and `_paper_intent` both call the model and neither logs, so a papers turn undercounts. Worth fixing before any number from this is quoted at a customer
 - **The log has no rotation and no retention policy.** `.logs/sessions.jsonl` grows without bound, same as `data/papers/`, and it now holds student text — which makes it the first thing in this project with a real privacy question attached. There is no consent flow and no way for a student to ask for their data back
+- **The sidebar turns that privacy question from latent into shipped.** `user_id` is still a null placeholder and there is no auth, so the history pane shows *every session on the server to whoever opens the page*. Fine on localhost, wrong the moment this is hosted anywhere. Auth is no longer just the last third of Phase B — it now gates a user-facing surface
+- **`list_sessions()` re-reads and re-parses the whole log per call, and the frontend calls it after every turn.** Free at 12 lines, O(file) forever, against a file with no rotation. The read path will need an index or a cache long before the write path needs anything
+- **A resumed lesson is not identical to the original.** It loses the RAG context of its opening question, and an attached image becomes a bracketed note saying the file is gone. The tutor is continuing from a slightly thinner history than it originally had, and nothing tells the student that
+- `.logs/sessions.jsonl` holds three test sessions — `test-session-0001` from the Phase B wiring, plus `resume-test-live` and `papers-log-test` from verifying the sidebar. They show up in the pane as real lessons. Harmless locally, but they are the first rows that would need stripping before this log is treated as training data
 - **The graph sandbox has no timeout.** `for i in range(10**9)` passes validation and hangs the request. Only a subprocess fixes that, and in-process restricted execution is never airtight regardless — the AST allowlist is doing the real work, not the builtins trimming
 - **Two capability denials have now been patched one at a time.** Past papers and uploaded files were the same bug wearing different clothes: one blanket honesty rule that does not know what the app can actually do. A third capability will hit it again. The rule wants rewriting around a list of what *is* possible, rather than another exception bolted on
 - `design.md` keeps the structured-call entry marked **SHIPPED** rather than deleted, against its own rule that entries move out once built. The cost argument for why a classifier here does not contradict the Session 4 decision is worth keeping, and it is exactly the sort of thing that gets re-litigated later
@@ -446,11 +463,12 @@ routing failures and sent paper intent detection to a structured call.
 - Carried over untouched: `pypdf` mangles notation, scanned papers download but are never transcribed, answer verification catches disagreement rather than shared error, and `data/papers/` still grows without bound
 
 ### Next
-1. **Finish Phase B properly.** One Ollama turn to tick the both-providers box, then log `_verify_questions` and `_paper_intent` so metering stops undercounting. Auth is the remaining third of the original goal — `user_id` is a null placeholder waiting for it
-2. Add a `node --check` on the `<script>` block to `hooks/pre-commit`. A lost `function` line took the whole page down this session and nothing caught it
-3. Rewrite the capability rule around what the app *can* do, instead of adding a third exception the next time this bites
-4. Validate the topic at `startLearn`, so junk never enters the session in the first place
-5. Unify the two tutor prompts, and give check mode its own prompt rather than the Socratic one
-6. Clean up extracted PDF text so notation survives, then vision transcription for scans
-7. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn
-8. Then Phase 7 (video) and Phase C (LoRA fine-tune)
+1. **Auth, and it is now the blocker rather than the tidy-up.** The sidebar shows every session on the server to anyone who opens it, so `user_id` needs to stop being a null placeholder before this runs anywhere but localhost
+2. **Finish the rest of Phase B.** One Ollama turn to tick the both-providers box, then log `_verify_questions` and `_paper_intent` so metering stops undercounting
+3. Add a `node --check` on the `<script>` block to `hooks/pre-commit`. A lost `function` line took the whole page down this session and nothing caught it
+4. Rewrite the capability rule around what the app *can* do, instead of adding a third exception the next time this bites
+5. Validate the topic at `startLearn`, so junk never enters the session in the first place
+6. Unify the two tutor prompts, and give check mode its own prompt rather than the Socratic one
+7. Clean up extracted PDF text so notation survives, then vision transcription for scans
+8. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn. The sidebar's rebuild is most of the work already — it reconstructs a full history server-side from an id
+9. Then Phase 7 (video) and Phase C (LoRA fine-tune)

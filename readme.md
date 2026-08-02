@@ -112,6 +112,12 @@ Build: `sessionlog.py`.
 - A logging failure must never break a lesson.
 - This is the input to Phase C, so the fields have to be enough to rebuild a
   conversation in order.
+- The chat history sidebar reads this log back: `GET /api/sessions` lists past
+  lessons, `GET /api/sessions/<id>` rebuilds the messages array so a lesson can
+  be resumed. That rebuild is the standing proof the fields are sufficient — if
+  a new field stops being logged, resume breaks first.
+- **No auth yet**, so the sidebar shows every session on the server to anyone
+  who opens the page. Localhost only until `user_id` is real.
 
 ### Phase C — LoRA fine-tune on logged sessions
 Needs Phase B to have collected enough real lessons first. Phase A already
@@ -144,6 +150,9 @@ locally.
 - [ ] Phase B: a finished lesson appears in `.logs/sessions.jsonl` as one JSON
       line per turn, in order, with non-zero token counts on both providers,
       and replaying those lines reconstructs the conversation
+      — replay is done and proven live: the sidebar resumes a lesson from the
+      log alone and the tutor continues rather than restarting. Still open:
+      token counts have only ever run live on Groq, never on Ollama
 - [ ] Phase C: a LoRA adapter trained on logged sessions beats the base model
 
 
