@@ -401,6 +401,9 @@
   let paperTimer = null;
   // Kept because the topic input is cleared and hidden once a lesson starts,
   // but a mid-lesson "get me a past paper" still needs to know the subject.
+  // Ties every turn of one lesson together in the session log. Generated here
+  // because the server keeps no session state — it is handed back each turn.
+  let sessionId = crypto.randomUUID();
   let currentTopic = '';
 
   // past-papers quiz state
@@ -429,6 +432,7 @@
     messages = [];
     wrongStreak = 0;
     paperMode = false; paperQuestions = []; paperIndex = 0;
+    sessionId = crypto.randomUUID();   // a new lesson is a new session
     clearAttachment();
     resetLearnUI();
   }
@@ -450,7 +454,8 @@
   function tavilyKey()  { return document.getElementById('input-tavily-key').value.trim(); }
 
   function basePayload() {
-    return { provider, model: model(), host: host(), api_key: apiKey() };
+    return { provider, model: model(), host: host(), api_key: apiKey(),
+             session_id: sessionId };
   }
 
   /* ---- attachment ---- */
@@ -655,6 +660,7 @@
     const topic = document.getElementById('input-topic').value.trim();
     if (!topic || busy) return;
     currentTopic = topic;
+    sessionId = crypto.randomUUID();   // each lesson is its own session
     busy = true;
     wrongStreak = 0;
     document.getElementById('btn-start').disabled = true;

@@ -403,21 +403,38 @@ routing failures and sent paper intent detection to a structured call.
 - Verified by driving the script through a stubbed DOM in node, 11 checks. The timer leak is the one that is invisible by eye
 - Two things that were not typos: the status pill had been wired into the *hint* path, which takes ~2s and would have said "Searching past papers and downloading PDFs" while fetching a hint, and never into `startPapers` where the wait actually is. And `currentTopic = topic` had been dropped, which is what a mid-lesson paper request reads the subject from
 
+### Phase B — session logging
+- **Phase B was never in `readme.md`.** The roadmap there runs 1–7; the lettered phases existed only in this devlog, so there was no definition of done to build against even though Phase B has been the #1 item for four sessions. Added a *Training track* section covering A, B and C, plus checklist entries — Phase B's is now concrete: a finished lesson appears as one JSON line per turn, in order, with non-zero token counts on both providers, and replaying the lines reconstructs the conversation
+- `llm/client.py` threw token counts away — both `chat()` and `generate()` returned `.message.content` and discarded `usage`. So per-student metering, one of the three things Phase B exists to unblock, was impossible without touching the shared core
+- The obvious fix — return `(text, usage)` — breaks **all 11 call sites**, 9 in `app.py` and 2 in `main.py`. Instead `LLMText(str)` subclasses `str` and hangs `.usage` on it, so every existing caller is untouched: it *is* the text, and `.strip()`, f-strings, `in` and slicing all behave. Customising `__new__` rather than `__init__` because `str` is immutable and the value is fixed before `__init__` runs
+- **The trap that comes with it:** any transform returns a plain `str`, so `_strip_signal()` — which ends in `.strip()` — drops `.usage`. Every route now keeps the raw reply and strips into a separate name. Written into the class docstring, because this will bite whoever adds the next model call
+- Ollama and Groq name the counts differently (`prompt_eval_count`/`eval_count` versus `prompt_tokens`/`completion_tokens`). A wrong name reads as zero rather than raising, so this fails silently by default
+- `sessionlog.py`: append-only JSONL at `.logs/sessions.jsonl`, already gitignored so student text never reaches GitHub. One line per turn — timestamp, session id, a null `user_id` placeholder for when auth exists, mode, topic, provider/model, both sides of the exchange, the `[CORRECT]`/`[WRONG]` verdict, wrong streak, tokens and latency
+- **Attachment metadata only** — type, name and size, never the bytes. A base64 image is hundreds of KB and the most sensitive thing in the request; the log records shapes, not contents
+- A `threading.Lock` around the append, because Flask serves on threads and a record here is larger than the 4KB a kernel appends atomically. `log_turn` swallows every exception: a logging failure must never cost a student their lesson
+- Session id is generated client-side with `crypto.randomUUID()` and refreshed per lesson, which fits the stateless design — the server keeps no session state, so the id has to be handed back each turn
+- **A bug in the first wiring, caught by the regression rather than by review:** `tokens=raw.usage` is evaluated *before* `log_turn` runs, so the `try/except` inside it could not protect the call, and anything returning a plain `str` 500'd the route. That defeats the entire fail-open promise. Now `getattr(raw, "usage", {})` at all four sites — the guarantee has to hold at the call site, not just inside the function
+- Verified live through Groq: `start` 1316+12 tokens, `reply` 1341+32, `check` 61+25; three valid JSON lines, no `b64` anywhere, and replaying them rebuilds the conversation in order. Then confirmed again from a real browser session, where the UUID ties both turns together
+
 ### Current state
-- Everything this session is committed and pushed, `a3593b2` through `330ebcf` — nine commits
+- Phase B is built but **uncommitted**: `sessionlog.py` is new and untracked, with changes in `app.py`, `llm/client.py`, `readme.md` and `static/index.html`
+- Everything before it is committed and pushed, `a3593b2` through `4f62c30` — ten commits
 - Everything below the screenshot-paste entry is on top of `04319a7`
 - Six `app.py` bugs closed: check-mode signal leakage, unsandboxed `exec`, the papers topic-reuse bug, the prompt contradiction, paper intent detection, and the uploaded-files denial. Plus the reply sentence swallowing a whole topic, and the `_ABOUT_RE` blocker introduced and fixed within the session
 - **The frontend was touched after all**, and all three papers bugs are closed. It was also found dead on arrival with a SyntaxError that killed every button on the page
 - **Paper requests are decided by the model now, not a regex.** Keywords survive as a prefilter and as the fallback when the call fails
 - Chat intent detection went from 5/14 to 14/14 on realistic phrasings, then to 7/7 live on the classifier including the phrasings no regex was going to catch
 - `app.py` compiles, all 9 routes present, and every prior fix still passes after each subsequent change
-- The running server spent the session on stale code (`use_reloader=False`); it needs a restart to pick any of this up
-- No phase moved. Phase 7 (video) is still the next unbuilt phase
+- The running server spent most of the session on stale code (`use_reloader=False`); it was restarted once Phase B landed, and the first real browser lesson is in the log
+- **Phase B moved**, four sessions after it was first flagged. Phase 7 (video) is still the next unbuilt numbered phase, and Phase C is now unblocked in principle — it needs logged volume, not more code
 
 ### Known issues / caveats
 - **`/api/papers` still takes 100 seconds.** The elapsed clock makes the wait legible; it does not make it shorter, and search plus download plus generate plus verify is four sequential steps that could report progress instead of one opaque block
 - **Asking for papers mid-lesson still shows bare dots.** That path goes through `sendAnswer`, which cannot know in advance the turn will fetch, so it gets no clock. Fixing it properly needs the server to stream progress
 - **The frontend has no syntax check and no build step.** A lost `function` line took the entire page down this session and nothing surfaced it — extracting the `<script>` block and running `node --check` was the only thing that caught it. Worth wiring into `hooks/pre-commit`
+- **Phase B's definition of done is not fully met: Ollama token counts have never run live.** Ollama is not running on this box, so `_ollama_usage` was only unit-tested against the real field names plus missing and `None` cases. A wrong field name there reads as zero rather than raising, which is exactly the failure that hides
+- **Metering is a lower bound.** `_verify_questions` and `_paper_intent` both call the model and neither logs, so a papers turn undercounts. Worth fixing before any number from this is quoted at a customer
+- **The log has no rotation and no retention policy.** `.logs/sessions.jsonl` grows without bound, same as `data/papers/`, and it now holds student text — which makes it the first thing in this project with a real privacy question attached. There is no consent flow and no way for a student to ask for their data back
 - **The graph sandbox has no timeout.** `for i in range(10**9)` passes validation and hangs the request. Only a subprocess fixes that, and in-process restricted execution is never airtight regardless — the AST allowlist is doing the real work, not the builtins trimming
 - **Two capability denials have now been patched one at a time.** Past papers and uploaded files were the same bug wearing different clothes: one blanket honesty rule that does not know what the app can actually do. A third capability will hit it again. The rule wants rewriting around a list of what *is* possible, rather than another exception bolted on
 - `design.md` keeps the structured-call entry marked **SHIPPED** rather than deleted, against its own rule that entries move out once built. The cost argument for why a classifier here does not contradict the Session 4 decision is worth keeping, and it is exactly the sort of thing that gets re-litigated later
@@ -426,10 +443,10 @@ routing failures and sent paper intent detection to a structured call.
 - `_looks_like_topic` is a heuristic and now matters less, since the classifier resolves the topic first. It is still the backstop on the fallback path
 - Nothing validates the lesson topic at `startLearn`, which is where the junk gets in both times — `high there` and the full sentence. Two guards downstream now cope with a bad topic; neither stops one being set
 - Prompt drift is now flagged for a **fourth** session and has got worse, not better
-- Carried over untouched: `pypdf` mangles notation, scanned papers download but are never transcribed, answer verification catches disagreement rather than shared error, `data/papers/` still grows without bound, and Phase B session logging is still the bottleneck
+- Carried over untouched: `pypdf` mangles notation, scanned papers download but are never transcribed, answer verification catches disagreement rather than shared error, and `data/papers/` still grows without bound
 
 ### Next
-1. **Phase B — session logging.** Fourth session running. Still blocking the Phase C dataset, per-student metering, and the school-subscription auth model
+1. **Finish Phase B properly.** One Ollama turn to tick the both-providers box, then log `_verify_questions` and `_paper_intent` so metering stops undercounting. Auth is the remaining third of the original goal — `user_id` is a null placeholder waiting for it
 2. Add a `node --check` on the `<script>` block to `hooks/pre-commit`. A lost `function` line took the whole page down this session and nothing caught it
 3. Rewrite the capability rule around what the app *can* do, instead of adding a third exception the next time this bites
 4. Validate the topic at `startLearn`, so junk never enters the session in the first place

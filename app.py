@@ -3,6 +3,7 @@ import os
 import re
 import ast
 import json
+import time
 import base64
 import hashlib
 from pathlib import Path
@@ -19,7 +20,7 @@ from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
-
+from sessionlog import log_turn, attachment_meta
 load_dotenv()
 
 _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
@@ -328,9 +329,21 @@ def api_start():
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
     messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}, user_msg]
-    response = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-    response, _ = _strip_signal(response)
+    started  = time.monotonic()
+    # Keep the raw reply: _strip_signal returns a plain str, which drops .usage.
+    raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+    response, _ = _strip_signal(raw)
     messages.append({"role": "assistant", "content": response})
+
+    log_turn("start",
+             session_id=data.get("session_id", ""),
+             user_id=None,                      # placeholder until auth exists
+             mode="learn", topic=topic,
+             provider=provider, model=model,
+             input=topic, output=response,
+             attachment=attachment_meta(attachment),
+             tokens=getattr(raw, "usage", {}),
+             latency_ms=round((time.monotonic() - started) * 1000))
 
     return jsonify({"response": response, "messages": _strip_images(messages), "done": "Topic complete." in response})
 
@@ -382,9 +395,21 @@ def api_reply():
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
     messages.append(user_msg)
-    response = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-    response, correct = _strip_signal(response)
+    started = time.monotonic()
+    raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+    response, correct = _strip_signal(raw)
     messages.append({"role": "assistant", "content": response})
+
+    log_turn("reply",
+             session_id=data.get("session_id", ""),
+             user_id=None,
+             mode="learn", topic=topic,
+             provider=provider, model=model,
+             input=user_input, output=response,
+             correct=correct, wrong_streak=wrong_streak,
+             attachment=attachment_meta(attachment),
+             tokens=getattr(raw, "usage", {}),
+             latency_ms=round((time.monotonic() - started) * 1000))
 
     return jsonify({
         "response": response,
@@ -425,8 +450,19 @@ def api_check():
                 "images": [attachment["b64"]],
             },
         ]
-        raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-        return jsonify({"response": _strip_signal(raw)[0]})
+        started  = time.monotonic()
+        raw      = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+        response = _strip_signal(raw)[0]
+        log_turn("check",
+                 session_id=data.get("session_id", ""),
+                 user_id=None,
+                 mode="check", topic=question,
+                 provider=provider, model=model,
+                 input=answer, output=response,
+                 attachment=attachment_meta(attachment),
+                 tokens=getattr(raw, "usage", {}),
+                 latency_ms=round((time.monotonic() - started) * 1000))
+        return jsonify({"response": response})
 
     pdf_context = f"Attached document:\n{attachment['text']}\n\n" if attachment and attachment.get("type") == "pdf" else ""
 
@@ -441,8 +477,19 @@ def api_check():
         f"Student's answer: {answer}\n\n"
         "Is the student's answer correct? Explain briefly."
     )
-    raw = generate(prompt, model=model, host=host, provider=provider, api_key=api_key)
-    return jsonify({"response": _strip_signal(raw)[0]})
+    started  = time.monotonic()
+    raw      = generate(prompt, model=model, host=host, provider=provider, api_key=api_key)
+    response = _strip_signal(raw)[0]
+    log_turn("check",
+             session_id=data.get("session_id", ""),
+             user_id=None,
+             mode="check", topic=question,
+             provider=provider, model=model,
+             input=answer, output=response,
+             attachment=attachment_meta(attachment),
+             tokens=getattr(raw, "usage", {}),
+             latency_ms=round((time.monotonic() - started) * 1000))
+    return jsonify({"response": response})
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 

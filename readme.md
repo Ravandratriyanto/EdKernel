@@ -95,6 +95,29 @@ Build: `video/frame_extractor.py`, `video/video_handler.py`.
   reconcile multiple frame transcriptions into one — decide how you want
   to handle that once you see what real extracted frames look like.
 
+## Training track (runs alongside the numbered phases, not after them)
+
+### Phase A — a transformer from scratch
+Build: `training/train_tiny.py`. A char-level GPT in one file — tokenizer,
+causal self-attention, residual blocks, training loop, sampling. No
+`transformers`, no `Trainer`. The point is understanding the parts, not the
+result.
+
+### Phase B — session logging
+Build: `sessionlog.py`.
+- Append one JSON line per tutor turn to `.logs/sessions.jsonl`: timestamp,
+  session id, mode, topic, provider/model, the student's message, the tutor's
+  reply, the `[CORRECT]`/`[WRONG]` verdict and token counts.
+- Attachment **metadata only** — type, name, size. Never the bytes.
+- A logging failure must never break a lesson.
+- This is the input to Phase C, so the fields have to be enough to rebuild a
+  conversation in order.
+
+### Phase C — LoRA fine-tune on logged sessions
+Needs Phase B to have collected enough real lessons first. Phase A already
+showed what too little data does: training on a 975-byte file drove train loss
+to 0.90 while validation *climbed* to 3.59.
+
 ## Hardware note (relevant to testing at every phase)
 
 8GB RAM + Intel Iris (no dedicated GPU) can run everything here *except*
@@ -117,6 +140,11 @@ locally.
       `/api/start`, `/api/reply`, `/api/check`) and in the CLI via
       `--image`, on both the Ollama and Groq providers
 - [ ] Phase 7: `--video` produces the same flow as `--image`
+- [x] Phase A: `training/train_tiny.py` trains on CPU and samples readable text
+- [ ] Phase B: a finished lesson appears in `.logs/sessions.jsonl` as one JSON
+      line per turn, in order, with non-zero token counts on both providers,
+      and replaying those lines reconstructs the conversation
+- [ ] Phase C: a LoRA adapter trained on logged sessions beats the base model
 
 
 
