@@ -472,3 +472,69 @@ routing failures and sent paper intent detection to a structured call.
 7. Clean up extracted PDF text so notation survives, then vision transcription for scans
 8. Server-side session state + prompt caching; `/api/reply` still resends the whole history every turn. The sidebar's rebuild is most of the work already — it reconstructs a full history server-side from an id
 9. Then Phase 7 (video) and Phase C (LoRA fine-tune)
+
+## Session 6 — 2026-08-02
+
+One question — "let's make the models smarter" — turned into finding that RAG had
+never worked. Phase 3 has been ticked in `readme.md` since Session 3 on the
+strength of code that runs, returns nothing, and fails silently.
+
+### RAG was dead the whole time
+- `chromadb` reported `collection 'reference': 0 documents`. `retrieve()` returned `[]` for every query it has ever been given, so `context_prefix` was always `""` and **every lesson in this project's history ran ungrounded**
+- Nothing surfaced it. `retrieve()` returning an empty list is indistinguishable from "nothing relevant found", `app.py` handles that correctly, and the tutor answers fine from its own weights. A dead dependency that degrades gracefully is one nobody notices
+- `rag/ingest.py` was fine. It had simply never been run against this database — or was run against one since replaced, because `get_or_create_collection` silently makes an empty one on every call, which is also why `chroma.sqlite3` had today's timestamp
+- The reference corpus was **one 975-byte `biology.txt`** — the same file Phase A used to demonstrate what too little data does. Meanwhile `data/papers/` held 93MB of real SAT and A-level material, downloaded over three sessions and never once used for grounding
+
+### The corpus was in better shape than `CLAUDE.md` feared
+- 957 pages extract more than 200 characters. **932 of them (97%) are clean enough to keep**; only 25 are chart or OCR garbage. The notation damage is real but concentrated in diagram pages, which extract as ASCII art. Ordinary question and explanation prose comes out fine
+- **3 PDFs were AES-encrypted and `pypdf` refused them**, because `cryptography` was never in `requirements.txt`. One line unlocked AP Biology, an A-level Paper 3 and a Quadratic Equations set — about 200 extra chunks that had been sitting on disk unreadable
+- Final ingest: **3,508 chunks**
+
+### Design decisions
+- **Cosine distance, not Chroma's default L2.** Cosine is bounded 0–1 so one threshold works whatever the chunk length; L2 is unbounded and scores a long chunk differently from a short one. The metric is fixed at creation, and `get_or_create_collection` will not apply new metadata to a collection that exists, so `build()` deletes and recreates rather than reusing
+- **Sentence-boundary chunks with overlap**, replacing `text[i:i+500]`. Blind slicing cuts mid-equation, and half an equation embeds as noise
+- **The junk filter runs at ingest, not retrieval.** A page that extracts as ASCII art is never worth storing, and filtering once beats filtering on every query
+- Chunks now carry their source paper and page, so a bad retrieval can be traced. `retrieve()` keeps returning `list[str]` by default, which is why all four callers in `app.py` and `main.py` needed no changes
+- `retrieve()` returning `[]` stays the safe outcome: empty context, ungrounded tutor, exactly the behaviour that has been shipping all along
+
+### The threshold, and a claim I had to withdraw
+- Measured on 7 queries the two classes looked cleanly separated — on-topic 0.39–0.53, off-topic 0.67–0.79 — and I called 0.60 a clean cut chosen from data
+- **Re-measured on 30 queries, they overlap.** Worst on-topic is `big O notation` at 0.605; best off-topic is `history of jazz` at **0.495**. The gap is **−0.110**. No threshold separates them, and the earlier claim was an artefact of too small a sample
+- Neither overlapping case is a bug. "History of jazz" matches a real SAT reading passage about jazz tap; "how to train a puppy" matches an OCR exam question about a dog-care program. The corpus is broad enough that generic queries find genuine things
+- 0.60 stays, now documented as a compromise rather than a clean cut: **19 of 20 real topics kept, 1 of 10 unrelated admitted**. The comment in `rag/retrieve.py` says so, because the next person to read that number will otherwise trust it more than it deserves
+- **Retrieval is sensitive to how a topic is phrased.** `big O notation` scores 0.605 and is rejected; `big O notation and algorithm complexity` scores 0.456 and is kept. A bare two-word topic is a weak query, and `app.py` retrieves on exactly that
+
+### Does grounding actually help
+- Live A/B through Groq, same topic, same prompt, context on and off. On `photosynthesis` the grounded opening asks *"What happens to sunlight, water, and carbon dioxide during photosynthesis?"* against the ungrounded *"What do you think plants need to grow?"* — it names the actual reactants
+- On `quadratic equations` the two openings were **almost identical**. The gain is real but uneven, and the first turn of a Socratic lesson is a broad opener by design, which is the turn with the least room to show a difference
+- It is not free: grounding adds **~550 prompt tokens per turn** (1316 → 1901), and because the context lives in the first user message it is resent on every turn after that
+- Not tested: whether grounding helps mid-lesson, where a specific fact actually matters. That is the turn where it should pay off and the one I have no evidence for
+
+### The typing pass
+- `rag/ingest.py` came back with 9 problems. Two were invisible rather than loud: `DB_PATH = "data/chroma"\` — a trailing backslash is a line continuation, so it silently swallowed the `COLLECTION` line — and `build()` was **missing both setup lines**, referencing `client` and `ef` that were never created. Also `from chromad.utils`, `def _page_texts(pdf_path; str)`, `parts, buf = [],`, `encodings=`, `len(chhunks)`, and no `__main__` block, so `python -m rag.ingest` would have done nothing at all
+- `rag/retrieve.py` arrived as the single line `def retrieve (que)` — **twice**, once mid-session by overwrite. That is what broke `app.py`'s import both times
+- Fifth session running for the same bug shape: code written and never wired, or wired and never called
+
+### Current state
+- **RAG works for the first time.** 3,508 chunks, on-topic queries return material, off-topic ones mostly return nothing, and `app.py` needed no changes
+- Uncommitted: `rag/ingest.py`, `rag/retrieve.py`, `requirements.txt`
+- `data/chroma/` is gitignored, so the collection does not travel — a fresh clone needs `python -m rag.ingest` before grounding does anything. That is a new setup step nothing tells you about
+- Phase 3's checkbox was true of the code and false of the behaviour for three sessions
+
+### Known issues / caveats
+- **The threshold is a compromise and the classes overlap.** 0.60 leaks about 1 in 10 unrelated topics and rejects about 1 in 20 real ones. A cross-encoder rerank or a keyword prefilter would beat a single distance number, and neither is built
+- **Short topics retrieve worse than long ones**, and `app.py` retrieves on the bare topic string. Retrieving on the topic plus the student's first message would be a cheap improvement
+- **Grounding costs ~550 tokens a turn and is resent every turn**, which lands straight on the cost problem already flagged: `/api/reply` sends the whole history each time. Prompt caching matters more now than it did yesterday
+- **A resumed lesson has no reference material.** The sidebar rebuilds history from the log, which stores the topic but not the retrieved context. That was a footnote when RAG did nothing; now it is a real difference between a lesson and its replay
+- **The corpus is lopsided.** Heavy on SAT practice, A-level Computer Science and exam specifications; thin on biology and thinner on maths beyond what SAT covers. Grounding will feel strong in some subjects and absent in others, with no signal to the student either way
+- **25 chart pages are dropped entirely** and 4 scanned PDFs still contribute nothing. Diagrams are simply not in the index
+- `build()` is a full rebuild with no incremental path, so every newly downloaded paper means re-embedding all 3,508 chunks
+- `retrieve()` constructs a `PersistentClient` and an embedding function on **every call**, which is once per lesson turn. It has not been measured and should be
+- Carried over: no auth (and the history sidebar exposes every session), no log rotation or retention, `data/papers/` growing without bound, prompt drift between `app.py` and `main.py` now flagged for a fifth session
+
+### Next
+1. Retrieve on the topic plus the student's first message, so a two-word topic stops being the whole query
+2. Measure `retrieve()`'s per-call cost, and hold the client and embedding function open if it is not free
+3. Log the retrieved sources per turn, so a bad lesson can be traced to the chunks that caused it
+4. Feed the resumed-lesson path some context, or say plainly in the UI that a replay is thinner than the original
+5. Everything still open from Session 5: auth first, then the rest of Phase B, `node --check` in the pre-commit hook, the capability rule, topic validation, prompt unification, prompt caching, then Phase 7 and Phase C

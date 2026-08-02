@@ -2,6 +2,7 @@ ollama
 chromadb
 flask
 pypdf
+cryptography
 groq
 matplotlib
 numpy

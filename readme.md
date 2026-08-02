@@ -58,6 +58,22 @@ Build: `rag/ingest.py`, `rag/retrieve.py`.
   asking "is this correct?"). Verify answers actually improve/ground
   correctly with real reference material in `data/reference/`.
 
+**Setup step — `data/chroma/` is gitignored, so a fresh clone has no
+collection and grounding does nothing until you build one:**
+
+```bash
+python -m rag.ingest        # ~3,500 chunks, a few minutes on CPU
+```
+
+It reads `.txt` files from `data/reference/` and PDFs from `data/papers/`,
+drops chart and OCR-garbage pages, and rebuilds the collection from scratch.
+Re-run it after downloading new papers.
+
+`retrieve()` drops anything further than `MAX_DISTANCE` (cosine, 0.60) so an
+off-topic lesson is not handed irrelevant context. That number is a
+compromise, not a clean cut — the on- and off-topic ranges overlap. See the
+comment in `rag/retrieve.py` before changing it.
+
 ### Phase 4 — Build learn mode's core loop
 Build: `core/decompose.py`, `core/session.py`.
 - `decompose_question(question) -> list of steps`: ask the model to break
@@ -138,6 +154,9 @@ locally.
 - [x] Phase 1: a script that sends one prompt to Ollama and prints the reply
 - [x] Phase 2: `python main.py check --text "..." --answer "..."` runs end to end
 - [x] Phase 3: check mode's answers visibly use ingested reference material
+      — ticked from Session 3 but **only true since 2026-08-02**. The collection
+      was empty until then, so `retrieve()` returned nothing and every lesson
+      ran ungrounded. Now 3,508 chunks from `data/reference/` and `data/papers/`
 - [x] Phase 4: `python main.py learn --text "..."` walks through steps interactively
 - [x] Phase 5: three wrong answers in a row produce three *different*,
       increasingly specific hints
