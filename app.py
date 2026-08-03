@@ -20,6 +20,7 @@ from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
+from diagram_shots import shot_messages 
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 load_dotenv()
 
@@ -104,7 +105,17 @@ GRAPH_SYSTEM_PROMPT = (
     "- Use LaTeX notation in all labels, titles, and legends: wrap math in $...$. "
     "Example: label=r'$f(x) = x^{2}$'. Always use r-strings for LaTeX.\n"
     "- Do NOT call plt.savefig(), plt.show(), plt.close(), or import anything.\n"
-    "- End with plt.tight_layout()."
+    "- End with plt.tight_layout().\n"
+    "- NEVER invent real-world data. If the graph needs figures you do not "
+    "have — prices, populations, sales, historical values — do not guess them. "
+    "Output exactly NEED_REAL_DATA and nothing else.\n"
+    "- Every worked example uses ONE standard market: demand P = 10 - 0.8Q, "
+    "supply P = 2 + 0.8Q. They cross at Q = 5, P = 6. Reuse those equations.\n"
+    "- A ceiling or maximum must sit BELOW P = 6. A floor, minimum or union "
+    "wage must sit ABOVE P = 6. A line level with 6 shows nothing.\n"
+    "- A horizontal line at price p meets demand at Q = (10 - p) / 0.8 and "
+    "supply at Q = (p - 2) / 0.8. Compute both before placing any marker.\n"
+    "- Never put a marker at a point that is not on a curve you plotted."
 )
 
 # Generated plotting code is checked against an allowlist before it runs, so a
@@ -164,6 +175,41 @@ def _check_graph_code(code: str) -> str | None:
             if node.id in _GRAPH_BANNED_NAMES:
                 return f"{node.id}() is not allowed"
     return None
+
+
+def _render_png() -> str:
+    """The current figure as base64 PNG. Closes the figure either way."""
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
+    plt.close("all")
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("utf-8")
+
+
+# A hardcoded run of numbers is data somebody typed, not data derived from a
+# formula. When the model types it, the numbers are invented — asked for the
+# price of gold it produced twelve monthly figures to two decimal places. The
+# figure gets stamped so an invented series cannot look like a measured one.
+_LITERAL_DATA_MIN = 4
+
+
+def _has_literal_data(code: str) -> bool:
+    """True if the code plots a hardcoded run of numbers rather than computing them."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.List, ast.Tuple)):
+            # bool subclasses int, so [True, False, True, False] would otherwise
+            # count as four numbers.
+            numbers = [e for e in node.elts
+                       if isinstance(e, ast.Constant)
+                       and isinstance(e.value, (int, float))
+                       and not isinstance(e.value, bool)]
+            if len(numbers) >= _LITERAL_DATA_MIN:
+                return True
+    return False
 
 
 ALLOWED_IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -278,11 +324,17 @@ def api_graph():
     if not description:
         return jsonify({"error": "No description provided"}), 400
 
-    messages = [
-        {"role": "system", "content": GRAPH_SYSTEM_PROMPT},
-        {"role": "user",   "content": f"Generate a graph for: {description}"},
-    ]
+    messages = [{"role": "system", "content": GRAPH_SYSTEM_PROMPT}]
+    messages += shot_messages(description)     # [] when nothing is close enough
+    messages.append({"role": "user",
+                     "content": f"Generate a graph for: {description}"})
     raw_code = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+
+    if "NEED_REAL_DATA" in raw_code:
+        return jsonify({"error": "That graph needs real data I do not have. "
+                                 "Give me the figures and I will plot them, or "
+                                 "ask for a diagram that shows the shape of the "
+                                 "relationship instead."}), 400
 
     # Strip accidental markdown fences and any savefig/show/close calls
     code = re.sub(r"^```(?:python)?\n?", "", raw_code.strip())
@@ -297,12 +349,10 @@ def api_graph():
     try:
         plt.close("all")
         exec(code, {"__builtins__": _GRAPH_BUILTINS, "plt": plt, "np": np})  # noqa: S102
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
-        plt.close("all")
-        buf.seek(0)
-        img_b64 = base64.b64encode(buf.read()).decode("utf-8")
-        return jsonify({"image": img_b64})
+        if _has_literal_data(code):
+            plt.gcf().text(0.99, 0.01, "Illustrative — values are not real data",
+                           ha="right", va="bottom", fontsize=7, color="#b45309")
+        return jsonify({"image": _render_png()})
     except Exception as e:
         plt.close("all")
         return jsonify({"error": str(e)}), 500

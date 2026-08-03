@@ -547,3 +547,158 @@ personal side project run on localhost, so auth, rate limiting and retention
 are not blockers — they are what would be needed *if* that changes, and they
 stay recorded for then rather than sitting at the top of the list. What matters
 instead is lesson quality: grounding, notation, and the prompts.
+
+## Session 7 — 2026-08-03
+
+Started from a screenshot: the tutor saying it did not understand "the value of
+gold from logammulia.com", with a **sine and cosine chart** rendered underneath
+it. The question behind it was whether this thing could be less narrow — useful
+for Cambridge AS/A Level Economics and Business, not just SAT maths. Answering
+that honestly meant testing the graph feature against economics, which it fails.
+
+### What the graph feature actually does with economics
+- Asked for "a demand and supply diagram for a normal good", it labelled the
+  **upward-sloping line `D` and the downward one `S`**. Axes were right, the
+  equilibrium was marked, the dashed lines were there — it looks correct, which
+  is what makes it dangerous. A student copying it into a paper loses the marks
+- Asked to "plot the price of gold over the last 12 months" it produced twelve
+  invented prices to two decimal places — `1745.23, 1763.55, …` — under the
+  title *Price of Gold Over the Last 12 Months*, with nothing saying they were
+  made up. This never mattered before: plotting `f(x) = x²` has no data to
+  invent. Economics is the first subject where the numbers must come from
+  somewhere, and there is nowhere for them to come from
+- The corpus has **zero economics or business**. All 25 cached papers are SAT
+  practice, OCR/AQA Computer Science, A-level Biology, one AQA Maths paper and a
+  quadratics workbook
+
+### The retraining detour
+- The reasonable next thought was "forget prompting, retrain". The diagnosis
+  behind it is right: `app.py`'s tutor prompt is **5,722 characters** and most
+  of its growth is scar tissue — the invented-marker rule, the past-papers
+  exception, the uploaded-files exception, the "never use `A)` for lists" rule.
+  Every one was added after a live failure
+- **The two prompts have drifted 7x.** `app.py` 5,722 characters, `main.py`
+  811. Flagged as a risk for six sessions, now measured
+- But retraining fixes none of the three failures above. Swapped `D`/`S` needs
+  correct examples authored first — and once they exist the problem is already
+  solved without training. Invented gold prices cannot be trained away because
+  the answer changes daily. Missing economics is a corpus problem
+- It is blocked anyway. The whole Phase C training set is **32 log lines, 9
+  sessions, 27 usable turns, 7,577 characters (~1,894 tokens)** — about 8x the
+  975-byte file Phase A used to demonstrate what too little data does
+- **Phase C as written in `readme.md` is self-referential.** "LoRA fine-tune on
+  logged sessions" trains the model on its own output, which reinforces the
+  current behaviour including these bugs. It needs a correction pass in the
+  middle — turns rewritten before they become training data — and that is not
+  in the plan
+
+### The architecture correction
+- The first design was `econ_graphs.py`: hardcoded template functions plus a
+  regex matcher. Correct, deterministic, and **it does not scale** — it implies
+  `statistics_graphs.py`, `business_models.py`, and so on forever. That
+  objection was raised before a line of it was typed, and it was right
+- The reframe that fixes it: the model does not fail for lack of subject
+  knowledge, it fails because **nothing in the prompt shows it the convention**.
+  That is one problem, not one problem per subject
+- So subjects became data. One mechanism, and adding statistics means adding an
+  entry to `diagram_examples.py`
+
+### Two experiments, measuring two different things
+- **Orientation** — does demand slope down and supply slope up. Judged
+  mechanically: exec the generated code against a fake pyplot that records every
+  `plot()` call, then check the sign of each labelled series. Control **7/20**,
+  with two retrieved examples **20/20**
+- On that evidence I said it worked. Then I rendered one and it was wrong in a
+  way the benchmark could not see: a labour-market diagram with the **axes
+  transposed**, wage on the horizontal. Adding a labour-market example fixed the
+  transposition, and the next render was still wrong — it put equilibrium at
+  `L = 6.25` when the curves it had just drawn cross at `L = 5`, and set the
+  union wage at exactly the equilibrium wage, so the diagram showed nothing
+- **Arithmetic** — is the intervention line on the correct side of equilibrium,
+  and does every marker sit on a curve that was actually plotted. With examples
+  alone: **0/15**. Price ceilings drawn at 8, 400, 500 and 800 when equilibrium
+  is 6. Adding four numeric rules to `GRAPH_SYSTEM_PROMPT`: **13/15**
+- The lesson is the split. Examples fix **conventions**; they do nothing for
+  **arithmetic**. A benchmark that measures one and reports "correct" is
+  measuring the easier half. My 20/20 was true and it was not the whole story
+
+### Design decisions
+- **Examples embedded in memory on first use, not stored in Chroma.** The
+  reference collection sat silently empty for three sessions because building it
+  was a separate step somebody had to remember. `diagram_examples.py` is in git
+  and there is no step to forget
+- **Shown as prior user/assistant turns**, not pasted into the system prompt.
+  The model continues a pattern it appears to have already followed
+- **`MIN_SIMILARITY = 0.35`**, cosine — the opposite direction to
+  `rag/retrieve.py`'s distance. Measured: `plot f(x) = x^2 and its derivative`
+  falls under it and gets no examples, which is what keeps this off the maths path
+- **All seven examples share one market** (`D: P = 10 − 0.8Q`, `S: P = 2 + 0.8Q`,
+  crossing at Q=5, P=6). The model copies curve equations out of an example but
+  works out annotations itself, so one consistent market is what makes the
+  numeric rule statable at all
+- **The fabrication guard is deterministic, not a prompt rule.** `NEED_REAL_DATA`
+  catches the cooperative case; an AST walk for a hardcoded run of 4+ numbers
+  catches the rest and stamps the figure *"Illustrative — values are not real
+  data"*. A prompt rule is a request, the AST check is a fact
+
+### The typing pass
+- `diagram_shots.py` came back with 8 problems. Four were syntax: `DEFAULT K`,
+  `min_similarityL float`, `- >`, `messages.append{`. One was structural — **the
+  entire body of `find_shots` was `_load`'s body pasted a second time**, so the
+  try/except, the query normalisation, `vecs @ q`, the argsort and the return
+  were all missing
+- Two were silent. `return _cache\` — a trailing backslash is a line
+  continuation, the **same bug as `DB_PATH = "data/chroma"\` last session** — and
+  `"role": "assitant"`, which is valid Python that Groq rejects at runtime. Only
+  graph requests that retrieved an example would have failed, and only those
+- `diagram_examples.py` was never created. `app.py` had 1 edit of 4: the import
+  landed and nothing called it, so `import app` succeeded and the file looked done
+- `keycheck.py` had its docstring deleted, unrelated to this work. Restored from git
+- **Sixth session running for the same shape**: code present, wiring absent
+
+### Current state
+- Graph requests now retrieve worked examples, refuse to invent data, and stamp
+  any figure built from hardcoded numbers
+- Verified live through `/api/graph` on Groq: the minimum-wage diagram renders
+  with the curves crossing at Q=5 P=6, the wage line at P=7, and the two dots at
+  Q=3.75 and Q=6.25 — exactly `(10−7)/0.8` and `(7−2)/0.8`. The gold-price
+  request is refused. `f(x) = x²` renders unchanged and unwatermarked. No errors
+  in the server log
+- All seven stored examples render and pass `_check_graph_code`
+- Uncommitted before this entry: `app.py`, `diagram_examples.py`, `diagram_shots.py`
+
+### Known issues / caveats
+- **13/15, not 15/15.** One run drew no intervention line, one placed a dot off
+  a curve. Good enough for a lesson, not good enough for anything that must be
+  right every time
+- **The live minimum-wage render is still not exam-clean**: the unemployment bar
+  runs from the left axis instead of starting at Q=3.75, and the axes are
+  labelled P and Q rather than W and L. Another example would probably fix it —
+  untested
+- **The numeric rule is welded to the standard market.** Add an example on
+  different curve equations and the rule in `GRAPH_SYSTEM_PROMPT` becomes a lie
+  and the arithmetic drifts back. There is a comment saying so and nothing enforcing it
+- **The watermark fires on legitimate maths plots** that use a literal list.
+  Judged acceptable — those numbers were typed rather than computed — but it
+  will look odd on a hand-plotted data question
+- **Still no economics in the RAG corpus.** The graph path is fixed; a lesson
+  *about* economics retrieves nothing
+- **Diagrams that are not curves on axes are untouched** — Ansoff, Boston matrix,
+  decision trees. Those belong to the mermaid path, which has not been looked at
+- The Socratic one-hint prompt is a poor fit for Business evaluation essays,
+  where the marks are in weighing both sides. Economics fits the current prompt;
+  Business does not
+- Carried over unchanged: prompt drift now measured at 7x and still unfixed, no
+  auth, no log rotation, `retrieve()` still unmeasured per call, PDF notation
+  damage still unaddressed
+
+### Next
+1. **PDF text cleanup**, still the top item and now overdue two sessions
+2. Add the missing labour-market labelling example and re-measure, since that is
+   the whole claim of this architecture — that a fix is a data change
+3. Put the correction pass into Phase C's plan in `readme.md`, while the reason
+   is fresh: logged sessions are the model's own output
+4. A syntax check in `hooks/pre-commit`. Six sessions, six transcription-typo
+   sessions. This is the cheapest unbuilt thing on the list
+5. Economics and business material into `data/papers/`, then re-ingest
+6. Everything still open from Session 6
