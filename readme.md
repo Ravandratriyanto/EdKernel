@@ -132,8 +132,11 @@ Build: `sessionlog.py`.
   lessons, `GET /api/sessions/<id>` rebuilds the messages array so a lesson can
   be resumed. That rebuild is the standing proof the fields are sufficient — if
   a new field stops being logged, resume breaks first.
-- **No auth yet**, so the sidebar shows every session on the server to anyone
-  who opens the page. Localhost only until `user_id` is real.
+- **Auth landed 2026-08-04** (`users.py`). Accounts, scrypt password hashing and
+  cookie sessions; `list_sessions()` and `session_turns()` take a `user_id` and
+  return only that student's lessons. The 32 log lines written before this all
+  carry `user_id: null`, so they belong to no account and no longer appear in
+  the sidebar — still on disk, not yet backfilled.
 
 ### Phase C — LoRA fine-tune on logged sessions
 Needs Phase B to have collected enough real lessons first. Phase A already

@@ -74,13 +74,20 @@ def read_records() -> list[dict]:
     return records
 
 
-def list_sessions(limit: int = 50) -> list[dict]:
-    """One summary per session id, newest first."""
+def list_sessions(user_id: int, limit: int = 50) -> list[dict]:
+    """One summary per session id, newest first — this user's sessions only.
+
+    user_id is positional and required on purpose. A new caller that forgets it
+    fails immediately with a TypeError; a default would have quietly served
+    every student's lessons to whoever asked.
+    """
     sessions = {}
     for rec in read_records():
         sid = rec.get("session_id") or ""
         if not sid:
             continue              # pre-sidebar rows — nothing to open them by
+        if rec.get("user_id") != user_id:
+            continue              # someone else's lesson, or a pre-auth row
         s = sessions.get(sid)
         if s is None:
             s = sessions[sid] = {
@@ -100,6 +107,11 @@ def list_sessions(limit: int = 50) -> list[dict]:
                   key=lambda s: s["updated"], reverse=True)[:limit]
 
 
-def session_turns(session_id: str) -> list[dict]:
-    """Every turn of one session, oldest first."""
-    return [r for r in read_records() if r.get("session_id") == session_id]
+def session_turns(session_id: str, user_id: int) -> list[dict]:
+    """Every turn of one session, oldest first — empty unless it's this user's.
+
+    Guessing a session id must not be enough to read the lesson, so the owner
+    check happens here rather than in the route.
+    """
+    return [r for r in read_records()
+            if r.get("session_id") == session_id and r.get("user_id") == user_id]

@@ -357,7 +357,7 @@
     /* min-width:0 lets a long bubble shrink instead of pushing the sidebar off */
     #main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 
-    #btn-sidebar {
+    #btn-sidebar, #btn-logout {
       border: none; background: rgba(255,255,255,0.1); color: white;
       border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.9rem;
     }
@@ -369,9 +369,62 @@
     }
 
     .hidden { display: none !important; }
+
+    /* login gate — sits over everything until /api/me returns a user */
+    #auth-gate {
+      position: fixed; inset: 0; z-index: 100;
+      background: #0f172a; display: flex;
+      align-items: center; justify-content: center;
+    }
+    #auth-card {
+      background: white; border-radius: 12px; padding: 28px;
+      width: 320px; max-width: calc(100vw - 32px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    #auth-card h2 { margin: 0 0 4px; font-size: 1.15rem; }
+    #auth-sub { margin: 0 0 18px; font-size: 0.8rem; color: #64748b; }
+    #auth-card input {
+      width: 100%; box-sizing: border-box; margin-bottom: 10px;
+      padding: 9px 11px; border: 1px solid #cbd5e1;
+      border-radius: 7px; font-size: 0.9rem;
+    }
+    #auth-submit {
+      width: 100%; padding: 10px; border: none; border-radius: 7px;
+      background: #2563eb; color: white; font-size: 0.9rem; cursor: pointer;
+    }
+    #auth-submit:disabled { opacity: 0.6; cursor: default; }
+    #auth-switch {
+      margin: 14px 0 0; font-size: 0.78rem; color: #64748b; text-align: center;
+    }
+    #auth-switch a { color: #2563eb; cursor: pointer; text-decoration: underline; }
+    #auth-error {
+      margin: 0 0 10px; font-size: 0.78rem; color: #b91c1c;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 6px; padding: 7px 9px;
+    }
+    #whoami { font-size: 0.78rem; color: rgba(255,255,255,0.75); margin-right: 4px; }
   </style>
 </head>
 <body>
+
+<div id="auth-gate">
+  <div id="auth-card">
+    <h2 id="auth-title">Log in</h2>
+    <p id="auth-sub">Your lessons are private to your account.</p>
+    <p id="auth-error" class="hidden"></p>
+    <form id="auth-form" onsubmit="submitAuth(event)">
+      <input id="auth-username" type="text" placeholder="Username"
+             autocomplete="username" required>
+      <input id="auth-password" type="password" placeholder="Password"
+             autocomplete="current-password" required>
+      <button id="auth-submit" type="submit">Log in</button>
+    </form>
+    <p id="auth-switch">
+      <span id="auth-switch-text">No account yet?</span>
+      <a onclick="toggleAuthMode()" id="auth-switch-link">Create one</a>
+    </p>
+  </div>
+</div>
 
 <header>
   <h1>OLLM Tutor</h1>
@@ -379,6 +432,8 @@
     <button id="btn-learn" class="active" onclick="setMode('learn')">Learn</button>
     <button id="btn-check" onclick="setMode('check')">Check</button>
   </div>
+  <span id="whoami"></span>
+  <button id="btn-logout" onclick="logout()" title="Log out">Log out</button>
   <button id="btn-sidebar" onclick="toggleSidebar()" title="Show or hide past lessons">☰</button>
 </header>
 
@@ -1358,7 +1413,87 @@
     }
   }
 
-  loadSessions();   // populate the sidebar on first paint
+  // ── auth ───────────────────────────────────────────────────────────────────
+
+  let authMode = 'login';   // or 'register'
+
+  function showAuthGate() {
+    document.getElementById('auth-gate').classList.remove('hidden');
+  }
+
+  function toggleAuthMode() {
+    authMode = authMode === 'login' ? 'register' : 'login';
+    const registering = authMode === 'register';
+    document.getElementById('auth-title').textContent  = registering ? 'Create an account' : 'Log in';
+    document.getElementById('auth-submit').textContent = registering ? 'Create account' : 'Log in';
+    document.getElementById('auth-switch-text').textContent = registering ? 'Already have an account?' : 'No account yet?';
+    document.getElementById('auth-switch-link').textContent = registering ? 'Log in' : 'Create one';
+    document.getElementById('auth-password').autocomplete   = registering ? 'new-password' : 'current-password';
+    document.getElementById('auth-error').classList.add('hidden');
+  }
+
+  function authError(msg) {
+    const el = document.getElementById('auth-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();          // stop the browser navigating away
+    const btn = document.getElementById('auth-submit');
+    btn.disabled = true;
+    document.getElementById('auth-error').classList.add('hidden');
+    try {
+      const res = await fetch(`/api/${authMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('auth-username').value,
+          password: document.getElementById('auth-password').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { authError(data.error || 'Could not sign you in.'); return; }
+      document.getElementById('auth-password').value = '';
+      enterApp(data.user);
+    } catch (e) {
+      authError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function enterApp(user) {
+    document.getElementById('whoami').textContent = user.username;
+    document.getElementById('auth-gate').classList.add('hidden');
+    loadSessions();       // the sidebar is per-user, so it can only load now
+  }
+
+  async function logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    // Drop the in-page lesson too, or the next person at this machine reads it.
+    messages = [];
+    clearChat();
+    document.getElementById('session-list').innerHTML = '';
+    document.getElementById('whoami').textContent = '';
+    showAuthGate();
+  }
+
+  // Any request can come back 401 once the 30-day session expires. Catching it
+  // in one place beats checking the status at all ten call sites.
+  const _fetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const res = await _fetch(...args);
+    if (res.status === 401) showAuthGate();
+    return res;
+  };
+
+  // Decide login screen or app before painting anything. loadSessions() is
+  // called from enterApp, not here — it would 401 while logged out.
+  fetch('/api/me')
+    .then(r => r.json())
+    .then(d => { if (d.user) enterApp(d.user); })
+    .catch(() => {});
 </script>
 </body>
 </html>

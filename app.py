@@ -14,14 +14,15 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
-from diagram_shots import shot_messages 
+from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
+import users
 load_dotenv()
 
 _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
@@ -33,6 +34,81 @@ _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
 _STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', re.MULTILINE)
 
 app = Flask(__name__, static_folder="static")
+
+# ── auth ─────────────────────────────────────────────────────────────────────
+
+users.init()
+
+SESSION_COOKIE = "ollm_session"
+
+# Endpoints reachable without logging in. Everything else is closed by
+# default — a new route is protected the moment it exists, rather than the
+# moment somebody remembers to decorate it.
+_OPEN_ENDPOINTS = {"index", "static", "api_register", "api_login",
+                   "api_logout", "api_me"}
+
+
+@app.before_request
+def _load_user():
+    """Turn the session cookie into g.user, and refuse anonymous callers."""
+    g.user = users.user_for_token(request.cookies.get(SESSION_COOKIE, ""))
+    if request.endpoint in _OPEN_ENDPOINTS:
+        return None
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    return None
+
+
+def _auth_response(user: dict, token: str):
+    """Reply to a successful login or registration, carrying the cookie."""
+    resp = jsonify({"user": {"id": user["id"], "username": user["username"]}})
+    resp.set_cookie(
+        SESSION_COOKIE, token,
+        max_age=users.SESSION_TTL_SECONDS,
+        httponly=True,          # JavaScript can't read it, so an XSS bug can't steal it
+        samesite="Lax",
+        secure=False,           # served over plain http on localhost; flip this behind TLS
+    )
+    return resp
+
+
+@app.route("/api/register", methods=["POST"])
+def api_register():
+    data = request.json or {}
+    try:
+        uid = users.create_user(data.get("username", ""), data.get("password", ""))
+    except users.UserError as e:
+        return jsonify({"error": str(e)}), 400
+    username = (data.get("username") or "").strip()
+    return _auth_response({"id": uid, "username": username},
+                          users.create_session(uid))
+
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.json or {}
+    uid = users.authenticate(data.get("username", ""), data.get("password", ""))
+    if uid is None:
+        # One message for both cases. "No such user" would confirm which
+        # usernames exist.
+        return jsonify({"error": "Wrong username or password."}), 401
+    username = (data.get("username") or "").strip()
+    return _auth_response({"id": uid, "username": username},
+                          users.create_session(uid))
+
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    users.delete_session(request.cookies.get(SESSION_COOKIE, ""))
+    resp = jsonify({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
+@app.route("/api/me")
+def api_me():
+    """Who am I? The page asks this on load to decide login screen or app."""
+    return jsonify({"user": g.user})
 
 
 def _key(data: dict, field: str, env_var: str) -> str:
@@ -387,7 +463,7 @@ def api_start():
 
     log_turn("start",
              session_id=data.get("session_id", ""),
-             user_id=None,                      # placeholder until auth exists
+             user_id=g.user["id"],
              mode="learn", topic=topic,
              provider=provider, model=model,
              input=topic, output=response,
@@ -428,7 +504,7 @@ def api_reply():
             # the middle of any session that fetched papers.
             log_turn("papers",
                      session_id=data.get("session_id", ""),
-                     user_id=None,
+                     user_id=g.user["id"],
                      mode="learn", topic=intent["topic"] or topic,
                      provider=provider, model=model,
                      input=user_input, output=reply,
@@ -465,7 +541,7 @@ def api_reply():
 
     log_turn("reply",
              session_id=data.get("session_id", ""),
-             user_id=None,
+             user_id=g.user["id"],
              mode="learn", topic=topic,
              provider=provider, model=model,
              input=user_input, output=response,
@@ -517,15 +593,17 @@ def _rebuild_messages(turns: list[dict]) -> list[dict]:
 
 @app.route("/api/sessions")
 def api_sessions():
-    return jsonify({"sessions": list_sessions()})
+    return jsonify({"sessions": list_sessions(g.user["id"])})
 
 
 @app.route("/api/sessions/<session_id>")
 def api_session(session_id: str):
     if len(session_id) > _SESSION_ID_MAX:
         return jsonify({"error": "bad session id"}), 400
-    turns = session_turns(session_id)
+    turns = session_turns(session_id, g.user["id"])
     if not turns:
+        # Same 404 whether the session is missing or belongs to someone else,
+        # so the reply never confirms that another student's lesson exists.
         return jsonify({"error": "no such session"}), 404
 
     # Show exactly the turns the rebuild used, so the transcript on screen can
@@ -582,7 +660,7 @@ def api_check():
         response = _strip_signal(raw)[0]
         log_turn("check",
                  session_id=data.get("session_id", ""),
-                 user_id=None,
+                 user_id=g.user["id"],
                  mode="check", topic=question,
                  provider=provider, model=model,
                  input=answer, output=response,
@@ -609,7 +687,7 @@ def api_check():
     response = _strip_signal(raw)[0]
     log_turn("check",
              session_id=data.get("session_id", ""),
-             user_id=None,
+             user_id=g.user["id"],
              mode="check", topic=question,
              provider=provider, model=model,
              input=answer, output=response,
