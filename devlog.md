@@ -842,9 +842,21 @@ history. Nearly free on Groq, but it is the number that will hurt first on
 hardware that bills, and it is what makes each turn slow.
 
 ### Next
-1. **The `hooks/pre-commit` syntax check.** Seven sessions, seven typo sessions.
-   It would have caught nine of the eleven bugs above. Still the cheapest
-   unbuilt thing on the list
+1. ~~**The `hooks/pre-commit` syntax check.**~~ **Built 2026-08-05.** Compiles
+   every staged `.py` and blocks the commit on a SyntaxError.
+
+   The claim above — "nine of the eleven bugs" — was wrong, and repeating it is
+   how it got into this file. Measured against all eleven, it catches **five**:
+   the merged `import timefrom`, a stray `.` in a path, `passwordL str`, an
+   unmatched `)`, and a stray line-continuation backslash. The other six parse
+   fine — two attribute typos (`sqlite3.row`, `conn.exceute`), one undefined-name
+   mismatch (`N` vs `_N`), a missing comma inside a SQL string, a block dedented
+   out of its `with`, and `DB_PATH` pointing at `logs` instead of `.logs`.
+
+   Still worth having — it catches the class of bug that stops a file importing
+   at all — but it is not the safety net the old note implied. Adding `pyflakes`
+   would bring the undefined-name case; nothing catches an attribute typo without
+   running the code
 2. Backfill `user_id` on the 32 orphaned log lines, or accept losing the sidebar
    history
 3. PDF text cleanup — top item for three sessions now

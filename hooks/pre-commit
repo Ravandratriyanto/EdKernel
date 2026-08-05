@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Block commits containing live API keys.
+# Two checks, both blocking:
+#
+#   1. Live API keys in staged changes.
+#   2. Python that will not parse.
 #
 # Three keys have leaked in three sessions (chat paste, .gitignore, .env.example),
 # each time because a key was pasted into whichever file was nearest. Two of those
@@ -10,6 +13,8 @@
 
 set -uo pipefail
 
+fail=0
+
 # name<TAB>regex — anchored on the long random tail so short placeholders
 # like placeholder="gsk_..." don't trip it.
 PATTERNS=$'Groq\tgsk_[A-Za-z0-9]{20,}
@@ -18,9 +23,9 @@ OpenAI\tsk-(proj-)?[A-Za-z0-9_-]{20,}
 AWS access key\tAKIA[0-9A-Z]{16}
 Anthropic\tsk-ant-[A-Za-z0-9_-]{20,}'
 
-# Added lines in the staged diff, minus the +++ file headers.
+# Added lines in the staged diff, minus the +++ file headers. May be empty on a
+# delete-only commit; the loop below then matches nothing, which is correct.
 added=$(git diff --cached --unified=0 | grep '^+' | grep -v '^+++' || true)
-[[ -z "$added" ]] && exit 0
 
 found=0
 while IFS=$'\t' read -r name regex; do
@@ -48,7 +53,75 @@ Treat any key that got this far as burned — rotate it, don't just move it.
 
 Override with: git commit --no-verify
 EOF
-    exit 1
+    fail=1
 fi
 
-exit 0
+
+# --- 2. Python syntax -------------------------------------------------------
+#
+# Seven sessions, seven of them with a typo that stopped a file importing.
+#
+# This catches 5 of the 11 bugs in users.py, not the 9 first claimed — measured,
+# not guessed. It gets the merged `import timefrom`, a stray `.` in a path,
+# `passwordL str`, an unmatched `)`, and a stray line-continuation backslash.
+#
+# It does NOT get the other 6, because they all parse fine:
+#   sqlite3.row / conn.exceute      attribute typos, AttributeError at runtime
+#   n = N, r = R  vs  _N, _R        undefined names, NameError at runtime
+#   missing comma in a SQL string   sqlite is the only thing that can see it
+#   a block dedented out of `with`  valid Python, just wrong
+#   DB_PATH -> "logs" not ".logs"   valid Python, and untracked-vs-tracked
+# A linter (pyflakes) would add the undefined-name case. Nothing here catches
+# an attribute typo without running the code.
+#
+# Checks the STAGED content, not the file on disk. Staging a file and then
+# editing it further is exactly when the two differ, and it is the staged
+# version that gets committed.
+
+root=$(git rev-parse --show-toplevel)
+py=python3
+[[ -x "$root/.venv/bin/python" ]] && py="$root/.venv/bin/python"
+
+syntax_bad=0
+# -z gives NUL-separated names, so a path with a space survives.
+# ACMR = added, copied, modified, renamed — never deleted, which has no content.
+while IFS= read -r -d '' path; do
+    [[ "$path" == *.py ]] || continue
+    err=$(git show ":$path" | "$py" -c '
+import sys
+name = sys.argv[1]
+try:
+    compile(sys.stdin.read(), name, "exec")
+except SyntaxError as e:
+    print(f"  {name}:{e.lineno}: {e.msg}")
+    if e.text:
+        print("      " + e.text.rstrip())
+        # e.offset is 1-based, and is 0 on some errors — clamp it.
+        print("      " + " " * max((e.offset or 1) - 1, 0) + "^")
+    sys.exit(1)
+except ValueError as e:
+    # Null bytes and similar — not a SyntaxError, still not importable.
+    print(f"  {name}: {e}")
+    sys.exit(1)
+' "$path" 2>&1) || {
+        if (( syntax_bad == 0 )); then
+            echo "COMMIT BLOCKED — staged Python does not parse:" >&2
+            echo >&2
+        fi
+        syntax_bad=1
+        printf '%s\n' "$err" >&2
+    }
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+if (( syntax_bad )); then
+    cat >&2 <<'EOF'
+
+This is the staged version, which is not always what is on disk. If you fixed
+it already, `git add` the file again.
+
+Override with: git commit --no-verify
+EOF
+    fail=1
+fi
+
+exit "$fail"
