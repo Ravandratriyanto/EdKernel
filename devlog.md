@@ -787,11 +787,11 @@ server. A login screen in front of that is a false sense of security, not a fix.
   `sessions.jsonl` (back to 32) and the test `users.db` deleted
 
 ### Known issues / caveats
-- **The login screen has never been opened in a browser.** The JS passes
-  `node --check`, the page serves 200 with the gate and logout button in the
-  markup, and that is all that was checked. This project has shipped two
-  regressions from exactly this — structurally verified, never run. Treat the
-  card, the login/register toggle and the logout button as unproven
+- ~~**The login screen has never been opened in a browser.**~~ **Resolved
+  2026-08-05.** Ravan ran it in Brave and reported it working. The database
+  agrees: one account written, and one session row for that user with a
+  30-day expiry, so register → login → cookie all ran end to end. The gate,
+  the register/login toggle and the logout button are no longer unproven
 - **The 32 existing log lines are orphaned.** Every one carries `user_id: null`,
   so those 9 sessions match no account and have dropped out of the sidebar.
   Nothing was deleted. A one-line backfill after registering would reclaim them
@@ -805,15 +805,50 @@ server. A login screen in front of that is a false sense of security, not a fix.
   rotation, `retrieve()` unmeasured per call, no economics in the corpus, Phase 7
   not started, Phase C still self-referential in `readme.md`
 
+### Follow-up — 2026-08-05
+No new code. The login screen was run in a browser, which was the one thing
+this session shipped without testing, and it works. That closes the last open
+item from the commit.
+
+Two decisions while looking at the state:
+
+- **No password reset.** Forgetting a password means deleting the row and
+  registering again. A CLI for it was offered and declined — one account, one
+  machine, not worth the code
+- **The Ollama token counts are parked, not broken.** Phase B's definition of
+  done wants non-zero counts on both providers. Ollama is not installed on this
+  laptop at all, so `_ollama_usage()`'s field names — `prompt_eval_count` and
+  `eval_count` — have never been checked against a real response. A wrong name
+  there reads as zero rather than as an error. Groq stays the inference path
+  while the hardware is 8GB RAM and an Intel Iris, so this waits for a remote
+  instance rather than being a defect to chase
+
+Counted what Phase C actually has to train on, and it is not close:
+
+| | |
+|---|---|
+| Sessions | 8 |
+| Turns | 32 |
+| Tutor output | 6,330 chars — roughly 1,600 tokens |
+| Tokens billed | 41,540 prompt, 1,454 completion |
+
+Phase A already showed what too little data does: on a 975-byte file, train loss
+fell to 0.90 while validation *climbed* to 3.59. The corpus here is six times
+that file. Phase C is data-blocked, not code-blocked, and no config change moves
+that number — only teaching real lessons does.
+
+The prompt-to-completion ratio is 28:1. Every turn ships the full RAG context and
+history. Nearly free on Groq, but it is the number that will hurt first on
+hardware that bills, and it is what makes each turn slow.
+
 ### Next
-1. **Open the login screen in a browser.** It is the only part of this session
-   that was not run
-2. **The `hooks/pre-commit` syntax check.** Seven sessions, seven typo sessions.
+1. **The `hooks/pre-commit` syntax check.** Seven sessions, seven typo sessions.
    It would have caught nine of the eleven bugs above. Still the cheapest
    unbuilt thing on the list
-3. Backfill `user_id` on the 32 orphaned log lines, or accept losing the sidebar
+2. Backfill `user_id` on the 32 orphaned log lines, or accept losing the sidebar
    history
-4. PDF text cleanup — top item for three sessions now
-5. The missing labour-market labelling example, and re-measure
-6. Put the correction pass into Phase C's plan in `readme.md`
-7. Economics and business material into `data/papers/`, then re-ingest
+3. PDF text cleanup — top item for three sessions now
+4. The missing labour-market labelling example, and re-measure
+5. Put the correction pass into Phase C's plan in `readme.md`
+6. Economics and business material into `data/papers/`, then re-ingest
+7. Accumulate lessons. Nothing in Phase C starts until there is real material
