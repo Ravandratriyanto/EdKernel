@@ -792,9 +792,10 @@ server. A login screen in front of that is a false sense of security, not a fix.
   agrees: one account written, and one session row for that user with a
   30-day expiry, so register → login → cookie all ran end to end. The gate,
   the register/login toggle and the logout button are no longer unproven
-- **The 32 existing log lines are orphaned.** Every one carries `user_id: null`,
-  so those 9 sessions match no account and have dropped out of the sidebar.
-  Nothing was deleted. A one-line backfill after registering would reclaim them
+- ~~**The 32 existing log lines are orphaned.**~~ **Resolved 2026-08-05** — all
+  32 backfilled to `user_id: 1`, 8 lessons back in the sidebar. The "9 sessions"
+  here was a miscount: one of the 9 ids is the empty string, and those rows are
+  skipped by design
 - `secure=False` on the session cookie. Correct for plain http on localhost, and
   wrong the moment this sits behind TLS. There is a comment and nothing enforcing it
 - No rate limiting on `/api/login`. scrypt at ~34ms is the only thing slowing a
@@ -806,9 +807,9 @@ server. A login screen in front of that is a false sense of security, not a fix.
   not started, Phase C still self-referential in `readme.md`
 
 ### Follow-up — 2026-08-05
-No new code. The login screen was run in a browser, which was the one thing
-this session shipped without testing, and it works. That closes the last open
-item from the commit.
+The login screen was run in a browser, which was the one thing this session
+shipped without testing, and it works. That closes the last open item from the
+commit. Then the two cheapest things on the Next list got built.
 
 Two decisions while looking at the state:
 
@@ -841,26 +842,79 @@ The prompt-to-completion ratio is 28:1. Every turn ships the full RAG context an
 history. Nearly free on Groq, but it is the number that will hurt first on
 hardware that bills, and it is what makes each turn slow.
 
+### The pre-commit syntax check — built
+Compiles every staged `.py` and blocks the commit on a SyntaxError, alongside the
+key scan that was already there.
+
+It reads the **staged blob** via `git show :path`, not the file on disk. Staging
+a file and then editing it further is exactly when the two differ, and it is the
+staged version that gets committed. Fixing the file means `git add`-ing it again,
+and the error message says so.
+
+Also fixed a hole in the existing key check: `[[ -z "$added" ]] && exit 0` would
+have skipped the new check entirely on a delete-only commit. Both checks now run
+and report together instead of the first one exiting.
+
+**The "nine of the eleven bugs" claim was wrong.** It came from an estimate that
+got repeated into this file without being measured. Run against all eleven, it
+catches **five**: the merged `import timefrom`, a stray `.` in a path,
+`passwordL str`, an unmatched `)`, and a stray line-continuation backslash.
+
+The other six parse fine and always would have:
+
+| Not caught | Why |
+|---|---|
+| `sqlite3.row`, `conn.exceute` | attribute typos — AttributeError at runtime |
+| `n = N, r = R` vs `_N`, `_R` | undefined names — NameError at runtime |
+| missing comma in a SQL string | only sqlite can see inside the string |
+| block dedented out of its `with` | valid Python, just wrong |
+| `DB_PATH` → `logs` not `.logs` | valid Python, and a tracked-vs-ignored mistake |
+
+Still worth having, because it catches the class of bug that stops a file
+importing at all — which is what bit this project seven sessions running. But it
+is not the safety net the old note implied. `pyflakes` would add the
+undefined-name case; nothing catches an attribute typo without running the code.
+
+Tested in a throwaway repo rather than by reading it: clean commit passes; both
+real syntax bugs blocked with the caret on the right column; staged-broken but
+fixed-on-disk still blocked, then allowed after `git add`; the key check still
+fires, and both blocks print when a commit has a key *and* a syntax error;
+delete-only commits, a `.txt` full of broken Python, and paths with spaces all
+handled.
+
+### The orphaned log lines — backfilled
+All 32 records now carry `user_id: 1`, and the 8 lessons are back in the sidebar.
+
+The care here was in not trusting the rewrite. Server stopped first so nothing
+could append mid-write; backup checksummed; then a dry run that re-serialised
+every record with the exact settings `sessionlog.py` writes with — all 32
+reproduced their original line **byte for byte**, which is what proves the
+rewrite can only change the field it targets. Written to a temp file and
+`os.replace`d, so a crash cannot leave a half-log. Diffed against the backup with
+`user_id` masked: identical.
+
+The condition is `if rec.get("user_id") is None`, so re-running it can never
+reassign a record that already has a real owner.
+
+Verified live, not just on disk: `/api/sessions` returns 8 lessons, and opening
+the AES-256 one rebuilt **17 messages** — system prompt plus 8 turns. Resume off
+the backfilled log is the standing proof the fields are still sufficient. Access
+control unchanged: no cookie 401, bogus cookie 401, bogus cookie on a real
+session id 401.
+
+30 of the 32 records belong to those 8 lessons. The other 2 are `check` rows from
+2026-08-01 with an empty `session_id` — they predate the sidebar, so there is
+nothing to open them by and `list_sessions()` skips them on purpose. Backfilled,
+but not reachable.
+
+Two session tokens were minted directly to test the read path without needing the
+password, then deleted. One session row left, the real browser login.
+
 ### Next
-1. ~~**The `hooks/pre-commit` syntax check.**~~ **Built 2026-08-05.** Compiles
-   every staged `.py` and blocks the commit on a SyntaxError.
-
-   The claim above — "nine of the eleven bugs" — was wrong, and repeating it is
-   how it got into this file. Measured against all eleven, it catches **five**:
-   the merged `import timefrom`, a stray `.` in a path, `passwordL str`, an
-   unmatched `)`, and a stray line-continuation backslash. The other six parse
-   fine — two attribute typos (`sqlite3.row`, `conn.exceute`), one undefined-name
-   mismatch (`N` vs `_N`), a missing comma inside a SQL string, a block dedented
-   out of its `with`, and `DB_PATH` pointing at `logs` instead of `.logs`.
-
-   Still worth having — it catches the class of bug that stops a file importing
-   at all — but it is not the safety net the old note implied. Adding `pyflakes`
-   would bring the undefined-name case; nothing catches an attribute typo without
-   running the code
-2. Backfill `user_id` on the 32 orphaned log lines, or accept losing the sidebar
-   history
-3. PDF text cleanup — top item for three sessions now
-4. The missing labour-market labelling example, and re-measure
-5. Put the correction pass into Phase C's plan in `readme.md`
-6. Economics and business material into `data/papers/`, then re-ingest
-7. Accumulate lessons. Nothing in Phase C starts until there is real material
+1. PDF text cleanup — top item for four sessions now
+2. The missing labour-market labelling example, and re-measure
+3. Put the correction pass into Phase C's plan in `readme.md`
+4. Economics and business material into `data/papers/`, then re-ingest
+5. Accumulate lessons. Nothing in Phase C starts until there is real material,
+   and 6,330 characters is not real material
+6. Optional: `pyflakes` in the hook, for the undefined-name case
