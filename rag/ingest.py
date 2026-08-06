@@ -16,6 +16,8 @@ import chromadb
 from chromadb.utils import embedding_functions
 from pypdf import PdfReader
 
+import pdftext
+
 # pypdf is loud about malformed cross-reference tables in scanned papers, and
 # every one of those warnings is about a file we are about to skip anyway.
 warnings.filterwarnings("ignore")
@@ -53,11 +55,15 @@ def _page_texts(pdf_path: str):
         n = len(reader.pages)
     except Exception:
         return
+    pages = []
     for i in range(n):
         try:
-            yield i, (reader.pages[i].extract_text() or "")
+            pages.append(pdftext.clean(pdftext.page_text(reader.pages[i])))
         except Exception:
-            return          # abandon the rest of this file, keep what we have
+            break           # abandon the rest of this file, keep what we have
+    # Footers can only be spotted by comparing pages, so this runs after the
+    # loop rather than inside it — the per-page recovery above still holds.
+    yield from enumerate(pdftext.strip_repeats(pages))
 
 
 def _chunk(text: str, size: int = 900, overlap: int = 150) -> list[str]:

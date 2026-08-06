@@ -22,6 +22,7 @@ from rag.retrieve import retrieve
 from vision.image_handler import transcribe
 from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
+import pdftext
 import users
 load_dotenv()
 
@@ -308,7 +309,7 @@ _FILLER_WORDS = {"test", "testing", "asdf", "abc", "stuff", "thing", "things",
 def _pdf_text(data: bytes) -> str:
     """Extract the text layer from PDF bytes. Empty string if it has none."""
     reader = PdfReader(io.BytesIO(data))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+    return "\n".join(pdftext.doc_pages(reader))
 
 
 # A numbered question ("12." or "12)") at the start of a line, and the symbols
@@ -333,8 +334,7 @@ def _question_pages(data: bytes, budget: int = 7000) -> tuple[bool, str]:
 
     has_text = False
     scored = []
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text() or ""
+    for i, text in enumerate(pdftext.doc_pages(reader)):
         if text.strip():
             has_text = True
         if len(text.strip()) < 80:
