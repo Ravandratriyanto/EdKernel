@@ -167,7 +167,24 @@ locally.
       — done in the web app (`vision/image_handler.py`, wired into
       `/api/start`, `/api/reply`, `/api/check`) and in the CLI via
       `--image`, on both the Ollama and Groq providers
-- [ ] Phase 7: `--video` produces the same flow as `--image`
+- [x] Phase 7: `--video` produces the same flow as `--image`
+      — `video/frame_extractor.py` shells out to ffmpeg rather than OpenCV,
+      which is not what the spec above says. `cv2` is a ~60MB wheel and ffmpeg
+      was already installed. The `mpdecimate` filter drops near-duplicate
+      frames, so a static page costs 1 vision call instead of one per sample.
+      Multiple distinct frames are merged by one text-model call in
+      `video/video_handler.py`. Run live on Groq in both learn and check mode.
+
+      **mpdecimate only catches a still camera.** Measured on a 10s clip of one
+      page with a slow zoom and drift: 5 frames of a possible 5 survive, so one
+      page costs 5 vision calls. No `hi`/`lo`/`frac` setting fixes it — the
+      loosest one that collapses the handheld clip to 1 also collapses a real
+      two-page clip to 1, which loses content. `_dedupe()` catches it after
+      transcription, so the answer is still right and the merge call is saved,
+      but the vision calls are already spent. A perceptual hash before
+      transcription would fix it; 48x48 separated cleanly on the two test
+      clips and smaller sizes did not, which is one data point, not a
+      threshold. Needs real filmed pages before it is worth wiring in
 - [x] Phase A: `training/train_tiny.py` trains on CPU and samples readable text
 - [ ] Phase B: a finished lesson appears in `.logs/sessions.jsonl` as one JSON
       line per turn, in order, with non-zero token counts on both providers,

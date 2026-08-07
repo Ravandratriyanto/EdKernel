@@ -8,10 +8,14 @@ from dotenv import load_dotenv
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
+# The module, not the function — the wrapper below shares its name.
+from video import video_handler
+from video.frame_extractor import ExtractError
 
 load_dotenv()
 
 ALLOWED_IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+ALLOWED_VIDEOS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SAT/A-level LLM tutor")
@@ -19,6 +23,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--text", help="Question as typed text")
     source.add_argument("--image", help="Path to a photo of the question")
+    source.add_argument("--video", help="Path to a video of the question")
     parser.add_argument("--answer", help="Student's answer (check mode only)")
     parser.add_argument("--ollama-host", default="http://localhost:11434")
     parser.add_argument("--model", default="gemma4")
@@ -64,6 +69,33 @@ def question_from_image(path: str, model: str, host: str,
     if not text:
         raise SystemExit(f"Nothing readable in {path} — is the question visible in the photo?")
     return text
+
+
+def question_from_video(path: str, model: str, host: str,
+                        provider: str, api_key: str, vision_model: str) -> str:
+    """Read a video file and return the question inside it as plain text."""
+    video_path = Path(path)
+    if not video_path.is_file():
+        raise SystemExit(f"No such video: {path}")
+
+    if video_path.suffix.lower() not in ALLOWED_VIDEOS:
+        allowed = ", ".join(sorted(ALLOWED_VIDEOS))
+        raise SystemExit(f"Unsupported video type '{video_path.suffix}'. Use one of: {allowed}")
+
+    def progress(n, total):
+        # flush=True because Python buffers print when output is not a
+        # terminal, and progress you see after the work finishes is not
+        # progress. One vision call per frame, so this can be a slow wait.
+        print(f"  reading frame {n} of {total}...", flush=True)
+
+    try:
+        return video_handler.question_from_video(
+            path, model=model, host=host, provider=provider,
+            api_key=api_key, vision_model=vision_model, on_progress=progress)
+    except ExtractError as e:
+        raise SystemExit(str(e))
+    except Exception as e:
+        raise SystemExit(f"Could not read {path}: {e}")
 
 
 def learn_mode(topic: str, model: str, host: str,
@@ -118,6 +150,10 @@ def main():
                                        args.provider, api_key, args.vision_model)
         # Transcription is the one lossy step, so show it before it's used.
         print(f"\n--- Read from {args.image} ---\n{question}\n")
+    elif args.video:
+        question = question_from_video(args.video, args.model, args.ollama_host,
+                                       args.provider, api_key, args.vision_model)
+        print(f"\n--- Read from {args.video} ---\n{question}\n")
     else:
         question = args.text
 

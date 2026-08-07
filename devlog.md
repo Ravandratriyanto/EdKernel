@@ -918,3 +918,178 @@ password, then deleted. One session row left, the real browser login.
 5. Accumulate lessons. Nothing in Phase C starts until there is real material,
    and 6,330 characters is not real material
 6. Optional: `pyflakes` in the hook, for the undefined-name case
+
+## Session 9 — 2026-08-07
+
+Two builds. PDF text extraction, top of the Next list for four sessions. Then
+Phase 7, which was the last numbered phase never started.
+
+### PDF extraction — `pdftext.py`
+
+`pypdf`'s `extract_text()` throws superscripts away, so `x²` arrives as `x2`.
+That is a different equation and the tutor cannot tell. The fix reads glyph
+positions through `extract_text(visitor_text=...)`: a run that sits higher than
+the one before it *and* is set smaller becomes `^n`.
+
+The word *before* is load-bearing. Comparing against the last **normal** run
+instead of the immediately preceding one leaves a stale baseline, and a stale
+baseline turns the subscript in NH3 into `NH^3`.
+
+Measured across all 25 papers:
+
+| | before | after |
+|---|---|---|
+| Ligature gaps (`simplifi  es`) | 146 | 0 |
+| Dotted answer rules | 914 | 0 |
+| Spaced URLs (`www .site`) | 6 | 0 |
+| Exponents recovered | — | 145 |
+| Exponents wrongly raised | — | 1 |
+
+**A regex that made things worse, and was removed.** An `ORPHAN` rule to rejoin
+exponents split across lines fixed 65 and created 120 false ones — every
+`NH^3`, `H2SO4`, `CO^2` in the corpus. Net negative, deleted. The visitor rule
+alone gives 94 true / 1 false at that stage. Worth recording because it looked
+right and only measuring caught it.
+
+**An over-claim, corrected.** "Flattened exponents" was first counted by
+matching `[a-z]\d`, which also hits `<h1>` tags, `H2SO4`, `N2`, `CO2` and
+subscript variables like `x1`. Many of those matches were never exponents, so
+the real win is smaller than the first number said.
+
+Re-ingested: **3,508 → 3,192 chunks**. The drop is removed junk, not lost
+content — dotted rules and a repeated "Save My Exams" footer that had been
+embedding as if it were syllabus material. Retrieval confirmed live returning
+`2x^2 + 7x – 3 = 0` with the footer gone.
+
+The footer needed a second pass. `strip_repeats()` compares pages against each
+other, so wiring `ingest.py` strictly page-by-page silently dropped it —
+footers survived the first re-ingest. Fixed by collecting pages, then stripping
+after the loop, which keeps the per-page error recovery that function exists
+for.
+
+### `app.py` was overwritten, and recovered
+
+An older pre-auth copy landed on top of the working file: **-148 lines**,
+including the entire auth block and every `g.user["id"]` site. The overwritten
+copy was backed up first, then `git checkout app.py`. Nothing was lost, because
+the auth work had been committed the session before. Uncommitted, it would have
+been gone.
+
+### The typing pass on `pdftext.py`
+Seven bugs. `font_szie`; a missing `stripped = text.strip()`; `out.appeand`;
+`"".joint(out)`; `set{...}` for `set(...)`; `of` for `if`; and the `cut` set
+merged into the return line. The eighth was structural — the `raised = (...)`
+block indented inside `if not stripped:` **after** a `continue`, so it was
+unreachable and `if raised:` referenced a name that never existed.
+
+### Phase 7 — video input
+
+Built as `video/frame_extractor.py` + `video/video_handler.py`, wired to
+`--video` in `main.py`. Frames are pulled with **ffmpeg, not OpenCV**, against
+what `readme.md` specifies: `cv2` is a ~60MB wheel and ffmpeg was already
+installed at `/usr/bin/ffmpeg`. Ravan chose this after seeing both.
+
+The design decision `readme.md` left open — what to do when frames show
+different things — resolved as *collapse locally first, pay a model call only
+if they really differ*. `_dedupe()` uses `difflib.SequenceMatcher` at 0.85 and
+keeps the longest of a matching group, because a blurred frame transcribes
+short, not wrong. A static page returns early and costs zero merge calls.
+
+### The typing pass on the video files
+`frame_extractor.py` had four, and did not parse: `class ExtractError(Exception):`
+with no body, a parameter named `MAX_FRAMES` shadowing the constant, `max_frames`
+undefined as a result, and `subproceses.TimeoutExpired`. `video_handler.py` was
+about a quarter typed — no imports, no `MERGE_PROMPT`, no function body, indented
+two spaces at top level, and ending mid-docstring with terminal chrome pasted in:
+`"""Return the question in a video as p Jump to bottom (ctrl+End) ↓`. It was also
+named `videohandler.py`. `_dedupe` was typed correctly and was kept as written.
+
+### mpdecimate only catches a still camera
+
+`mpdecimate` drops near-duplicate frames, which is what stops one vision call
+per second of footage. It works on a tripod and not in a hand. Measured, wanting
+1 / 1 / 2:
+
+| setting | handheld | static | two-page |
+|---|---|---|---|
+| `frac=0.33` (shipped) | **5** | 1 | 2 |
+| `frac=0.5` | **5** | 1 | 2 |
+| `frac=0.75` | **5** | 1 | 2 |
+| `hi=64*200:lo=64*100` | 1 | 1 | **1** |
+
+**The advice given at design time — "raise `frac` toward 0.5" — is wrong.** No
+setting works. It stays at 5 until it is loose enough to collapse a genuine
+two-page clip to one, which loses half the question. So a handheld video of one
+page costs 5 vision calls. `_dedupe()` catches it after the fact, so the answer
+is right and the merge call is saved, but the calls are already spent.
+
+A perceptual hash before transcription would fix it and was tried and dropped:
+8x8 and 16x16 do not separate at all — 16x16 scored the *different* pages at 0,
+worse than the same page. Only 48x48 gave a clean margin, 3 against 126, on one
+synthetic clip that is unusually sparse. That is one data point, not a
+threshold, and `rag/retrieve.py` already carries a comment about exactly this
+mistake.
+
+### `drop_reasoning` leaked an unclosed `<think>`
+
+Found while testing video, and **pre-existing — it affects `--image` too.** The
+function splits on `</think>`, so a model that opens the block and never closes
+it passes straight through. Caught live: one frame returned **6,146 characters**
+of the model narrating its own transcription process, which then went into the
+merge prompt as if it were the question.
+
+Unclosed now returns empty, which callers already treat as unreadable and skip.
+It is intermittent — a second five-frame run of the same video produced no
+`<think>` at all — so it would have shipped and surfaced later as a lesson that
+taught the model's inner monologue.
+
+`_drop_reasoning` renamed to `drop_reasoning`, since a second module now needs it.
+
+### Current state
+- Verified live on Groq, not structurally. `check --video` on a two-page clip
+  merged to `Solve 2x^2 + 7x - 3 = 0 / Show all your working`; `learn --video`
+  on a static page taught the derivative; `--image` re-verified after the
+  `drop_reasoning` change
+- Tested against a **real past-paper page** rendered at 150dpi and filmed with
+  zoom and drift, not just synthetic text. It came back as `2x^2 + 7x - 3 = 0`
+  with the superscript intact
+- Error paths: missing file, `.py` passed as a video, and `--text` with
+  `--image` all fail with a clean message and no traceback
+- `drop_reasoning` passes six cases including `<think>` inside legitimate text
+- Phase 7 ticked in `readme.md`, with the ffmpeg deviation and the handheld
+  limitation written under it
+
+### Known issues / caveats
+- **A handheld video of one page costs 5 vision calls.** Above. The answer is
+  still correct; the cost and the latency are not
+- **SAT-produced PDFs are still wrong.** `ax bx c 02++ =` for `ax² + bx + c = 0`
+  — the characters are reordered, not just flattened, which is a harder problem
+  than the superscripts were. Minus signs extract as the letter `O`
+  (`4x^2 O 18x O 10 = 0`), which is arguably worse, since `O` reads as a
+  variable. Exam-board papers are now good; these are not
+- Some `x2` still slip through where the PDF does not raise the glyph at all
+- One exponent in 146 is still wrongly raised
+- `Pillow` is installed and used by nothing here, but it is not in
+  `requirements.txt`. If the perceptual hash ever gets wired in, it needs adding
+- `question_from_video` drops `.usage` — `drop_reasoning` transforms `LLMText`
+  back to a plain `str`. Harmless in the CLI, which does not log. Not harmless
+  if video is ever wired into `app.py`, where Phase B counts those tokens
+- `learn --video` with stdin closed raises `EOFError` at the `input()` prompt.
+  Pre-existing; `--text` does the same
+- Video is CLI-only. `app.py` has no `--video` equivalent, so the two front ends
+  have drifted again — a fourth way, on top of the tutor prompts
+- Carried over unchanged: prompt drift at 7x, no log rotation, `retrieve()`
+  unmeasured per call, no economics in the corpus, Phase C still
+  self-referential in `readme.md`, `secure=False` on the session cookie, no
+  rate limiting on `/api/login`, `purge_expired()` still called by nothing
+
+### Next
+1. Accumulate lessons. Phase C is data-blocked, not code-blocked, and 6,330
+   characters is not real material. This is now the only thing standing between
+   here and the last unticked box
+2. The SAT PDF reordering, if those papers are worth keeping in the corpus
+3. Economics and business material into `data/papers/`, then re-ingest
+4. The missing labour-market labelling example, and re-measure
+5. Put the correction pass into Phase C's plan in `readme.md`
+6. Optional: `pyflakes` in the hook, for the undefined-name case
+7. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
