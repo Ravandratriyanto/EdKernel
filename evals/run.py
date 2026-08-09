@@ -127,8 +127,12 @@ def report(results, regressions):
     if results:
         pct = 100 * len(hits) / len(results)
         print(f"\ncheck mode        {len(hits)}/{len(results)}  ({pct:.0f}%)")
-        print(f"  accepts correct   {sum(1 for r in trues if r['got'])}/{len(trues)}")
-        print(f"  rejects wrong     {sum(1 for r in falses if not r['got'])}/{len(falses)}")
+        # `is True` / `is False`, not truthiness. got is None when there was no
+        # verdict at all, and `not None` is True — which silently counted every
+        # rate-limited case as a successful rejection. It read "rejects wrong
+        # 15/15" on a run where 7 of those 15 never reached the model.
+        print(f"  accepts correct   {sum(1 for r in trues if r['got'] is True)}/{len(trues)}")
+        print(f"  rejects wrong     {sum(1 for r in falses if r['got'] is False)}/{len(falses)}")
 
         by = lambda h: sum(1 for r in results if r["how"] == h)
         print(f"  verdict source    signal {by('signal')}, prose {by('prose')}, "

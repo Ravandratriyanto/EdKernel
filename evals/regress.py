@@ -192,6 +192,45 @@ def _cookie_secure_default():
     return os.environ.get("OLLM_HTTPS", "").strip().lower() not in {"1", "true", "yes"}
 
 
+# --- the harness itself --------------------------------------------------
+
+@check("a case with no verdict is not scored as a correct rejection")
+def _no_verdict_is_not_a_pass():
+    """got=None once counted as a rejection, because `not None` is True.
+
+    It printed "rejects wrong 15/15" on a run where 7 of those 15 died on a
+    rate limit and never reached the model. The harness flattering itself is
+    worse than no harness.
+    """
+    import io, contextlib
+    from evals.run import report
+
+    results = [{"id": "x1", "topic": "t", "answer": "a", "correct": False,
+                "got": None, "how": "error", "detail": ""},
+               {"id": "x2", "topic": "t", "answer": "a", "correct": False,
+                "got": False, "how": "signal", "detail": ""},
+               {"id": "x3", "topic": "t", "answer": "a", "correct": True,
+                "got": True, "how": "signal", "detail": ""}]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        report(results, [])
+    out = buf.getvalue()
+    return "rejects wrong     1/2" in out and "accepts correct   1/1" in out
+
+
+@check("report counts a missing verdict as an overall miss")
+def _no_verdict_is_a_miss():
+    import io, contextlib
+    from evals.run import report
+
+    results = [{"id": "x1", "topic": "t", "answer": "a", "correct": True,
+                "got": None, "how": "unparsed", "detail": ""}]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = report(results, [])
+    return "check mode        0/1" in buf.getvalue() and code == 1
+
+
 def run():
     """Return (name, result, note) for every check. result is True/False/None."""
     out = []

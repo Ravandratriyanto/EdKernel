@@ -1300,8 +1300,53 @@ Regressions **12 → 19**: the limiter allowing at n-1 and blocking at n, window
 expiry, key isolation, clearing on success, aged-out keys not leaking in the
 dict, and the cookie default staying off.
 
+### The confirming run, and a bug in the harness itself
+
+The run owed from earlier was attempted and **did not confirm anything**. The
+daily budget had not reset; it ran out 23 cases in and 7 never reached the
+model. 28/30 is still unmeasured since the revert.
+
+What it did settle, on the 23 that ran: `signal 23, prose 0, unparsed 0`. Third
+consecutive run where every case reaching the model carried a signal. The signal
+fix holds; it is the score that is still owed.
+
+Then it printed this, on a run where 7 of the 15 wrong-answer cases had died on
+a rate limit:
+
+```
+  rejects wrong     15/15
+```
+
+`not r["got"]` — and `got` is `None` when there was no verdict at all, so
+`not None` is `True` and **every errored case counted as a successful
+rejection**. The line above it used plain truthiness the other way, counting
+`None` as a failure. The two sub-scores disagreed about what a missing verdict
+meant, and one of them flattered the result.
+
+The headline was never wrong: it compares `got == correct`, and `None` equals
+neither `True` nor `False`. Only the breakdown lied. Fixed with explicit
+`is True` / `is False`.
+
+This is the harness making exactly the mistake the harness exists to prevent, so
+it now tests itself: two checks drive `report()` and assert on its printed
+output. They discriminate — under the old expression the fixture scores `2/2`
+and the check demands `1/2`.
+
+**q12 failed again, this time as a false `[WRONG]`.** It worked `(x + 3)(x - 5)`
+correctly to `x^2 - 2x - 15` and then marked the student's identical answer
+wrong. q12 has now failed in three runs in *both* directions, which makes it the
+least stable case in the set and the one worth studying.
+
+### `Pillow` declared
+
+Added to `requirements.txt`. Nothing had broken because **matplotlib depends on
+pillow**, so a fresh clone was getting it transitively by luck. Nothing in the
+repo imports `PIL` today; it is there for the perceptual hash if that is ever
+wired in. Now declared rather than inherited.
+
 ### Current state
-- `python -m evals.run` → 28/30, `signal 30/30`, regressions **19/19**
+- `python -m evals.run` → 28/30 (unconfirmed since the revert), `signal` clean
+  on every case that reaches the model, regressions **21/21**
 - Stable: 28/30 on two consecutive runs, same two failures
 - `--only regress` runs in ~7s with no model calls and no key
 - `--jobs` runs cases concurrently; retry backs off on a per-minute 429 and
@@ -1311,9 +1356,14 @@ dict, and the cookie default staying off.
   and expired sessions are swept
 
 ### Known issues / caveats
-- **The revert was not re-measured.** Groq's daily budget (100,000 tokens, about
-  six full runs) was spent proving the change was bad. The reverted text is
-  byte-identical to what scored 28/30 twice, but one confirming run is owed
+- **The revert is still not re-measured, after two attempts.** Groq's daily
+  budget is 100,000 tokens, about six full runs, and it went on proving the
+  change was bad. The retry attempt also ran out, 23 cases in. The reverted text
+  is byte-identical to what scored 28/30 twice, so the number is an inference,
+  not a measurement. One clean run is owed and needs a fresh day
+- **A full run costs about a sixth of the daily budget**, so roughly six a day.
+  That is the real pacing constraint on any prompt work here, and it is why the
+  bad wording cost a whole day rather than three minutes
 - **2/30 is now a real model defect**, not a parser artifact: it explains the
   student's mistake correctly and then marks `[CORRECT]`. q21 failed in every
   run; q23 and q27 alternate. First reproducible product bug this project has
@@ -1341,21 +1391,28 @@ dict, and the cookie default staying off.
   characters. Rotating it now would fragment the only training data there is to
   solve a problem that does not exist at 19KB. It needs a decision about whether
   rotated files stay in the training set
+- **q12 is the least stable case in the set** — three failures across runs, in
+  both directions. Either the case is ambiguous or the model is unreliable on
+  it, and the harness cannot yet tell those apart
 - Carried over unchanged: handheld video costs 5 vision calls, SAT PDF
-  reordering, `Pillow` missing from `requirements.txt`, video CLI-only
+  reordering, video CLI-only
 
 ### Next
-1. One confirming run of the reverted `CHECK_SIGNAL`, then trust 28/30
-2. The `[CORRECT]`-after-explaining-wrong defect. Wording alone made it worse
+1. One clean confirming run of the reverted `CHECK_SIGNAL` on a fresh day's
+   budget, then trust 28/30. Owed twice now
+2. Study q12. Three failures in both directions is either an ambiguous case or
+   an unreliable model, and telling those apart needs repeat runs of one case
+3. The `[CORRECT]`-after-explaining-wrong defect. Wording alone made it worse
    once, so the next attempt needs a different lever — a second cheap call that
    only decides the verdict is the obvious one, and the eval can now price it
-3. Accumulate lessons. Still the only thing between here and the last unticked
+4. Accumulate lessons. Still the only thing between here and the last unticked
    box, and unchanged from Session 9
-4. Move `TUTOR_SYSTEM_PROMPT` into `prompts.py` and reconcile the two copies
-5. Run the evals against Ollama once, to close the same gap Phase B has
-6. The SAT PDF reordering, if those papers are worth keeping
-7. Economics and business material into `data/papers/`, then re-ingest
-8. Log rotation, once the log is big enough to be a problem, and with a decision
+5. Move `TUTOR_SYSTEM_PROMPT` into `prompts.py` and reconcile the two copies
+6. Run the evals against Ollama once, to close the same gap Phase B has — and it
+   costs no Groq budget, which is now the binding constraint
+7. The SAT PDF reordering, if those papers are worth keeping
+8. Economics and business material into `data/papers/`, then re-ingest
+9. Log rotation, once the log is big enough to be a problem, and with a decision
    about whether rotated files stay in the Phase C training set
-9. Optional: `pyflakes` in the hook, for the undefined-name case
-10. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
+10. Optional: `pyflakes` in the hook, for the undefined-name case
+11. Optional: video in `app.py`, or an explicit decision that it stays CLI-only

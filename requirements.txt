@@ -6,5 +6,6 @@ cryptography
 groq
 matplotlib
 numpy
+pillow
 requests
 python-dotenv

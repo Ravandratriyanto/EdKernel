@@ -175,11 +175,20 @@ it.
 **Run this before and after any prompt change.** Two regressions shipped here
 because a change was checked structurally and never against real model output.
 
-As of 2026-08-09, against Groq `llama-3.3-70b-versatile`: **28/30 on check mode,
-12/12 regressions, 30/30 replies carrying a verdict signal.** The score moves
-about 2 points between identical runs because temperature is not pinned, so
-treat anything under 3 points as noise and run it twice. One full run costs
-roughly a sixth of Groq's free daily token budget.
+As of 2026-08-09, against Groq `llama-3.3-70b-versatile`: **21/21 regressions,
+and every reply that reaches the model carries a verdict signal.** Check mode
+scored **28/30 on two runs**, but that was before a prompt was reverted and it
+has not been re-measured since — treat it as the last known good number, not a
+current one.
+
+The score moves about 2 points between identical runs because temperature is not
+pinned, so treat anything under 3 points as noise and run it twice. One full run
+costs roughly a sixth of Groq's free daily token budget, which works out at about
+six runs a day — that, not the code, is the real limit on how fast prompt changes
+can be tested.
+
+Numbers in this file go stale the moment they are not re-run. `12/12
+regressions` sat here for two commits after the count reached 19.
 
 The check-mode prompt and the `[CORRECT]`/`[WRONG]` parser both live in
 `prompts.py`, shared by `app.py`, `main.py` and the evals. Change the marker
