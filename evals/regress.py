@@ -11,6 +11,7 @@ import glob
 import re
 
 import pdftext
+from ratelimit import RateLimiter
 from vision.image_handler import drop_reasoning
 from video.video_handler import _dedupe
 
@@ -128,6 +129,67 @@ def _dedupe_same():
 @check("_dedupe keeps genuinely different pages")
 def _dedupe_diff():
     return len(_dedupe(["Solve 2x^2 + 7x - 3 = 0", "Show all your working"])) == 2
+
+
+# --- auth ----------------------------------------------------------------
+
+@check("rate limiter allows attempts up to the limit")
+def _limiter_allows():
+    rl = RateLimiter(max_failures=3, window_seconds=900)
+    for _ in range(2):
+        rl.record_failure("ip:1.2.3.4", now=1000.0)
+    return rl.retry_after("ip:1.2.3.4", now=1000.0) == 0
+
+
+@check("rate limiter blocks on the nth failure")
+def _limiter_blocks():
+    rl = RateLimiter(max_failures=3, window_seconds=900)
+    for _ in range(3):
+        rl.record_failure("ip:1.2.3.4", now=1000.0)
+    return rl.retry_after("ip:1.2.3.4", now=1000.0) > 0
+
+
+@check("rate limiter forgets failures once the window passes")
+def _limiter_window():
+    rl = RateLimiter(max_failures=3, window_seconds=900)
+    for _ in range(3):
+        rl.record_failure("ip:1.2.3.4", now=1000.0)
+    # One second after the window, the oldest failure has aged out.
+    return rl.retry_after("ip:1.2.3.4", now=1000.0 + 901) == 0
+
+
+@check("rate limiter keeps keys apart")
+def _limiter_isolated():
+    rl = RateLimiter(max_failures=3, window_seconds=900)
+    for _ in range(3):
+        rl.record_failure("ip:1.2.3.4", now=1000.0)
+    # A blocked address must not block everyone else.
+    return rl.retry_after("ip:5.6.7.8", now=1000.0) == 0
+
+
+@check("a correct password clears the failure count")
+def _limiter_cleared():
+    rl = RateLimiter(max_failures=3, window_seconds=900)
+    for _ in range(3):
+        rl.record_failure("ip:1.2.3.4", "user:ravan", now=1000.0)
+    rl.clear("ip:1.2.3.4", "user:ravan")
+    return rl.retry_after("ip:1.2.3.4", "user:ravan", now=1000.0) == 0
+
+
+@check("rate limiter does not leak keys that aged out")
+def _limiter_no_leak():
+    rl = RateLimiter(max_failures=3, window_seconds=900)
+    rl.record_failure("ip:1.2.3.4", now=1000.0)
+    rl.retry_after("ip:1.2.3.4", now=1000.0 + 901)
+    return rl._hits == {}
+
+
+@check("the session cookie is not marked secure on plain http")
+def _cookie_secure_default():
+    # A secure cookie over http is dropped silently, so the default must stay
+    # off for localhost. OLLM_HTTPS=1 turns it on.
+    import os
+    return os.environ.get("OLLM_HTTPS", "").strip().lower() not in {"1", "true", "yes"}
 
 
 def run():

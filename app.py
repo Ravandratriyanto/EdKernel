@@ -24,6 +24,7 @@ from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 import pdftext
 import users
+from ratelimit import RateLimiter
 # Shared with main.py so the two front ends cannot drift on the verdict signal.
 from prompts import build_check_prompt, strip_signal as _strip_signal
 load_dotenv()
@@ -33,8 +34,34 @@ app = Flask(__name__, static_folder="static")
 # ── auth ─────────────────────────────────────────────────────────────────────
 
 users.init()
+# Timed-out rows serve no purpose and user_for_token already refuses them.
+# Only runs at boot, which is enough for a server that is restarted often; a
+# long-lived one is also swept on each successful login below.
+users.purge_expired()
 
 SESSION_COOKIE = "ollm_session"
+
+# A secure cookie is only sent over https. Setting it on plain http does not
+# warn — the browser silently drops the cookie and the app looks broken with no
+# error anywhere. So it follows the deployment: export OLLM_HTTPS=1 when this
+# sits behind TLS, and leave it unset on localhost.
+COOKIE_SECURE = os.environ.get("OLLM_HTTPS", "").strip().lower() in {"1", "true", "yes"}
+
+# 8 failures per 15 minutes, counted against the IP and the username separately.
+# Aimed at online guessing, not at a determined attacker: see ratelimit.py for
+# what this does not cover.
+_login_limiter = RateLimiter(max_failures=8, window_seconds=15 * 60)
+
+
+def _login_keys(username: str) -> tuple:
+    """The two buckets a login attempt counts against.
+
+    IP alone is not enough — an attacker with a pool of addresses would get 8
+    tries each against one account. Username alone is not enough either, or one
+    machine could work through a list of accounts unhindered.
+    """
+    return (f"ip:{request.remote_addr}",
+            f"user:{(username or '').strip().lower()}")
 
 # Endpoints reachable without logging in. Everything else is closed by
 # default — a new route is protected the moment it exists, rather than the
@@ -62,7 +89,7 @@ def _auth_response(user: dict, token: str):
         max_age=users.SESSION_TTL_SECONDS,
         httponly=True,          # JavaScript can't read it, so an XSS bug can't steal it
         samesite="Lax",
-        secure=False,           # served over plain http on localhost; flip this behind TLS
+        secure=COOKIE_SECURE,   # https only when OLLM_HTTPS is set
     )
     return resp
 
@@ -70,10 +97,26 @@ def _auth_response(user: dict, token: str):
 @app.route("/api/register", methods=["POST"])
 def api_register():
     data = request.json or {}
+
+    # Registration is an enumeration oracle: "That username is taken" confirms
+    # an account exists, which is exactly what api_login refuses to reveal. The
+    # message has to stay — someone picking a name deserves to know it is gone
+    # — so the rate limit is what stops it being read in bulk. IP only: keying
+    # on the username would let anyone lock a name out of being registered.
+    ip_key = f"register-ip:{request.remote_addr}"
+    wait = _login_limiter.retry_after(ip_key)
+    if wait:
+        resp = jsonify({"error": "Too many attempts. Try again later."})
+        resp.headers["Retry-After"] = str(wait)
+        return resp, 429
+
     try:
         uid = users.create_user(data.get("username", ""), data.get("password", ""))
     except users.UserError as e:
+        _login_limiter.record_failure(ip_key)
         return jsonify({"error": str(e)}), 400
+
+    _login_limiter.clear(ip_key)
     username = (data.get("username") or "").strip()
     return _auth_response({"id": uid, "username": username},
                           users.create_session(uid))
@@ -82,12 +125,28 @@ def api_register():
 @app.route("/api/login", methods=["POST"])
 def api_login():
     data = request.json or {}
+    username = (data.get("username") or "").strip()
+    keys = _login_keys(username)
+
+    wait = _login_limiter.retry_after(*keys)
+    if wait:
+        # Checked before the password is verified, so a blocked caller cannot
+        # use this endpoint to test guesses at all.
+        resp = jsonify({"error": "Too many failed logins. Try again later."})
+        resp.headers["Retry-After"] = str(wait)
+        return resp, 429
+
     uid = users.authenticate(data.get("username", ""), data.get("password", ""))
     if uid is None:
+        _login_limiter.record_failure(*keys)
         # One message for both cases. "No such user" would confirm which
         # usernames exist.
         return jsonify({"error": "Wrong username or password."}), 401
-    username = (data.get("username") or "").strip()
+
+    # A correct password clears the count, so a student who mistypes four times
+    # and then gets it right is not left half-way to a lockout.
+    _login_limiter.clear(*keys)
+    users.purge_expired()
     return _auth_response({"id": uid, "username": username},
                           users.create_session(uid))
 

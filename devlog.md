@@ -1227,13 +1227,88 @@ Client and embedding function are now built once behind a lock. The collection
 is still fetched per call, so one created after startup is still picked up.
 30 concurrent retrieves: 0 errors, 5.2s.
 
+### A stale claim in the readme
+
+`readme.md` still said the 32 pre-auth log lines were "not yet backfilled".
+Session 8 backfilled them to `user_id: 1` — `devlog.md:796` records it. Checked
+the log directly: `null` appears **0 times in 32 lines**. Corrected.
+
+Worth noting the shape of the mistake. The devlog was right and the readme was
+stale, because the readme states current state and nothing forces it to be
+re-read. The eval numbers now in `readme.md` will rot the same way unless they
+are re-run.
+
+### The auth loose ends
+
+Four items had been carried in "Known issues" since Session 8. Three were auth
+and are now closed.
+
+**`secure=False` on the session cookie** is now `COOKIE_SECURE`, read from
+`OLLM_HTTPS`. Not simply flipped to `True`: a Secure cookie is silently dropped
+over plain http, with no warning in the browser or the server, so hard-coding it
+would have made localhost login stop working with nothing to find. Default off,
+`OLLM_HTTPS=1` behind TLS, documented blank in `.env.example`.
+
+**No rate limiting on `/api/login`** — new `ratelimit.py`. 8 failures per 15
+minutes, counted against the IP **and** the username separately. Either bucket
+alone leaks: IP-only gives an attacker with an address pool 8 tries each against
+one account, username-only lets one machine walk a list of accounts. The limit
+is checked *before* the password is verified, so a blocked caller cannot use the
+endpoint to test guesses at all. A correct password clears the count.
+
+Its own module, not a helper inside `app.py`, so it can be tested without
+booting Flask or touching the users DB. The clock is injectable, so the tests
+assert on window expiry without sleeping.
+
+**`purge_expired()` called by nothing** now runs at boot and after each
+successful login. Boot alone never sweeps a long-lived server.
+
+### Registration was an enumeration oracle
+
+Not on the list, found while reading the code. `authenticate()` goes to real
+trouble to avoid confirming which accounts exist — one message for both failure
+cases, and a dummy hash on the unknown-username path so it is not measurably
+faster. Then `create_user()` says **"That username is taken."**
+
+The message has to stay; someone picking a name deserves to know it is gone. So
+registration is rate-limited by IP instead. IP only — keying on the username
+would let anyone lock a name out of ever being registered.
+
+### Verified live
+
+Through the real Flask endpoints against a throwaway database, not by reading
+the code:
+
+```
+8 bad logins        -> [401 x 8]
+9th bad login       -> 429  Retry-After: 900
+RIGHT pw, blocked   -> 429   (checked before verifying)
+right pw, new IP    -> 429   (username bucket still holds)
+other user, new IP  -> 401   (others unaffected)
+3 fails then right  -> 200   (not half-locked)
+no cookie /api/sessions -> 401
+COOKIE_SECURE default -> False;  with OLLM_HTTPS=1 -> True
+expired rows before login -> 1, after -> 1   (old purged, new kept)
+```
+
+The first probe reported the auth gate returning 200. That was the test client
+reusing a cookie from an earlier successful login in the same script, not a
+hole — a fresh client returns 401. Recorded because it is exactly the kind of
+false pass a careless test suite ships.
+
+Regressions **12 → 19**: the limiter allowing at n-1 and blocking at n, window
+expiry, key isolation, clearing on success, aged-out keys not leaking in the
+dict, and the cookie default staying off.
+
 ### Current state
-- `python -m evals.run` → 28/30, `signal 30/30`, regressions 12/12
+- `python -m evals.run` → 28/30, `signal 30/30`, regressions **19/19**
 - Stable: 28/30 on two consecutive runs, same two failures
 - `--only regress` runs in ~7s with no model calls and no key
 - `--jobs` runs cases concurrently; retry backs off on a per-minute 429 and
   fails fast on a per-day one
 - Both front ends import clean; `build_check_prompt` verified identical in both
+- Login and registration are rate-limited, the cookie follows the deployment,
+  and expired sessions are swept
 
 ### Known issues / caveats
 - **The revert was not re-measured.** Groq's daily budget (100,000 tokens, about
@@ -1255,10 +1330,19 @@ is still fetched per call, so one created after startup is still picked up.
 - `TUTOR_SYSTEM_PROMPT` is still duplicated and divergent between `app.py` and
   `main.py`. `prompts.py` now exists as the place to fix that, and the check
   prompt is the first thing to move in. Drift is 7x minus one
+- **The rate limiter is in memory and per-process.** A restart clears every
+  counter, and N workers means N times the limit. Fine for one Flask process on
+  localhost, which is what this is; behind a real deployment it has to move to
+  the database or a shared cache. Written into its docstring, not left implied
+- The limiter is not a defence against an attacker with a large address pool
+  and patience. It raises the cost of online guessing; it does not stop it
+- **Log rotation is still open, and was left open on purpose.**
+  `.logs/sessions.jsonl` is the Phase C training set — 32 lines, 7,577
+  characters. Rotating it now would fragment the only training data there is to
+  solve a problem that does not exist at 19KB. It needs a decision about whether
+  rotated files stay in the training set
 - Carried over unchanged: handheld video costs 5 vision calls, SAT PDF
-  reordering, `Pillow` missing from `requirements.txt`, video CLI-only, no log
-  rotation, `secure=False` on the session cookie, no rate limiting on
-  `/api/login`, `purge_expired()` called by nothing
+  reordering, `Pillow` missing from `requirements.txt`, video CLI-only
 
 ### Next
 1. One confirming run of the reverted `CHECK_SIGNAL`, then trust 28/30
@@ -1271,5 +1355,7 @@ is still fetched per call, so one created after startup is still picked up.
 5. Run the evals against Ollama once, to close the same gap Phase B has
 6. The SAT PDF reordering, if those papers are worth keeping
 7. Economics and business material into `data/papers/`, then re-ingest
-8. Optional: `pyflakes` in the hook, for the undefined-name case
-9. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
+8. Log rotation, once the log is big enough to be a problem, and with a decision
+   about whether rotated files stay in the Phase C training set
+9. Optional: `pyflakes` in the hook, for the undefined-name case
+10. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
