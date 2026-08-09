@@ -137,9 +137,9 @@ Build: `sessionlog.py`.
   a new field stops being logged, resume breaks first.
 - **Auth landed 2026-08-04** (`users.py`). Accounts, scrypt password hashing and
   cookie sessions; `list_sessions()` and `session_turns()` take a `user_id` and
-  return only that student's lessons. The 32 log lines written before this all
-  carry `user_id: null`, so they belong to no account and no longer appear in
-  the sidebar — still on disk, not yet backfilled.
+  return only that student's lessons. The 32 log lines written before auth
+  carried `user_id: null` and vanished from the sidebar; they were backfilled to
+  `user_id: 1` in Session 8, and `null` now appears 0 times in the log.
 
 ### Phase C — LoRA fine-tune on logged sessions
 Needs Phase B to have collected enough real lessons first. Phase A already
