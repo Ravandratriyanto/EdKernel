@@ -1,5 +1,32 @@
+import threading
+
 import chromadb
 from chromadb.utils import embedding_functions
+
+_lock = threading.Lock()
+_clients: dict = {}
+
+
+def _client_and_ef(db_path: str):
+    """One Chroma client and one embedding model per path, built once.
+
+    PersistentClient is not safe to build from two threads at once: the second
+    one runs _release_system and deletes the first's Rust bindings mid-use,
+    which surfaces as "Could not connect to tenant default_tenant". Flask
+    serves requests on threads, so the web app could hit this too — it was
+    found by running the evals 2 at a time.
+
+    Building once also stops reloading the ONNX embedding model on every
+    single question, which was pure waste.
+
+    The collection itself is fetched per call, not cached, so a collection
+    created after startup is still picked up.
+    """
+    with _lock:
+        if db_path not in _clients:
+            _clients[db_path] = (chromadb.PersistentClient(path=db_path),
+                                 embedding_functions.DefaultEmbeddingFunction())
+        return _clients[db_path]
 
 # Cosine distance: 0 is identical, 1 is unrelated.
 #
@@ -27,8 +54,7 @@ def retrieve(query: str,
     Returning [] is the safe outcome: app.py builds an empty context_prefix and
     the tutor runs ungrounded, exactly as it did before this collection existed.
     """
-    client = chromadb.PersistentClient(path=db_path)
-    ef = embedding_functions.DefaultEmbeddingFunction()
+    client, ef = _client_and_ef(db_path)
     try:
         collection = client.get_collection(name=collection_name,
                                            embedding_function=ef)

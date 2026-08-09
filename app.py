@@ -24,15 +24,9 @@ from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 import pdftext
 import users
+# Shared with main.py so the two front ends cannot drift on the verdict signal.
+from prompts import build_check_prompt, strip_signal as _strip_signal
 load_dotenv()
-
-_SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
-
-# Models mimic the bracket convention they see — the [CORRECT]/[WRONG] signal and
-# the [Tutor note: ...] lines we inject — and invent markers of their own, e.g.
-# [WAITING FOR RESPONSE]. Anchored to a whole line so it can't eat interval
-# notation like [0, 5] or a citation mid-sentence.
-_STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', re.MULTILINE)
 
 app = Flask(__name__, static_folder="static")
 
@@ -646,28 +640,26 @@ def api_check():
             {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": (
-                    f"{context_prefix}Question: {question}\n"
-                    f"Student's answer: {answer}\n\n"
-                    "The student also attached an image for context. "
-                    "Is the student's answer correct? Explain briefly."
-                ),
+                "content": build_check_prompt(
+                    question, answer, context_prefix=context_prefix,
+                    note="The student also attached an image for context. "),
                 "images": [attachment["b64"]],
             },
         ]
         started  = time.monotonic()
         raw      = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-        response = _strip_signal(raw)[0]
+        response, correct = _strip_signal(raw)
         log_turn("check",
                  session_id=data.get("session_id", ""),
                  user_id=g.user["id"],
                  mode="check", topic=question,
                  provider=provider, model=model,
                  input=answer, output=response,
+                 correct=correct,
                  attachment=attachment_meta(attachment),
                  tokens=getattr(raw, "usage", {}),
                  latency_ms=round((time.monotonic() - started) * 1000))
-        return jsonify({"response": response})
+        return jsonify({"response": response, "correct": correct})
 
     pdf_context = f"Attached document:\n{attachment['text']}\n\n" if attachment and attachment.get("type") == "pdf" else ""
 
@@ -676,25 +668,22 @@ def api_check():
     if attachment and attachment.get("type") == "image":
         image_context = _transcription_note(attachment, provider, model, host, api_key, vision_model).strip() + "\n\n"
 
-    prompt = (
-        f"{context_prefix}{pdf_context}{image_context}"
-        f"Question: {question}\n"
-        f"Student's answer: {answer}\n\n"
-        "Is the student's answer correct? Explain briefly."
-    )
+    prompt   = build_check_prompt(
+        question, answer, context_prefix=f"{context_prefix}{pdf_context}{image_context}")
     started  = time.monotonic()
     raw      = generate(prompt, model=model, host=host, provider=provider, api_key=api_key)
-    response = _strip_signal(raw)[0]
+    response, correct = _strip_signal(raw)
     log_turn("check",
              session_id=data.get("session_id", ""),
              user_id=g.user["id"],
              mode="check", topic=question,
              provider=provider, model=model,
              input=answer, output=response,
+             correct=correct,
              attachment=attachment_meta(attachment),
              tokens=getattr(raw, "usage", {}),
              latency_ms=round((time.monotonic() - started) * 1000))
-    return jsonify({"response": response})
+    return jsonify({"response": response, "correct": correct})
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -724,15 +713,6 @@ def _transcription_note(attachment: dict, provider: str, model: str, host: str,
 
 def _strip_images(messages: list) -> list:
     return [{"role": m["role"], "content": m["content"]} for m in messages]
-
-def _strip_signal(text: str) -> tuple:
-    m = _SIGNAL_RE.search(text)
-    if m:
-        clean, correct = text[:m.start()], m.group(1).upper() == "CORRECT"
-    else:
-        clean, correct = text, None
-    clean = _STRAY_MARKER_RE.sub('', clean)
-    return re.sub(r'\n{3,}', '\n\n', clean).strip(), correct
 
 # ── past papers ─────────────────────────────────────────────────────────────
 

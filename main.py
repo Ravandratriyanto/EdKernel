@@ -11,6 +11,8 @@ from vision.image_handler import transcribe
 # The module, not the function — the wrapper below shares its name.
 from video import video_handler
 from video.frame_extractor import ExtractError
+# Shared with app.py so the two front ends cannot drift on the verdict signal.
+from prompts import build_check_prompt, strip_signal
 
 load_dotenv()
 
@@ -162,14 +164,16 @@ def main():
         context = "\n\n".join(context_chunks) if context_chunks else ""
 
         context_prefix = f"Reference material:\n{context}\n\n" if context else ""
-        prompt = (
-            f"{context_prefix}"
-            f"Question: {question}\n"
-            f"Student's answer: {args.answer}\n\n"
-            "Is the student's answer correct? Explain briefly."
-        )
-        print(generate(prompt, model=args.model, host=args.ollama_host,
-                       provider=args.provider, api_key=api_key))
+        prompt = build_check_prompt(question, args.answer,
+                                    context_prefix=context_prefix)
+        raw = generate(prompt, model=args.model, host=args.ollama_host,
+                       provider=args.provider, api_key=api_key)
+        # The marker is for machines, so strip it and say the verdict in words.
+        response, correct = strip_signal(raw)
+        print(response)
+        verdict = {True: "Correct", False: "Not correct",
+                   None: "No clear verdict"}[correct]
+        print(f"\n--- {verdict} ---")
 
     elif args.mode == "learn":
         learn_mode(question, model=args.model, host=args.ollama_host,

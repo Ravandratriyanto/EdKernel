@@ -1093,3 +1093,183 @@ taught the model's inner monologue.
 5. Put the correction pass into Phase C's plan in `readme.md`
 6. Optional: `pyflakes` in the hook, for the undefined-name case
 7. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
+
+
+## Session 10 — 2026-08-09
+
+First tests this project has ever had. The harness was built to score check
+mode, and the first thing it measured was that check mode had nothing to score.
+
+### Why an eval, and what it found before it ran
+
+34 tracked files, ~3,000 lines of Python, zero tests. Two regressions have
+shipped here because a change was checked structurally and never against real
+model output — `readme.md` and `CLAUDE.md` both carry the scar tissue.
+
+Reading `api_check` to work out how to score it turned up the reason no score
+was possible:
+
+- the text path built a bare prompt with **no system prompt**, so the
+  `[CORRECT]`/`[WRONG]` instruction that lives in `TUTOR_SYSTEM_PROMPT` was
+  never sent
+- `main.py` did the same
+- and both then called `_strip_signal(raw)[0]`, throwing the verdict away
+
+So `_SIGNAL_RE` — which `CLAUDE.md` warns must stay anchored last — was dead
+code on the check path. The web UI could not show a tick because nothing told
+it whether the student was right, and every check turn in `.logs/sessions.jsonl`
+had `correct: null`.
+
+### The harness — `evals/`
+
+`cases.jsonl` is 30 hand-written questions, 15 right and 15 wrong, **every key
+verified with sympy** before use. `CLAUDE.md` records model-generated answer
+keys as wrong 2 times in 3; an eval with a bad key fails you for being right.
+The wrong answers are real student errors — sign slips, `2^5 = 32`, the
+gradient formula inverted, circumference for area — because rejecting nonsense
+proves nothing.
+
+`run.py` scores check mode by building the **product's own prompt**, not a
+reworded copy. `regress.py` is 12 deterministic checks with no model calls,
+each one a bug already fixed once: the unclosed `<think>`, `NH3` not being
+raised, ligature gaps, dotted rules, the running footer, `_dedupe` collapsing
+one page but not two.
+
+Two of the checks as first designed were worthless, and measuring said so:
+
+- the `_dedupe` case compared strings at ratio **0.8519** against a 0.85
+  threshold. It passed by 0.002 and would flip on any tweak. Widened to 0.92
+- `clean("NH3...")` tests nothing, because `clean()` has no rule that can add a
+  `^`. Replaced the real work with a check that runs the actual glyph-position
+  path over 3 real papers. Full corpus is 25 files, 1,492 superscripts, 0 raised
+  subscripts — but that takes 47s, so the check uses 3 files (58 and 0, 6s)
+
+### The typing pass on the eval files
+Neither file parsed. `regress.py` had `_closed_think` pasted twice and seven
+lines truncated mid-string. `run.py` had four bugs that were **not** syntax
+errors and would have produced wrong numbers silently: `case.jsonl` for
+`cases.jsonl`; `_SIGNAL_RE` mangled to `r"\s*|[(CORRECT|WRONG)\]\s~$"`, which
+compiles but has no capture group so `m.group(1)` raises at runtime; the entire
+prose fallback indented **inside** `if m:` after a `return`, making it
+unreachable; and `text[-400]` for `text[-400:]`, one character apart.
+
+`app.py` also had a diagnostic snippet from chat pasted into `api_check`:
+
+```python
+raw = generate(prompt, ...)          # no system prompt
+response = _strip_signal(raw)[0]     # [1] is the verdict — thrown away
+```
+
+`...` is `Ellipsis`, a real object, so that is valid syntax that fails at call
+time. **Check mode in the web app was broken and uncommitted.** Same class of
+event as the `app.py` and `rag/ingest.py` overwrites in Session 9.
+
+### The signal fix — `prompts.py`
+
+The whole verdict convention now lives in one module: the instruction that asks
+for the marker and the parser that reads it, next to each other, because they
+only make sense as a pair. `_SIGNAL_RE` and `_STRAY_MARKER_RE` moved out of
+`app.py`; it imports `strip_signal as _strip_signal` so all six call sites are
+untouched. Both front ends and the evals call `build_check_prompt()`.
+
+Both check paths now keep the verdict. It goes into the JSON as `"correct"` and
+into the session log as `correct=`. The CLI prints it in words rather than
+leaking the marker.
+
+Measured, 30 cases, `llama-3.3-70b-versatile`:
+
+| | before | after |
+|---|---|---|
+| signal | 0 | **30** |
+| prose fallback | 28 | 0 |
+| unparsed | 2 | 0 |
+| check mode | 27/30 | **28/30** |
+| accepts correct | 13/15 | **15/15** |
+
+It took two attempts. The first wording produced 28 signals and 2 bare `WRONG`s
+with no brackets. Adding "keep the square brackets — a bare word without them
+does not count" took it to 30/30.
+
+The score barely moved, and that is the point. Before the fix **every single
+failure in three runs was the prose regex, not the model** — it could not tell
+that "is *actually* correct" means correct. The number now measures the product
+instead of the harness.
+
+### A prompt change that made things worse
+
+The two remaining failures were the model marking `[CORRECT]` straight after
+explaining the student was wrong. q23, verbatim:
+
+> The student's answer, 6, is incorrect because 2^6 = 64, not 32. **[CORRECT]**
+
+So a sentence was added saying the marker judges the student, not your own
+explanation. It backfired: **`accepts correct` fell 15/15 → 12/15**, with the
+model marking `[WRONG]` immediately after confirming an answer was right. q01
+ended "which matches these calculations when rounded to two decimal places.
+[WRONG]".
+
+Reverted. The measurement is recorded as a comment above `CHECK_SIGNAL` so it
+is not retried blind.
+
+### `rag/retrieve.py` was not thread-safe
+
+Found by running the evals 2 at a time. `retrieve()` built a new
+`chromadb.PersistentClient` **and reloaded the ONNX embedding model on every
+call**. Two threads racing that constructor run `_release_system` and delete
+each other's Rust bindings, which surfaces as `Could not connect to tenant
+default_tenant`.
+
+It appeared once, could not be reproduced by 12 concurrent calls, then killed a
+whole run — a startup race, so it only bites before the first client is warm.
+**Flask serves requests on threads, so the web app could hit this too.**
+
+Client and embedding function are now built once behind a lock. The collection
+is still fetched per call, so one created after startup is still picked up.
+30 concurrent retrieves: 0 errors, 5.2s.
+
+### Current state
+- `python -m evals.run` → 28/30, `signal 30/30`, regressions 12/12
+- Stable: 28/30 on two consecutive runs, same two failures
+- `--only regress` runs in ~7s with no model calls and no key
+- `--jobs` runs cases concurrently; retry backs off on a per-minute 429 and
+  fails fast on a per-day one
+- Both front ends import clean; `build_check_prompt` verified identical in both
+
+### Known issues / caveats
+- **The revert was not re-measured.** Groq's daily budget (100,000 tokens, about
+  six full runs) was spent proving the change was bad. The reverted text is
+  byte-identical to what scored 28/30 twice, but one confirming run is owed
+- **2/30 is now a real model defect**, not a parser artifact: it explains the
+  student's mistake correctly and then marks `[CORRECT]`. q21 failed in every
+  run; q23 and q27 alternate. First reproducible product bug this project has
+  been able to state with a number
+- The score moves ~2 points between identical runs — temperature is not pinned.
+  Treat anything under ~3 points as noise
+- `evals/run.py` keeps its **own** copy of `_SIGNAL_RE` on purpose. If the
+  product's marker format ever moves, the eval must report `signal 0` rather
+  than quietly adapting. Two regexes that must agree is a real cost, accepted
+- The eval covers check mode only. Learn mode, hint escalation, RAG grounding
+  and transcription have no cases
+- 30 cases is small. A 2-point move is one question
+- Only run against Groq. Never against Ollama, same gap as Phase B's token counts
+- `TUTOR_SYSTEM_PROMPT` is still duplicated and divergent between `app.py` and
+  `main.py`. `prompts.py` now exists as the place to fix that, and the check
+  prompt is the first thing to move in. Drift is 7x minus one
+- Carried over unchanged: handheld video costs 5 vision calls, SAT PDF
+  reordering, `Pillow` missing from `requirements.txt`, video CLI-only, no log
+  rotation, `secure=False` on the session cookie, no rate limiting on
+  `/api/login`, `purge_expired()` called by nothing
+
+### Next
+1. One confirming run of the reverted `CHECK_SIGNAL`, then trust 28/30
+2. The `[CORRECT]`-after-explaining-wrong defect. Wording alone made it worse
+   once, so the next attempt needs a different lever — a second cheap call that
+   only decides the verdict is the obvious one, and the eval can now price it
+3. Accumulate lessons. Still the only thing between here and the last unticked
+   box, and unchanged from Session 9
+4. Move `TUTOR_SYSTEM_PROMPT` into `prompts.py` and reconcile the two copies
+5. Run the evals against Ollama once, to close the same gap Phase B has
+6. The SAT PDF reordering, if those papers are worth keeping
+7. Economics and business material into `data/papers/`, then re-ingest
+8. Optional: `pyflakes` in the hook, for the undefined-name case
+9. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
