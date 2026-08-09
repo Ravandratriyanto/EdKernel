@@ -28,6 +28,9 @@ sat_tutor/
   vision/image_handler.py Turn a photographed question into text
   video/frame_extractor.py  Pull frames (and audio) out of a video file
   video/video_handler.py    Turn a video question into text
+  prompts.py               Shared prompt text + the [CORRECT]/[WRONG] parser
+  evals/run.py             Score check mode against questions with known answers
+  evals/regress.py         Fast checks for bugs already fixed once
   main.py                  CLI: parse args, wire everything together
 ```
 
@@ -151,6 +154,37 @@ instance (e.g. tunneled from a free Colab/Kaggle GPU notebook) rather than
 `localhost` while developing. Everything else — RAG ingestion, frame
 extraction, the session state machine — is lightweight enough to run
 locally.
+
+## Checking it still works
+
+```bash
+python -m evals.run                  # everything
+python -m evals.run --only regress   # no model calls, no key, ~7 seconds
+```
+
+`evals/cases.jsonl` is 30 questions with known answers, 15 right and 15 wrong.
+Every key was checked with sympy first. Model-generated keys were wrong 2 times
+in 3 before the verification pass existed, and an eval with a bad key fails you
+for being right.
+
+`evals/regress.py` is 12 checks for bugs already fixed once — the unclosed
+`<think>`, `NH3` not being raised to `NH^3`, the running footer, `_dedupe`
+collapsing one page but not two. No model calls, so there is no excuse to skip
+it.
+
+**Run this before and after any prompt change.** Two regressions shipped here
+because a change was checked structurally and never against real model output.
+
+As of 2026-08-09, against Groq `llama-3.3-70b-versatile`: **28/30 on check mode,
+12/12 regressions, 30/30 replies carrying a verdict signal.** The score moves
+about 2 points between identical runs because temperature is not pinned, so
+treat anything under 3 points as noise and run it twice. One full run costs
+roughly a sixth of Groq's free daily token budget.
+
+The check-mode prompt and the `[CORRECT]`/`[WRONG]` parser both live in
+`prompts.py`, shared by `app.py`, `main.py` and the evals. Change the marker
+format and you must change both — the instruction that asks for it and the
+regex that reads it are deliberately next to each other.
 
 ## Definition of done, per phase
 
