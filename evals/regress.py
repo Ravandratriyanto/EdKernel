@@ -11,6 +11,7 @@ import glob
 import re
 
 import pdftext
+from prompts import tutor_reply
 from ratelimit import RateLimiter
 from vision.image_handler import drop_reasoning
 from video.video_handler import _dedupe
@@ -190,6 +191,43 @@ def _cookie_secure_default():
     # off for localhost. OLLM_HTTPS=1 turns it on.
     import os
     return os.environ.get("OLLM_HTTPS", "").strip().lower() not in {"1", "true", "yes"}
+
+
+# --- the tutor never sends an empty bubble --------------------------------
+
+@check("a bare [CORRECT] does not become an empty message")
+def _bare_marker_not_empty():
+    # Seen live 2026-08-10: student answered "is x = 5" right, the model replied
+    # with the marker and nothing else, and the app drew an empty bubble.
+    text, correct = tutor_reply("[CORRECT]")
+    return text.strip() != "" and correct is True
+
+
+@check("a bare [WRONG] does not become an empty message")
+def _bare_wrong_not_empty():
+    text, correct = tutor_reply("[WRONG]")
+    return text.strip() != "" and correct is False
+
+
+@check("a reply that is only a stray marker is not empty either")
+def _stray_marker_not_empty():
+    # _STRAY_MARKER_RE eats invented markers like [WAITING FOR RESPONSE], which
+    # can also leave nothing behind.
+    text, _ = tutor_reply("[WAITING FOR RESPONSE]")
+    return text.strip() != ""
+
+
+@check("check mode's fallback does not promise a next step")
+def _check_fallback_wording():
+    # There is no next step in check mode, so the learn-mode wording would lie.
+    text, _ = tutor_reply("[CORRECT]", teaching=False)
+    return "next step" not in text.lower()
+
+
+@check("a real reply is passed through untouched")
+def _real_reply_untouched():
+    text, correct = tutor_reply("Good. What is 15 divided by 3?\n[CORRECT]")
+    return text == "Good. What is 15 divided by 3?" and correct is True
 
 
 # --- the harness itself --------------------------------------------------

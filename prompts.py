@@ -50,6 +50,37 @@ def build_check_prompt(question: str, answer: str,
             f"{CHECK_SIGNAL}")
 
 
+# What to say when the model sent a verdict and nothing else. Short, plain, and
+# ending in a question, so the lesson keeps its shape.
+_EMPTY_REPLY = {
+    # Learn mode: end on a question, so the lesson keeps its shape.
+    True:  {True: "That's right. Ready for the next step?", False: "That's right."},
+    False: {True: "Not quite. Want to try that again?",     False: "Not quite."},
+    None:  {True: "Can you say a bit more about that?",
+            False: "I could not tell from that. Can you show your working?"},
+}
+
+
+def tutor_reply(raw: str, teaching: bool = True) -> tuple:
+    """strip_signal for the teaching paths, which must never return nothing.
+
+    Seen live on 2026-08-10: the student answered "is x = 5" correctly and the
+    model replied with the bare marker and no words. Stripping the marker left
+    an empty string, the web app rendered an empty speech bubble, and the empty
+    string was appended to `messages` as the assistant turn — so the history
+    sent back on the next turn had a blank tutor message in it.
+
+    The prompt now tells the model not to do this. This is the safety net for
+    when it does anyway, because a canned sentence is recoverable and a blank
+    bubble is not.
+
+    `teaching` picks the wording: learn mode ends on a question to keep the
+    lesson moving, check mode does not, because there is no next step there.
+    """
+    text, correct = strip_signal(raw)
+    return (text or _EMPTY_REPLY[correct][teaching]), correct
+
+
 def strip_signal(text: str) -> tuple:
     """Split a reply into (text to show, True/False/None verdict).
 

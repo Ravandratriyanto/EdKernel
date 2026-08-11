@@ -26,7 +26,7 @@ import pdftext
 import users
 from ratelimit import RateLimiter
 # Shared with main.py so the two front ends cannot drift on the verdict signal.
-from prompts import build_check_prompt, strip_signal as _strip_signal
+from prompts import build_check_prompt, tutor_reply as _tutor_reply
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
@@ -220,6 +220,9 @@ TUTOR_SYSTEM_PROMPT = (
     "- Wrong three or more times: directly explain the concept they are missing, then ask them to apply it.\n"
     "If they are right, affirm briefly and move to the next idea with another question. "
     "When evaluating a student's answer, end your response with exactly [CORRECT] or [WRONG] on its own line. "
+    "That marker is always EXTRA, never the whole message. Always write your reply first — at least one short "
+    "sentence to the student — and put the marker on the line after it. A message containing only a marker "
+    "reaches the student as an empty bubble. "
     "When a process diagram or flowchart would help (cycles, cause-effect, steps), include it as a ```mermaid code block using 'graph TD'. "
     "Mermaid syntax rule: always wrap node labels in double quotes when they contain special characters. Example: A[\"Step one\"] --> B[\"Step two\"]. "
     "NEVER use Mermaid for mathematical function plots — Mermaid cannot draw axes or curves. "
@@ -509,9 +512,9 @@ def api_start():
 
     messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}, user_msg]
     started  = time.monotonic()
-    # Keep the raw reply: _strip_signal returns a plain str, which drops .usage.
+    # Keep the raw reply: _tutor_reply returns a plain str, which drops .usage.
     raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-    response, _ = _strip_signal(raw)
+    response, _ = _tutor_reply(raw)
     messages.append({"role": "assistant", "content": response})
 
     log_turn("start",
@@ -589,7 +592,7 @@ def api_reply():
     messages.append(user_msg)
     started = time.monotonic()
     raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-    response, correct = _strip_signal(raw)
+    response, correct = _tutor_reply(raw)
     messages.append({"role": "assistant", "content": response})
 
     log_turn("reply",
@@ -707,7 +710,7 @@ def api_check():
         ]
         started  = time.monotonic()
         raw      = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-        response, correct = _strip_signal(raw)
+        response, correct = _tutor_reply(raw)
         log_turn("check",
                  session_id=data.get("session_id", ""),
                  user_id=g.user["id"],
@@ -731,7 +734,7 @@ def api_check():
         question, answer, context_prefix=f"{context_prefix}{pdf_context}{image_context}")
     started  = time.monotonic()
     raw      = generate(prompt, model=model, host=host, provider=provider, api_key=api_key)
-    response, correct = _strip_signal(raw)
+    response, correct = _tutor_reply(raw)
     log_turn("check",
              session_id=data.get("session_id", ""),
              user_id=g.user["id"],
@@ -1068,7 +1071,7 @@ def api_papers_hint():
         )},
     ]
     response = chat(messages, model=model_name, host=host, provider=provider, api_key=api_key)
-    response, _ = _strip_signal(response)
+    response, _ = _tutor_reply(response)
     return jsonify({"response": response})
 
 def _search_papers(topic: str, tavily_key: str) -> list[dict]:
