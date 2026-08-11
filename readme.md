@@ -162,29 +162,34 @@ python -m evals.run                  # everything
 python -m evals.run --only regress   # no model calls, no key, ~7 seconds
 ```
 
-`evals/cases.jsonl` is 30 questions with known answers, 15 right and 15 wrong.
-Every key was checked with sympy first. Model-generated keys were wrong 2 times
-in 3 before the verification pass existed, and an eval with a bad key fails you
-for being right.
+`evals/cases.jsonl` is 50 questions with known answers, 25 right and 25 wrong.
+Every key was checked with sympy first — both directions, so a "wrong" answer is
+proven wrong rather than just written differently. Model-generated keys were
+wrong 2 times in 3 before the verification pass existed, and an eval with a bad
+key fails you for being right.
 
-`evals/regress.py` is 12 checks for bugs already fixed once — the unclosed
+`evals/regress.py` is 26 checks for bugs already fixed once — the unclosed
 `<think>`, `NH3` not being raised to `NH^3`, the running footer, `_dedupe`
-collapsing one page but not two. No model calls, so there is no excuse to skip
-it.
+collapsing one page but not two, the login rate limiter, and a bare `[CORRECT]`
+reaching the student as an empty bubble. No model calls, so there is no excuse
+to skip it.
 
 **Run this before and after any prompt change.** Two regressions shipped here
 because a change was checked structurally and never against real model output.
 
-As of 2026-08-09, against Groq `llama-3.3-70b-versatile`: **21/21 regressions,
-and every reply that reaches the model carries a verdict signal.** Check mode
-scored **28/30 on two runs**, but that was before a prompt was reverted and it
-has not been re-measured since — treat it as the last known good number, not a
-current one.
+As of 2026-08-10, against Groq `llama-3.3-70b-versatile`: **49/50 on check mode,
+26/26 regressions, 50/50 replies carrying a verdict signal, no errors.**
+
+That 49/50 is the baseline *without* the `Check:` line in `CHECK_SIGNAL`. The
+`Check:` line is in the code but **not yet confirmed** — 42 of 50 cases ran
+before the daily budget died and all 42 were right, but the 8 that did not run
+were mostly the harder wrong-answer half. Re-measure before trusting it.
 
 The score moves about 2 points between identical runs because temperature is not
-pinned, so treat anything under 3 points as noise and run it twice. One full run
-costs roughly a sixth of Groq's free daily token budget, which works out at about
-six runs a day — that, not the code, is the real limit on how fast prompt changes
+pinned, so treat anything under 3 points as noise and run it twice. A 50-case run
+costs roughly a quarter of Groq's free daily token budget, which works out at
+about four runs a day — that, not the code, is the real limit on how fast prompt
+changes
 can be tested.
 
 Numbers in this file go stale the moment they are not re-run. `12/12

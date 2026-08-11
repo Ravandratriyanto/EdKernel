@@ -28,3 +28,23 @@
 {"id": "q28", "topic": "mensuration", "question": "Find the area of a circle of radius 7 cm. Give your answer to 2 decimal places.", "answer": "43.98 cm^2", "correct": false, "note": "used the circumference formula"}
 {"id": "q29", "topic": "quadratics", "question": "Use the quadratic formula to solve 2x^2 + 7x - 3 = 0. Give your answers correct to 2 decimal places.", "answer": "x = 0.5 or x = -3", "correct": false, "note": "factorised as if it were 2x^2 + 5x - 3"}
 {"id": "q30", "topic": "differentiation", "question": "Differentiate y = x^3 + 4x with respect to x.", "answer": "dy/dx = 3x^2 + 4x", "correct": false, "note": "did not differentiate the 4x term"}
+{"id": "q31", "topic": "linear equations", "question": "Solve for x: 5x - 3 = 2x + 12", "answer": "x = 5", "correct": true, "note": ""}
+{"id": "q32", "topic": "substitution", "question": "If y = 3x + 1 and x = 4, what is y?", "answer": "y = 13", "correct": true, "note": ""}
+{"id": "q33", "topic": "quadratics", "question": "Solve: (x - 3)(x + 5) = 0. What are the values of x?", "answer": "x = 3 or x = -5", "correct": true, "note": ""}
+{"id": "q34", "topic": "roots", "question": "If x^2 = 49, what is x?", "answer": "x = 7 or x = -7", "correct": true, "note": ""}
+{"id": "q35", "topic": "rates", "question": "A train travels 60 miles in 45 minutes. At this rate, how far does it travel in 2 hours?", "answer": "160 miles", "correct": true, "note": ""}
+{"id": "q36", "topic": "indices", "question": "Simplify: (3x^2y)^3", "answer": "27x^6y^3", "correct": true, "note": ""}
+{"id": "q37", "topic": "averages", "question": "The average of 5 numbers is 12. If one number is removed, the average of the remaining 4 is 10. What was the removed number?", "answer": "20", "correct": true, "note": ""}
+{"id": "q38", "topic": "functions", "question": "If f(x) = 2x^2 - 5x + 3, what is f(3)?", "answer": "6", "correct": true, "note": ""}
+{"id": "q39", "topic": "mensuration", "question": "A rectangle's length is 3 more than twice its width. If the perimeter is 36, find the width.", "answer": "5", "correct": true, "note": ""}
+{"id": "q40", "topic": "indices", "question": "If 2^(x+1) = 32, what is x?", "answer": "x = 4", "correct": true, "note": ""}
+{"id": "q41", "topic": "linear equations", "question": "Solve for x: 5x - 3 = 2x + 12", "answer": "x = 3", "correct": false, "note": "subtracted 3 instead of adding it, giving 3x = 9"}
+{"id": "q42", "topic": "substitution", "question": "If y = 3x + 1 and x = 4, what is y?", "answer": "y = 15", "correct": false, "note": "added 1 to x before multiplying"}
+{"id": "q43", "topic": "quadratics", "question": "Solve: (x - 3)(x + 5) = 0. What are the values of x?", "answer": "x = -3 or x = 5", "correct": false, "note": "read the roots straight off the brackets without flipping the signs"}
+{"id": "q44", "topic": "roots", "question": "If x^2 = 49, what is x?", "answer": "x = 7", "correct": false, "note": "gave only the positive root"}
+{"id": "q45", "topic": "rates", "question": "A train travels 60 miles in 45 minutes. At this rate, how far does it travel in 2 hours?", "answer": "120 miles", "correct": false, "note": "treated 60 miles as one hour's distance"}
+{"id": "q46", "topic": "indices", "question": "Simplify: (3x^2y)^3", "answer": "9x^6y^3", "correct": false, "note": "cubed the 3 as 3 x 3 instead of 3 x 3 x 3"}
+{"id": "q47", "topic": "averages", "question": "The average of 5 numbers is 12. If one number is removed, the average of the remaining 4 is 10. What was the removed number?", "answer": "2", "correct": false, "note": "subtracted the averages instead of the totals"}
+{"id": "q48", "topic": "functions", "question": "If f(x) = 2x^2 - 5x + 3, what is f(3)?", "answer": "24", "correct": false, "note": "squared 2x instead of x"}
+{"id": "q49", "topic": "mensuration", "question": "A rectangle's length is 3 more than twice its width. If the perimeter is 36, find the width.", "answer": "11", "correct": false, "note": "added length and width once instead of twice"}
+{"id": "q50", "topic": "indices", "question": "If 2^(x+1) = 32, what is x?", "answer": "x = 5", "correct": false, "note": "solved 2^x = 32 and forgot the +1"}

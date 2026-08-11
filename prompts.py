@@ -22,15 +22,30 @@ _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
 _STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', re.MULTILINE)
 
 CHECK_SIGNAL = (
-    "Finish your reply with a last line that is exactly [CORRECT] or exactly "
-    "[WRONG]. Keep the square brackets — a bare word without them does not "
-    "count. Write nothing after that line."
+    "Just before your last line, write one line in exactly this form:\n"
+    "Check: correct answer is <your answer>; student wrote <their answer>.\n"
+    "They match if they mean the same thing mathematically, even when written "
+    "differently: 3n + 2 is the same as 2 + 3n, 0.5 is the same as 1/2, and "
+    "x = 7 or x = -7 is the same as x = +/-7. Only the value matters, never the "
+    "wording or the order.\n"
+    "Then finish with a last line that is exactly [CORRECT] if those two match, "
+    "or exactly [WRONG] if they do not. Keep the square brackets — a bare word "
+    "without them does not count. Write nothing after that line."
 )
-# Do not add "that line judges the student, not your explanation" here. It was
-# tried on 2026-08-09 and backfired: it biased the model toward [WRONG], and
-# "accepts correct" fell from 15/15 to 12/15 — it started marking answers wrong
-# straight after explaining they were right. The wording above scored 28/30 on
-# two consecutive runs. Re-measure with `python -m evals.run` before changing it.
+# Two measured dead ends, so they are not retried blind:
+#
+# 1. "that line judges the student, not your explanation" (2026-08-09) biased
+#    the model toward [WRONG]. "accepts correct" fell 15/15 -> 12/15: it marked
+#    answers wrong straight after explaining they were right.
+# 2. The "Check:" line without the equivalence sentence below (2026-08-10) made
+#    the model compare the two answers as *text*. It wrote "correct answer is
+#    2 + 3n; student wrote 3n + 2" and marked it [WRONG]. Systematic, not
+#    random — it fails any correct answer written in a different order.
+#
+# The equivalence sentence is what fixes (2). UNCONFIRMED as of 2026-08-10:
+# 42 of 50 cases ran before the daily token budget died, and all 42 were right,
+# but 7 of the 8 missing were wrong-answer cases, which are the harder half.
+# Baseline without the "Check:" line is 49/50. Re-measure before trusting this.
 
 
 def build_check_prompt(question: str, answer: str,
