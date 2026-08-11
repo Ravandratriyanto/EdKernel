@@ -180,10 +180,10 @@ because a change was checked structurally and never against real model output.
 As of 2026-08-10, against Groq `llama-3.3-70b-versatile`: **49/50 on check mode,
 26/26 regressions, 50/50 replies carrying a verdict signal, no errors.**
 
-That 49/50 is the baseline *without* the `Check:` line in `CHECK_SIGNAL`. The
-`Check:` line is in the code but **not yet confirmed** — 42 of 50 cases ran
-before the daily budget died and all 42 were right, but the 8 that did not run
-were mostly the harder wrong-answer half. Re-measure before trusting it.
+The one failure is the marker coming loose from the reasoning — the model states
+the student is right and then marks `[WRONG]`, or the reverse. Three prompt
+changes have been measured against it and none shipped; see the comments above
+`CHECK_SIGNAL` in `prompts.py` before trying a fourth.
 
 The score moves about 2 points between identical runs because temperature is not
 pinned, so treat anything under 3 points as noise and run it twice. A 50-case run

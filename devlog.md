@@ -1416,3 +1416,157 @@ wired in. Now declared rather than inherited.
    about whether rotated files stay in the Phase C training set
 10. Optional: `pyflakes` in the hook, for the undefined-name case
 11. Optional: video in `app.py`, or an explicit decision that it stays CLI-only
+
+
+## Session 11 — 2026-08-10
+
+A bug found the way bugs should be found — by using the thing. Then a day spent
+failing to fix a different one, which is written up here in full because the
+failures are the useful part.
+
+### The empty bubble
+
+Ravan sent a screenshot of a lesson with a blank tutor message in the middle of
+it. The log had it exactly:
+
+```
+input    'is x = 5'
+output   ''
+correct  True
+```
+
+The student answered correctly, the model replied with **nothing but the
+`[CORRECT]` marker**, `strip_signal` removed it as designed, and what was left
+was an empty string. The web app rendered it faithfully.
+
+There was a second half not visible in the screenshot. That empty string was
+also appended to `messages` as the assistant turn, so the history sent on the
+*next* request contained a blank tutor message. That is why the follow-up
+("huh?") got a slightly disjointed answer — the model was reading a conversation
+in which it had said nothing.
+
+Fixed in two places. `TUTOR_SYSTEM_PROMPT` previously said only to *end* with
+the marker; it now says the marker is always extra and never the whole message.
+And `tutor_reply()` wraps `strip_signal` and cannot return nothing — learn mode
+falls back to a sentence ending in a question, check mode to one that does not,
+because there is no next step there. All five call sites use it.
+
+Which half is proven matters. **The safety net is deterministic and tested; the
+prompt change cannot be credited from one run**, because the original failure
+was intermittent. The net is what guarantees the bubble is never blank again.
+
+Verified by replaying the same lesson through the real endpoints: the turn that
+produced the empty bubble now returns text, `correct=True`, and there is no
+blank assistant turn left in the history.
+
+### The eval set doubled
+
+Ravan supplied 10 questions with answers. All 10 keys verified with sympy and
+**all 10 were right** — the first answer key in this project's history to be
+clean on the first pass. The ones `CLAUDE.md` warns about were model-generated;
+these were not.
+
+They were all *correct* answers, though, and at the time the open defect looked
+like a `rejects wrong` failure, so each was paired with a plausible student
+error — signs unflipped, only the positive root, `2^x = 32` with the `+1`
+forgotten. Every wrong answer was verified wrong in sympy too, so none is merely
+a different valid form.
+
+50 cases now, 25/25, 18 topics. One question is worth 2 points instead of 3.3,
+so the ~2-point run-to-run noise no longer swamps a single case. That was the
+real gain: **the 20 new cases surfaced no new failures at all.**
+
+### An assumption corrected mid-session
+
+The claim that correct-answer cases "won't catch this bug" was wrong. The very
+next run failed on **q12 — a correct answer marked `[WRONG]`**, while q21, the
+case the whole theory was built on, passed.
+
+The defect is not "accepts wrong answers". It is **the marker coming loose from
+the reasoning, in either direction**. The model writes "the student applied the
+distributive property correctly" and then marks `[WRONG]`.
+
+### q12 diagnosed
+
+q12 had failed in 2 of 6 runs while everything around it was stable, so: is the
+case ambiguous, or the model unreliable?
+
+**10/10 correct in isolation**, every run with clean working. Crossed RAG
+context under concurrency was ruled out separately — `retrieve()` returns
+identical results at 1, 2 and 4 jobs, 0 mismatches in 32 calls.
+
+So it is model flakiness at roughly 1 in 3, not an ambiguous case and not a
+harness bug. Worth recording that the intermediate claim "0/10 is essentially
+impossible" was overstated — that used 2-of-3 recent runs; across all six it is
+2/6, where 0/10 has about a 2% chance. Unlikely, not impossible.
+
+### Three prompt changes, none shipped
+
+| attempt | result |
+|---|---|
+| baseline | **49/50**, only failure q12 |
+| "the marker judges the student, not your explanation" | biased toward `[WRONG]`; accepts correct 15/15 → **12/15** |
+| `Check: correct answer is X; student wrote Y` | 48/50, and a **new systematic failure** |
+| the above + "equivalent forms match" | 42/42 on what ran, then the budget died |
+
+The third row is the interesting one. It made the model compare the two answers
+as *text*: it wrote "correct answer is 2 + 3n; student wrote 3n + 2" and marked
+it `[WRONG]`. That is worse in kind than what it fixed — q12 flips at random,
+but this fails *every* correct answer written in a different order, which in
+mathematics is most of them.
+
+The fourth row looked genuinely promising and is still not shipped, because 8 of
+50 cases never ran and 7 of those were wrong-answer cases — the harder half.
+An unconfirmed prompt change is exactly what cost a day in Session 10.
+
+All three are recorded as comments above `CHECK_SIGNAL`, with numbers, and the
+full wording of the fourth is in commit `c0e7b39`.
+
+### Pushed, then partly unpushed
+
+The 50 cases and the `Check:` line went to master together, with the commit
+message opening `UNCONFIRMED PROMPT CHANGE`. Ravan's call was that an unproven
+prompt should not sit on master where another developer would read it as
+settled — so `CHECK_SIGNAL` was reverted to the measured baseline in a follow-up
+commit, keeping the cases, which are verified and were the set the 49/50 was
+measured on.
+
+Reverted with a commit, not a force-push. The history was already public, and
+rewriting it confuses people far more than an extra commit does.
+
+### Current state
+- `python -m evals.run` → **49/50**, `signal 50/50`, 0 errors, regressions 26/26
+- 50 cases, 25/25 balanced, every key sympy-verified in both directions
+- The tutor cannot render an empty bubble, in either mode
+- `CHECK_SIGNAL` is the measured baseline, with three dead ends recorded above it
+
+### Known issues / caveats
+- **The marker still comes loose from the reasoning, about 1 case in 50.** Three
+  prompt changes measured, none shipped. The next lever is a second call that
+  does nothing but decide the verdict — robust because the deciding call has no
+  explanation to be proud of, but it doubles the calls per check, and at four
+  runs a day that is a real cost
+- q12 is model flakiness at ~1 in 3, not a bad case. Repeat runs of one case are
+  a scratchpad script, not a harness feature — `--case` would be worth adding
+- **The daily token budget ran out three times today.** A 50-case run is about a
+  quarter of it, so four a day. This is now the binding constraint on the
+  project, and running the evals against Ollama is the way out of it
+- The 20 new cases found nothing. Coverage grew, resolution improved, but the
+  set is still only measuring check mode
+- Carried over unchanged: eval covers check mode only, learn mode has no cases,
+  Groq only, `TUTOR_SYSTEM_PROMPT` still duplicated and divergent, handheld
+  video costs 5 vision calls, SAT PDF reordering, video CLI-only
+
+### Next
+1. One clean 50-case run to settle the `Check:` line — either re-apply
+   `c0e7b39`'s wording or close it out as a fourth dead end
+2. Run the evals against Ollama. It costs no Groq budget, and the budget is now
+   the thing actually limiting this project
+3. Accumulate lessons. Unchanged since Session 9, and still the only thing
+   between here and the last unticked box
+4. `--case q12` in the harness, so diagnosing one case is not a scratchpad job
+5. Move `TUTOR_SYSTEM_PROMPT` into `prompts.py` and reconcile the two copies
+6. Extend the eval to learn mode — hint escalation has the most logic and zero
+   coverage, and Phase 5's done criterion is already written as a test
+7. `pyflakes` in the hook. It catches undefined names, which is exactly what the
+   hand-typing passes produce, and it would have caught three of them unaided
