@@ -1,4 +1,10 @@
+import sys
+
 from ollama import Client as OllamaClient
+
+# Fires once per process, not once per call — a warning on every turn is noise
+# you learn to ignore, which defeats the point.
+_warned_no_usage = False
 
 
 class LLMText(str):
@@ -24,10 +30,18 @@ def _ollama_usage(r) -> dict:
 
     Ollama names these differently from every hosted API, which is the easy
     thing to get silently wrong — a wrong name here reads as zero, not as an
-    error.
+    error. So say so: the warning prints the field names the response actually
+    has, which is the one thing you need to fix a rename.
     """
-    return {"prompt": getattr(r, "prompt_eval_count", 0) or 0,
-            "completion": getattr(r, "eval_count", 0) or 0}
+    global _warned_no_usage
+    u = {"prompt": getattr(r, "prompt_eval_count", 0) or 0,
+         "completion": getattr(r, "eval_count", 0) or 0}
+    if not u["completion"] and not _warned_no_usage:
+        _warned_no_usage = True
+        fields = sorted(vars(r)) if hasattr(r, "__dict__") else type(r).__name__
+        print(f"warning: ollama returned no token counts. fields seen: {fields}",
+              file=sys.stderr)
+    return u
 
 
 def generate(prompt: str, model: str = "gemma4", host: str = "http://localhost:11434",
