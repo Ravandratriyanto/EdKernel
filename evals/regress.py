@@ -11,7 +11,7 @@ import glob
 import re
 
 import pdftext
-from prompts import tutor_reply
+from prompts import tutor_reply, strip_signal
 from ratelimit import RateLimiter
 from vision.image_handler import drop_reasoning
 from video.video_handler import _dedupe
@@ -193,6 +193,25 @@ def _cookie_secure_default():
     return os.environ.get("OLLM_HTTPS", "").strip().lower() not in {"1", "true", "yes"}
 
 
+# --- token counts --------------------------------------------------------
+
+@check("ollama token counts are read off the response")
+def _ollama_usage_reads_counts():
+    """Pins OUR field names, not Ollama's.
+
+    A stub answers to whatever names it is given, so this cannot catch Ollama
+    renaming its response fields — only a live run does that. What it catches
+    is this end of the wiring being edited to read the wrong thing.
+    """
+    from llm.client import _ollama_usage
+
+    class Reply:
+        prompt_eval_count = 41
+        eval_count = 17
+
+    return _ollama_usage(Reply()) == {"prompt": 41, "completion": 17}
+
+
 # --- the tutor never sends an empty bubble --------------------------------
 
 @check("a bare [CORRECT] does not become an empty message")
@@ -228,6 +247,39 @@ def _check_fallback_wording():
 def _real_reply_untouched():
     text, correct = tutor_reply("Good. What is 15 divided by 3?\n[CORRECT]")
     return text == "Good. What is 15 divided by 3?" and correct is True
+
+
+# --- the Check: line stays out of the student's reply ----------------------
+
+@check("the Check: scaffolding line is not shown to the student")
+def _check_line_stripped():
+    # CHECK_SIGNAL asks the model to write "Check: correct answer is X; student
+    # wrote Y" to hold the two answers side by side before judging. It is
+    # working-out for the model. Verbatim tail of q19, 2026-08-12.
+    raw = ("To solve, subtract 7 from both sides:\n"
+           "3x = 15\n"
+           "x = 5\n"
+           "Check: correct answer is 5; student wrote 9.67.\n"
+           "[WRONG]")
+    text, correct = strip_signal(raw)
+    return "Check:" not in text and text.endswith("x = 5") and correct is False
+
+
+@check("a reply that is only scaffolding does not become an empty bubble")
+def _check_line_only_not_empty():
+    # Stripping the Check: line is a new way to leave nothing behind, so it
+    # meets the empty-bubble fallback from Session 11. Both fixes are needed.
+    text, correct = tutor_reply("Check: correct answer is 5; student wrote 5.\n"
+                                "[CORRECT]", teaching=False)
+    return text.strip() != "" and "Check:" not in text and correct is True
+
+
+@check("an ordinary tutor line starting Check: survives")
+def _check_word_not_eaten():
+    # The regex is anchored to the full instructed form for this reason: learn
+    # mode shares strip_signal, and eating a real sentence is a worse bug.
+    text, _ = strip_signal("Check: does that make sense?\n[CORRECT]")
+    return text == "Check: does that make sense?"
 
 
 # --- the harness itself --------------------------------------------------

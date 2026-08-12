@@ -21,31 +21,47 @@ _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG)\]\s*$', re.IGNORECASE)
 # notation like [0, 5] or a citation mid-sentence.
 _STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', re.MULTILINE)
 
+# The "Check: correct answer is X; student wrote Y" line that CHECK_SIGNAL asks
+# for is scaffolding for the model, not something to show. Matched on the full
+# instructed form rather than a bare "Check:", so an ordinary tutor line like
+# "Check: does that make sense?" is left alone.
+_CHECK_LINE_RE = re.compile(r'^[ \t]*Check:\s*correct answer is\b[^\n]*\n?',
+                            re.MULTILINE | re.IGNORECASE)
+
 CHECK_SIGNAL = (
-    "Finish your reply with a last line that is exactly [CORRECT] or exactly "
-    "[WRONG]. Keep the square brackets — a bare word without them does not "
-    "count. Write nothing after that line."
+    "Just before your last line, write one line in exactly this form:\n"
+    "Check: correct answer is <your answer>; student wrote <their answer>.\n"
+    "They match if they mean the same thing mathematically, even when written "
+    "differently: 3n + 2 is the same as 2 + 3n, 0.5 is the same as 1/2, and "
+    "x = 7 or x = -7 is the same as x = +/-7. Only the value matters, never the "
+    "wording or the order.\n"
+    "Then finish with a last line that is exactly [CORRECT] if those two match, "
+    "or exactly [WRONG] if they do not. Keep the square brackets — a bare word "
+    "without them does not count. Write nothing after that line."
 )
-# The wording above is the measured baseline: 49/50 on the 50-case set.
+# Measured 2026-08-12 on the 50-case set: 50/50, every verdict from the signal.
+# The previous wording — the marker instruction alone, no Check: line — scored
+# 49/50. Treat one case as noise; what this actually buys is below.
 #
-# Three things were tried against it and are NOT shipped. Recorded so they are
-# not retried blind:
+# The Check: line is scaffolding. `_CHECK_LINE_RE` strips it before the reply
+# reaches a student, so changing its wording means changing that regex too.
+#
+# Two earlier attempts failed and are recorded so they are not retried blind:
 #
 # 1. "that line judges the student, not your explanation" (2026-08-09) biased
 #    the model toward [WRONG]. "accepts correct" fell 15/15 -> 12/15: it marked
 #    answers wrong straight after explaining they were right.
-# 2. A "Check: correct answer is X; student wrote Y" line before the marker
-#    (2026-08-10) made the model compare the two as *text*. It wrote "correct
-#    answer is 2 + 3n; student wrote 3n + 2" and marked it [WRONG]. Systematic,
-#    not random — it fails any correct answer written in a different order.
-# 3. (2) plus a rule that equivalent forms count as matching looked promising:
-#    42 of 50 cases ran before the daily budget died and all 42 were right. But
-#    7 of the 8 that never ran were wrong-answer cases, the harder half, so it
-#    was never confirmed and is not shipped. The full wording is in commit
-#    c0e7b39 if it is worth another run.
+# 2. The Check: line WITHOUT the equivalence sentence (2026-08-10) made the
+#    model compare the two answers as *text*. It wrote "correct answer is
+#    2 + 3n; student wrote 3n + 2" and marked it [WRONG]. Systematic, not
+#    random — it failed any correct answer written in a different order.
 #
-# All three aim at the same defect: the marker coming loose from the reasoning,
-# in either direction. It is still open.
+# The equivalence sentence is the part that fixes (2), and that — not the extra
+# point — is the evidence for this wording: 25/25 on correct answers, with the
+# text-comparison failure absent from all of them.
+#
+# Both attempts, and this one, aim at the same defect: the marker coming loose
+# from the reasoning. 50/50 is one clean run, not proof it is gone.
 
 
 def build_check_prompt(question: str, answer: str,
@@ -108,4 +124,5 @@ def strip_signal(text: str) -> tuple:
     else:
         clean, correct = text, None
     clean = _STRAY_MARKER_RE.sub('', clean)
+    clean = _CHECK_LINE_RE.sub('', clean)
     return re.sub(r'\n{3,}', '\n\n', clean).strip(), correct

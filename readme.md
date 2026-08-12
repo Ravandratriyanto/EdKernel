@@ -168,22 +168,28 @@ proven wrong rather than just written differently. Model-generated keys were
 wrong 2 times in 3 before the verification pass existed, and an eval with a bad
 key fails you for being right.
 
-`evals/regress.py` is 26 checks for bugs already fixed once — the unclosed
+`evals/regress.py` is 29 checks for bugs already fixed once — the unclosed
 `<think>`, `NH3` not being raised to `NH^3`, the running footer, `_dedupe`
-collapsing one page but not two, the login rate limiter, and a bare `[CORRECT]`
-reaching the student as an empty bubble. No model calls, so there is no excuse
-to skip it.
+collapsing one page but not two, the login rate limiter, a bare `[CORRECT]`
+reaching the student as an empty bubble, and the `Check:` scaffolding line
+leaking into a reply. No model calls, so there is no excuse to skip it.
 
 **Run this before and after any prompt change.** Two regressions shipped here
 because a change was checked structurally and never against real model output.
 
-As of 2026-08-10, against Groq `llama-3.3-70b-versatile`: **49/50 on check mode,
-26/26 regressions, 50/50 replies carrying a verdict signal, no errors.**
+As of 2026-08-12, against Groq `llama-3.3-70b-versatile`: **50/50 on check mode,
+29/29 regressions, 50/50 replies carrying a verdict signal, no errors.**
 
-The one failure is the marker coming loose from the reasoning — the model states
-the student is right and then marks `[WRONG]`, or the reverse. Three prompt
-changes have been measured against it and none shipped; see the comments above
-`CHECK_SIGNAL` in `prompts.py` before trying a fourth.
+That is one clean run, not proof the marker problem is gone. `CHECK_SIGNAL` now
+asks for a `Check: correct answer is X; student wrote Y` line before the marker,
+plus a rule that equivalent forms count as matching. The rule is the part that
+matters: without it the model compared the two answers as *text* and failed
+`3n + 2` against `2 + 3n`. With it, correct answers scored 25/25. Two earlier
+attempts made things worse — read the comments above `CHECK_SIGNAL` in
+`prompts.py` before trying a third.
+
+The `Check:` line is scaffolding and never reaches the student; `_CHECK_LINE_RE`
+strips it. Reword one and you must reword the other.
 
 The score moves about 2 points between identical runs because temperature is not
 pinned, so treat anything under 3 points as noise and run it twice. A 50-case run
