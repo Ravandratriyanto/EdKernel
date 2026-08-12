@@ -1570,3 +1570,144 @@ rewriting it confuses people far more than an extra commit does.
    coverage, and Phase 5's done criterion is already written as a test
 7. `pyflakes` in the hook. It catches undefined names, which is exactly what the
    hand-typing passes produce, and it would have caught three of them unaided
+
+## Session 12 — 2026-08-12
+
+The `Check:` line, which has been open since Session 10, is settled and shipped.
+One clean run answered it. The other half of the session was Phase B groundwork
+and a lesson about what a passing syntax check does not tell you.
+
+### The Check: line, confirmed
+
+Session 11 left this unresolved: the wording looked good over 42 of 50 cases,
+but the 8 that never ran were mostly wrong-answer cases, the harder half, so it
+was reverted rather than shipped on a partial result.
+
+Re-applied `c0e7b39`'s wording and ran the full 50:
+
+```
+check mode        50/50  (100%)
+  accepts correct   25/25
+  rejects wrong     25/25
+  verdict source    signal 50, prose 0, unparsed 0, error 0
+```
+
+Two cases (q19, q29) died on a per-minute rate limit inside the parallel run and
+were re-run one at a time; both passed, both via signal. The first pass without
+them read 48/50, which is the same trap as Session 10's flattering report — the
+losses were 429s, not wrong verdicts, and a score that does not separate the two
+is a lie. Worth remembering that `--jobs 4` is now more likely to hit TPM,
+because this wording makes every prompt longer.
+
+**The extra point over 49/50 is not the evidence.** One case is inside the noise
+the readme already warns about. The evidence is `accepts correct 25/25`: the
+failure that killed attempt 2 was the model comparing answers as *text* and
+marking `3n + 2` wrong against `2 + 3n`, which should have shown up repeatedly
+across those 25 and did not show up once. The equivalence sentence is the part
+doing the work.
+
+### The scaffolding leaked
+
+Shipping it needed a fix that had nothing to do with the score. The `Check:`
+line is working-out for the model, and it was going straight to the student:
+
+```
+To solve, subtract 7 from both sides:
+3x = 15
+x = 5
+Check: correct answer is 5; student wrote 9.67.
+```
+
+`strip_signal` removed the marker and `_STRAY_MARKER_RE` only catches bracketed
+lines, so the check line survived into the printed reply. `_CHECK_LINE_RE` now
+strips it, in `strip_signal` rather than `tutor_reply` so the CLI gets it too.
+
+It matches the full instructed form, not a bare `Check:`. Learn mode shares
+`strip_signal`, and silently eating a real tutor sentence like "Check: does that
+make sense?" would be a worse bug than the one being fixed.
+
+An interaction worth recording: stripping the check line is a **new way to empty
+a reply**. If the model writes only the scaffolding and the marker, both get
+removed and nothing is left — the exact empty bubble Session 11 fixed. The
+fallback catches it and returns "That's right." Both fixes are now load-bearing
+together, and there is a regression asserting it.
+
+Verified with two live CLI turns, not just structurally: `(2x^3)^4 -> 16x^12`
+came back *Correct*, and the average-of-6 question with answer 12 came back *Not
+correct* — sum 90, five remaining sum to 80, so 10 was removed and 12 is
+genuinely wrong.
+
+### Phase B groundwork
+
+Phase B's one open criterion is token counts on Ollama. The log says how open:
+
+```
+turns: 46   sessions: 12   providers: {'groq': 45, 'ollama': 1}
+```
+
+One Ollama turn has ever been logged and it recorded `tokens = {}`. So that half
+of the phase has never produced a number at all.
+
+`_ollama_usage` reads its counts with `getattr(r, "prompt_eval_count", 0)`,
+which means a renamed field reads as **0, not as an error** — its own docstring
+warned about this and nothing had ever exercised it. It now warns once per
+process and prints the field names the response actually has, which is the one
+thing you need to fix a rename. Simulated one to check it works:
+
+```
+warning: ollama returned no token counts. fields seen: ['output_tokens', 'prompt_tokens']
+```
+
+A regression pins the extraction, with a docstring saying plainly what it is
+worth: it catches *our* end being edited, not Ollama renaming anything. A stub
+answers to whatever names it is given. Only a live run tests the real thing.
+
+### What a syntax check does not catch
+
+The hand-typed pass produced two bugs that `py_compile` passed cleanly:
+
+- `import Systematic` instead of `import sys` — a well-formed statement about a
+  module that does not exist. Nothing that imports `llm.client` ran, which is
+  everything
+- **`_ollama_usage` defined twice**, the new version above the original. The
+  second `def` silently replaces the first, so the new warning code would never
+  have run. No error, no warning — the conclusion would have been "the guard
+  doesn't work" when it was never called
+
+Both are exactly what `pyflakes` catches. That is item 7 on the Next list and
+now has a third data point behind it.
+
+### Current state
+- `python -m evals.run` → **50/50**, `signal 50/50`, 0 errors, regressions 30/30
+- `CHECK_SIGNAL` carries the Check: line; `_CHECK_LINE_RE` keeps it off screen
+- Ollama token counts are guarded and pinned, but still unproven live
+
+### Known issues / caveats
+- **50/50 is one clean run, not proof the marker problem is gone.** q12 flakes
+  at about 1 in 3 on the old wording and passed here, which is the expected
+  outcome either way. A second run would say more than the first did
+- **Phase B is not code any more.** Both pieces are written and tested; the
+  criterion is a live Ollama lesson writing non-zero counts, and nothing is
+  listening on `localhost:11434`. It needs the remote instance up
+- The `_ollama_usage` warning uses `vars(r)`, which sees instance attributes
+  only. If the regression's stub ever fails it will print `fields seen: []`.
+  Real responses set instance attributes, so the live path is fine
+- **Phase C is gated on volume, not code.** 12 sessions and 46 turns would
+  reproduce Phase A's result exactly — train loss 0.90, validation climbing to
+  3.59 on a 975-byte file
+- Carried over unchanged: eval covers check mode only, learn mode has no cases,
+  `TUTOR_SYSTEM_PROMPT` still duplicated and divergent, handheld video costs 5
+  vision calls, SAT PDF reordering, video CLI-only
+
+### Next
+1. Bring up the remote Ollama and tick Phase B — one lesson, non-zero counts
+2. Run the evals on Ollama. Free, and it ends the Groq budget being the limit.
+   Expect a lower score; gemma4 is far smaller, so it is a separate baseline,
+   not a regression
+3. Accumulate lessons. Unchanged since Session 9, and the only thing between
+   here and Phase C
+4. `pyflakes` in the hook — three data points now
+5. `--case q12` in the harness, so repeating one case is not a scratchpad job
+6. Move `TUTOR_SYSTEM_PROMPT` into `prompts.py` and reconcile the two copies
+7. Extend the eval to learn mode — hint escalation has the most logic and zero
+   coverage
