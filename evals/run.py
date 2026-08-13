@@ -1,8 +1,9 @@
 """Score check mode against questions with known answers.
 
-    python -m evals.run                    everything
-    python -m evals.run --only regress     no model calls, no cost
+    python -m evals.run                          everything
+    python -m evals.run --only regress           no model calls, no cost
     python -m evals.run --provider ollama --model gemma4
+    python -m evals.run --case q12 --repeat 30   diagnose one flaky case
 
 The point is one number you can compare across prompt changes. Two regressions
 shipped in this project because a change was checked structurally and never
@@ -138,6 +139,17 @@ def report(results, regressions):
         print(f"  verdict source    signal {by('signal')}, prose {by('prose')}, "
               f"unparsed {by('unparsed')}, error {by('error')}")
 
+        # Per-case rollup when --repeat runs the same case more than once. The
+        # aggregate above answers "how good is the tutor"; this answers "how
+        # flaky is q12", which is what --case exists for.
+        ids = [r["id"] for r in results]
+        if len(set(ids)) < len(ids):
+            print("\nper case:")
+            for cid in sorted(set(ids), key=ids.index):
+                runs = [r for r in results if r["id"] == cid]
+                passed = sum(1 for r in runs if r["got"] == r["correct"])
+                print(f"  {cid}  {passed}/{len(runs)}  ({100 * passed / len(runs):.0f}%)")
+
     # A skipped check (result None) counts as neither passed nor failed.
     ran    = [r for r in regressions if r[1] is not None]
     passed = sum(1 for _, ok, _ in ran if ok)
@@ -174,15 +186,32 @@ def main():
     p.add_argument("--ollama-host", default="http://localhost:11434")
     p.add_argument("--api-key", default="", help="Falls back to API_KEY in .env")
     p.add_argument("--jobs", type=int, default=4)
+    p.add_argument("--case", nargs="+", metavar="ID",
+                   help="Run only these case IDs (e.g. --case q12 q21).")
+    p.add_argument("--repeat", type=int, default=1, metavar="N",
+                   help="Run each selected case N times. Model flakiness on a "
+                        "single case cannot be told from an unlucky run without this.")
     args = p.parse_args()
 
     api_key = args.api_key.strip() or os.environ.get("API_KEY", "").strip()
     if args.provider == "groq" and not api_key and args.only != "regress":
         raise SystemExit("Groq needs a key: pass --api-key or set API_KEY in .env")
 
+    if args.repeat < 1:
+        raise SystemExit("--repeat must be at least 1")
+
     results = []
     if args.only != "regress":
         cases = [json.loads(l) for l in CASES.read_text().splitlines() if l.strip()]
+        if args.case:
+            wanted = set(args.case)
+            missing = wanted - {c["id"] for c in cases}
+            if missing:
+                # Fail early rather than silently running a smaller set — a typo
+                # in --case would otherwise pass with a flattering score.
+                raise SystemExit(f"Unknown case id(s): {', '.join(sorted(missing))}")
+            cases = [c for c in cases if c["id"] in wanted]
+        cases = cases * args.repeat
         print(f"running {len(cases)} cases on {args.provider}/{args.model}, "
               f"{args.jobs} at a time...")
         results = run_cases(cases, args.provider, args.model,
