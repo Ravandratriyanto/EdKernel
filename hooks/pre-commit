@@ -79,15 +79,36 @@ fi
 # version that gets committed.
 
 root=$(git rev-parse --show-toplevel)
-py=python3
-[[ -x "$root/.venv/bin/python" ]] && py="$root/.venv/bin/python"
+# Pick a working Python. Preference order: venv, then whichever command exists
+# and actually runs. On Windows Git Bash `python3` and `python` sometimes point
+# at different installs (Store stub vs real interpreter), so both need trying.
+pick_python() {
+    local cand
+    for cand in \
+        "$root/.venv/bin/python" \
+        "$root/.venv/Scripts/python.exe" \
+        python3 \
+        python; do
+        if [[ "$cand" == /* ]]; then
+            [[ -x "$cand" ]] && "$cand" -c '' 2>/dev/null && { echo "$cand"; return; }
+        else
+            command -v "$cand" >/dev/null && "$cand" -c '' 2>/dev/null && { echo "$cand"; return; }
+        fi
+    done
+}
+py=$(pick_python)
+if [[ -z "$py" ]]; then
+    echo "warn: no working python found — pre-commit checks skipped" >&2
+    exit 0
+fi
 
 syntax_bad=0
+syntax_ok=()
 # -z gives NUL-separated names, so a path with a space survives.
 # ACMR = added, copied, modified, renamed — never deleted, which has no content.
 while IFS= read -r -d '' path; do
     [[ "$path" == *.py ]] || continue
-    err=$(git show ":$path" | "$py" -c '
+    if err=$(git show ":$path" | "$py" -c '
 import sys
 name = sys.argv[1]
 try:
@@ -103,14 +124,16 @@ except ValueError as e:
     # Null bytes and similar — not a SyntaxError, still not importable.
     print(f"  {name}: {e}")
     sys.exit(1)
-' "$path" 2>&1) || {
+' "$path" 2>&1); then
+        syntax_ok+=("$path")
+    else
         if (( syntax_bad == 0 )); then
             echo "COMMIT BLOCKED — staged Python does not parse:" >&2
             echo >&2
         fi
         syntax_bad=1
         printf '%s\n' "$err" >&2
-    }
+    fi
 done < <(git diff --cached --name-only -z --diff-filter=ACMR)
 
 if (( syntax_bad )); then
@@ -122,6 +145,63 @@ it already, `git add` the file again.
 Override with: git commit --no-verify
 EOF
     fail=1
+fi
+
+
+# --- 3. Pyflakes: undefined names ------------------------------------------
+#
+# The syntax check catches typos that stop a file parsing. It cannot catch a
+# typo that still parses — `sqlite3.exeucte` or a lost `import`, which look
+# fine to the compiler and fail only when the line runs. Pyflakes reads the
+# same class of bug from the AST.
+#
+# Filtered to `undefined name` / `undefined local`. Pyflakes also flags unused
+# imports and unused locals, both of which have real reasons to exist (re-exports,
+# side-effect imports, work-in-progress code) and would block legitimate commits.
+#
+# Skipped for files that failed the syntax check above, which pyflakes would
+# just repeat. Skipped entirely when pyflakes isn't installed, with one warning.
+
+# The Python we picked above may not have pyflakes even if some other Python on
+# the box does — the two commands `python3` and `python` sometimes point at
+# different installs. Try each candidate until we find one with pyflakes.
+pyflakes_py=""
+for cand in "$py" "$root/.venv/bin/python" "$root/.venv/Scripts/python.exe" python3 python; do
+    [[ -z "$cand" ]] && continue
+    "$cand" -c "import pyflakes" 2>/dev/null && { pyflakes_py="$cand"; break; }
+done
+
+if [[ -z "$pyflakes_py" ]]; then
+    if (( ${#syntax_ok[@]} > 0 )); then
+        echo "warn: pyflakes not installed — undefined-name check skipped (pip install pyflakes)" >&2
+    fi
+else
+    lint_bad=0
+    for path in "${syntax_ok[@]}"; do
+        # pyflakes with no args reads stdin and labels it <stdin>; substitute
+        # the real path back in so the message is grep-able and clickable.
+        findings=$(git show ":$path" | "$pyflakes_py" -m pyflakes 2>&1 \
+                   | grep -E 'undefined (name|local)' \
+                   | sed "s|<stdin>|$path|g" || true)
+        if [[ -n "$findings" ]]; then
+            if (( lint_bad == 0 )); then
+                echo "COMMIT BLOCKED — staged Python has undefined names:" >&2
+                echo >&2
+            fi
+            lint_bad=1
+            printf '%s\n' "$findings" | sed 's/^/  /' >&2
+        fi
+    done
+
+    if (( lint_bad )); then
+        cat >&2 <<'EOF'
+
+Fix the reference or add the missing import, then `git add` the file again.
+
+Override with: git commit --no-verify
+EOF
+        fail=1
+    fi
 fi
 
 exit "$fail"
