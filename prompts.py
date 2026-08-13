@@ -10,6 +10,28 @@ a pair.
 
 import re
 
+# Style rules both front ends send verbatim. The two prompts drifted 7x measured
+# in Session 7 — the growth is app.py-only capability rules, but the shared style
+# block also picked up small edits in one file and not the other. Splitting it
+# out means the next edit lands in both or in neither.
+PLAIN_ENGLISH_RULES = (
+    "Write in the simplest English you can. Short sentences. Everyday words a "
+    "12-year-old would understand. "
+    "Never use a long or academic word where a short one works: say 'use' not "
+    "'utilise', 'so' not 'therefore', 'find' not 'determine'. "
+    "One idea per sentence. No filler, no throat-clearing, no phrases like "
+    "'let us consider' or 'it is important to note'. "
+    "You may use a subject term (like 'mitochondria' or 'derivative') when it "
+    "is the thing being taught — but the first time it appears, immediately "
+    "explain what it means in plain words. "
+    "Assume English may be the student's second language."
+)
+
+TOPIC_COMPLETE_RULE = (
+    "When the entire topic has been fully explored through dialogue, end your "
+    "response with the exact phrase 'Topic complete.'"
+)
+
 # The verdict marker. Anchored to end-of-string, so it must be the last thing
 # in the reply — that is why the instruction below says to write nothing after
 # it. Change one of these two and you must change the other.

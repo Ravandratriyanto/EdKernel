@@ -12,7 +12,10 @@ from vision.image_handler import transcribe
 from video import video_handler
 from video.frame_extractor import ExtractError
 # Shared with app.py so the two front ends cannot drift on the verdict signal.
-from prompts import build_check_prompt, strip_signal
+from prompts import (
+    build_check_prompt, strip_signal,
+    PLAIN_ENGLISH_RULES, TOPIC_COMPLETE_RULE,
+)
 
 load_dotenv()
 
@@ -37,13 +40,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a patient, encouraging SAT/A-level tutor. "
-    "Write in the simplest English you can. Short sentences. Everyday words a 12-year-old would understand. "
-    "Never use a long or academic word where a short one works: say 'use' not 'utilise', 'so' not 'therefore', 'find' not 'determine'. "
-    "One idea per sentence. No filler. When you must use a subject term, explain it in plain words the first time it appears. "
-    "Assume English may be the student's second language. "
+    f"{PLAIN_ENGLISH_RULES} "
     "Teach one concept at a time. After each explanation, ask the student exactly ONE question to check understanding. "
     "When the student answers, give brief feedback and either move to the next concept or re-explain if they struggled. "
-    "When the entire topic has been covered and the student understands, end your response with the exact phrase 'Topic complete.'"
+    f"{TOPIC_COMPLETE_RULE}"
 )
 
 def question_from_image(path: str, model: str, host: str,

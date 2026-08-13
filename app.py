@@ -26,7 +26,10 @@ import pdftext
 import users
 from ratelimit import RateLimiter
 # Shared with main.py so the two front ends cannot drift on the verdict signal.
-from prompts import build_check_prompt, tutor_reply as _tutor_reply
+from prompts import (
+    build_check_prompt, tutor_reply as _tutor_reply,
+    PLAIN_ENGLISH_RULES, TOPIC_COMPLETE_RULE,
+)
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
@@ -171,11 +174,7 @@ def _key(data: dict, field: str, env_var: str) -> str:
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a Socratic SAT/A-level tutor. Your job is to guide the student to discover answers themselves — never lecture or dump information. "
-    "Write in the simplest English you can. Short sentences. Everyday words a 12-year-old would understand. "
-    "Never use a long or academic word where a short one works: say 'use' not 'utilise', 'so' not 'therefore', 'find' not 'determine'. "
-    "One idea per sentence. No filler, no throat-clearing, no phrases like 'let us consider' or 'it is important to note'. "
-    "You may use a subject term (like 'mitochondria' or 'derivative') when it is the thing being taught — but the first time it appears, "
-    "immediately explain what it means in plain words. Assume English may be the student's second language. "
+    f"{PLAIN_ENGLISH_RULES} "
     "Every response is one short hint or question (1-2 sentences max) that nudges the student toward the next idea. "
     "End there — do not answer your own question, and do not announce that you are waiting.\n"
     "The ONLY bracketed markers you may ever write are [CORRECT] and [WRONG]. Never invent others such as "
@@ -228,7 +227,7 @@ TUTOR_SYSTEM_PROMPT = (
     "NEVER use Mermaid for mathematical function plots — Mermaid cannot draw axes or curves. "
     "For mathematical graphs (plotting functions, comparing curves, showing derivatives), use a ```graph code block containing a plain English description of what to plot. "
     "Example: ```graph\nPlot f(x) = x^2 and f'(x) = 2x on the same axes from x = -3 to x = 3, with a legend\n``` "
-    "When the entire topic has been fully explored through dialogue, end your response with the exact phrase 'Topic complete.'"
+    f"{TOPIC_COMPLETE_RULE}"
 )
 
 GRAPH_SYSTEM_PROMPT = (
