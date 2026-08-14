@@ -282,6 +282,40 @@ def _check_word_not_eaten():
     return text == "Check: does that make sense?"
 
 
+# --- an open question is not a wrong answer -------------------------------
+
+@check("[OPEN] means no single answer, not a wrong answer")
+def _open_is_not_wrong():
+    # Seen live 2026-08-14: asked "what is the best way to revise SAT" with the
+    # answer "flashcards", check mode replied that the reference material did
+    # not mention flashcards and marked it [WRONG]. A question with no right
+    # answer must not produce a cross.
+    text, correct = strip_signal("There is no single best way to revise.\n[OPEN]")
+    return correct is None and text == "There is no single best way to revise."
+
+
+@check("[OPEN] never reaches the student")
+def _open_marker_stripped():
+    text, _ = strip_signal("Both of those are fine ways to revise.\n[OPEN]")
+    return "[OPEN]" not in text
+
+
+@check("a bare [OPEN] does not become an empty message")
+def _bare_open_not_empty():
+    # Same empty-bubble trap as [CORRECT] and [WRONG]: stripping the marker can
+    # leave nothing behind, and None already has a row in _EMPTY_REPLY.
+    text, correct = tutor_reply("[OPEN]", teaching=False)
+    return text.strip() != "" and correct is None
+
+
+@check("[OPEN] does not swallow the real verdicts")
+def _open_keeps_other_verdicts():
+    # The alternation is the risky edit: widening _SIGNAL_RE must not change
+    # what the two existing markers mean.
+    return (strip_signal("Right.\n[CORRECT]")[1] is True
+            and strip_signal("No.\n[WRONG]")[1] is False)
+
+
 # --- the harness itself --------------------------------------------------
 
 @check("a case with no verdict is not scored as a correct rejection")

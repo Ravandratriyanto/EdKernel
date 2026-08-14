@@ -1711,3 +1711,410 @@ now has a third data point behind it.
 6. Move `TUTOR_SYSTEM_PROMPT` into `prompts.py` and reconcile the two copies
 7. Extend the eval to learn mode — hint escalation has the most logic and zero
    coverage
+
+## Session 13 — 2026-08-13
+
+Three items came off the Next list before this session started, and the devlog
+did not know. Then the pyflakes hook was checked, found to be switched off, and
+switched on — in time to catch the next batch of typos it was built for.
+
+### The Next list was stale
+
+Asked what was left, the honest answer came out wrong the first time, because it
+was read from Session 12's Next list. Three of those seven had already landed
+that morning and were never written up:
+
+```
+d816f3b  Extract the shared tutor style rules into prompts.py   (item 6, partly)
+916247d  Add --case and --repeat to the eval harness            (item 5)
+ed48262  Catch undefined-name typos in the pre-commit hook       (item 4)
+```
+
+Item 6 is only half done: `PLAIN_ENGLISH_RULES` moved, `TUTOR_SYSTEM_PROMPT`
+did not. It is still defined in `app.py` and again in `main.py`.
+
+The devlog is the thing that is supposed to stop this. It only works if an entry
+is written before the next session starts.
+
+### The hook was there and doing nothing
+
+`hooks/pre-commit` section 3 was written and correct. Pyflakes was not installed
+in `.venv`, so every run took the `warn: pyflakes not installed` branch and let
+the commit through. It is listed in `requirements.txt:12` — the venv had just
+drifted from the file.
+
+A guard that degrades to a warning is the right design and is also the reason
+nobody noticed for a day. Installed it (3.4.0), and the behaviour changed the
+same afternoon.
+
+### The redefinition rung
+
+Session 12's `_ollama_usage` bug — the same `def` typed twice, the second
+silently replacing the first — was not caught by the filter. Pyflakes sees it,
+but reports it as `redefinition of unused`, and the grep only kept
+`undefined (name|local)`.
+
+Added it. The worry was false positives on the shapes that redefine a name on
+purpose, so all four were tested in a throwaway repo rather than reasoned about:
+
+```
+duplicate `def _ollama_usage`                          BLOCKED
+try: import ujson as json / except ImportError: import json   committed
+if TYPE_CHECKING: from pathlib import Path             committed
+def clear() twice under if sys.platform / else         committed
+```
+
+Pyflakes already understands conditional and fallback definitions — it only
+reports a redefinition when the first binding was never used. The filter is
+narrower than its name suggests. All tracked `.py` files pass it, so nothing
+pre-existing is blocked.
+
+### Learn mode gets an eval, item 7
+
+The eval measures check mode, and check mode is the small half. Learn mode —
+decomposition, the hint ladder, knowing when a topic is done — has no automated
+coverage at all. Phase 5's definition of done, "three wrong answers in a row
+produce three increasingly specific hints", has only ever been checked by
+reading three replies by hand.
+
+Design: hold a question fixed, send the same wrong answer three times at
+`wrong_streak` 0, 1, 2, keep the history the way `/api/reply` does, and judge
+the three hints on four properties the ladder itself promises:
+
+```
+hints differ                 the three replies are not the same text
+rung 1 withholds concept     the first hint does not name the key idea
+rung 2 names concept         the second one does
+answer held back             neither leaks the final answer
+```
+
+That is deliberately not "is the hint good". It checks the ladder's own claims.
+A tutor could pass all four and still teach badly.
+
+### Three hint ladders, not one
+
+Writing the eval turned up the reason it could not simply call the product: the
+ladder is inline in `app.py:579-585`, so an eval would have to copy it. Looking
+for the one copy found two, and they disagree:
+
+| streak | `/api/reply` | `/api/papers/hint` |
+|--------|--------------|--------------------|
+| 1 | slightly more specific clue | subtle hint, stay indirect |
+| 2 | direct clue naming the concept | name the concept, no answer |
+| 3+ | explain, then ask them to apply | explain why the option is wrong |
+
+They also default differently — `reply` starts the counter at 0, `papers` at 1 —
+so the same mistake gets rung 1 in one route and rung 2 in the other. Same drift
+as `TUTOR_SYSTEM_PROMPT`, third instance, and nothing was measuring it.
+
+`HINT_LADDER` and `hint_note()` are now written, but at the bottom of `app.py`
+rather than in `prompts.py`, so there are currently **three** ladders and the new
+one is the only one nothing calls. `api_reply` also assigns a local named
+`hint_note`, which shadows the function for that whole route. Ravan is typing the
+move.
+
+### What the hook caught, measured
+
+The hand-typed `evals/learn.py` arrived with four transcription bugs:
+
+```
+line 50  {""case, ...}                 should be {**case, ...}
+line 23  "\n\n", join(chunks)          should be "\n\n".join(chunks)
+line 56  concept, asnwer = ...         answer then undefined at 65, 66
+line 11  from rag.retrieve import retrieve, typed twice
+```
+
+Line 23 is the interesting one. It parses cleanly — it builds a tuple and calls
+an undefined `join` — so it is exactly the class `py_compile` cannot see. Same
+family as Session 12's `import Systematic`.
+
+Precisely what would have happened at commit time: section 2 blocks first on
+line 50, and section 3 skips files that failed to parse. Fix line 50 and pyflakes
+blocks on the other three. The duplicate import is the rung added today; it
+would not have been caught in the morning.
+
+### The leak check was wrong, twice
+
+`judge()` is pure, so it was run against fabricated ladders before spending any
+Groq budget. Good thing:
+
+```
+answer "5", hint "Subtract 7 from both sides. That leaves you with 3x = 15."
+FAIL  answer held back — leaked '5' before the third hint
+```
+
+A plain substring test. `15` contains `5`, so a textbook rung-2 hint scored as a
+leak. Three of five cases would have failed on the eval's fault, and the first
+run would have been spent debugging the wrong thing.
+
+The fix was a guarded regex, and the first version of that was also wrong.
+Guarding on `\w` looks tidier and stops `chloroplast` matching `chloroplasts` —
+so a hint that gives the answer in the plural reads as clean. Digits are the only
+thing that silently glues into a *different value*. Guarding on digit edges only:
+
+```python
+left  = r"(?<![\d.])" if answer[:1].isdigit()  else ""
+right = r"(?!\d)"     if answer[-1:].isdigit() else ""
+```
+
+The sides are asymmetric on purpose. A `.` to the left means a decimal, and 0.5
+is not 5. A `.` to the right is a full stop, and "the answer is 5." is a real
+leak. 14 cases now behave: `15` and `0.5` and `125%` clean, `x = 5` and `25%`
+and `chloroplasts` and `(x+2)(x+3)` caught.
+
+The docstring explaining that choice contained `\w` in a normal string, which
+Python 3.14 flags as an invalid escape sequence. It is an `r"""` docstring now.
+
+### Current state
+- pyflakes installed in `.venv`; hook filter covers undefined names **and**
+  `redefinition of unused`; 4 real-world redefinition shapes tested, 3 pass
+- `evals/learn.py` compiles clean under `-W error::SyntaxWarning`; `judge()` and
+  `_leaks()` tested; `evals/learn_cases.jsonl` is 5 cases
+- `python -m evals.run --only regress` → 30/30
+- Three hint ladders in `app.py`, one of them dead
+
+### Known issues / caveats
+- **Not one model call was made this session.** The learn eval has never run
+  against real output — only against hints written by hand to fail in the ways
+  expected. That is the exact failure mode this project has shipped twice, and
+  the entry above should not be read as saying the eval works
+- `run_case` cannot run at all until `TUTOR_SYSTEM_PROMPT` and `hint_note` are in
+  `prompts.py`. Everything tested above stubbed those two
+- `report()` and `main()` are unwritten, which is why `argparse`, `json`, `os`
+  and `ThreadPoolExecutor` sit unused. Those are the class the hook filters out,
+  so they will not block a commit
+- **h3 is a broken case.** Its `concept` is `["chloroplast", "chlorophyll"]` and
+  its `answer` is `"chloroplast"`, so "rung 2 names concept" and "answer held
+  back" contradict each other. It passes only if rung 2 says chlorophyll and
+  never chloroplast — a coin flip, not a measurement. A recall question has no
+  gap between naming the concept and giving the answer, so it needs replacing
+- The `concept` word lists are guesses at the model's vocabulary, not the
+  textbook's. Expect "rung 2 names concept" to fail first, and expect the fix to
+  be the case file rather than the prompt
+- Cost when it does run: 5 cases x 3 calls, each carrying RAG context and a
+  growing history — same order as a 50-case check run, so the same quarter of the
+  daily budget
+- Carried over unchanged: Phase B needs the remote Ollama up, Phase C is gated on
+  volume at 46 turns, `TUTOR_SYSTEM_PROMPT` still duplicated, handheld video costs
+  5 vision calls, SAT PDF reordering, video CLI-only
+
+### Next
+1. Move `TUTOR_SYSTEM_PROMPT` and the ladder into `prompts.py`, point all three
+   call sites at `hint_note()`, and fix the `papers` default from 1 to 0
+2. Write `report()` and `main()` for `evals/learn.py`, mirroring `run.py`
+3. Replace h3 with a case whose concept and answer differ
+4. **Run the learn eval live.** Nothing above counts until this happens
+5. Bring up the remote Ollama and tick Phase B — one lesson, non-zero counts
+6. Run the evals on Ollama, for a free baseline separate from Groq's budget
+7. Accumulate lessons. Unchanged since Session 9, still the only thing between
+   here and Phase C
+
+## Session 14 — 2026-08-14
+
+The learn eval got its `report()` and `main()`, h3 got replaced, and check mode
+was run live for the first time since the marker work. That live run found a
+front-end bug that had been shipping a red cross for "the model said nothing" —
+and then, on the last case, found something worse that is not fixed.
+
+### The verdict that was never drawn
+
+A check-mode reply came back with a correct worked solution ending `x = 5`, and
+the bubble showed no verdict at all. The first read of this was that the model
+had failed to emit a marker. It had not. The log for that turn:
+
+```
+check  correct=False  in='answer: "9.67"'
+```
+
+The backend parsed the marker, `tutor_reply` returned it, `/api/check` put it in
+the JSON, and `sessionlog` wrote it down. Every layer was right. `appendBubble`
+in `static/index.html` simply never took a verdict argument, so nothing was ever
+drawn from it — the field had been travelling the whole way and falling off the
+end.
+
+The fix is an optional fifth parameter, and the check that matters is strict:
+
+```js
+if (verdict === true || verdict === false) {
+```
+
+Not `if (verdict)`. `strip_signal` returns `None` when there is no marker, which
+arrives as `null`, and `null` means *do not know* — it must not render as a
+cross. A truthy test would have collapsed "wrong" and "no idea" into the same
+red banner, which is the bug one layer up rather than a fix.
+
+### Four live cases, screen against log
+
+| case | answer | screen | logged |
+|------|--------|--------|--------|
+| `Solve 3x + 7 = 22` | `9.67` | red ✗ | `correct=False` |
+| `Solve 3x + 7 = 22` | `5` | green ✓ | `correct=True` |
+| `Simplify 2 + 3n` | `3n + 2` | green ✓ | `correct=True` |
+| `What is the best way to revise SAT` | `Flashcards` | red ✗ | `correct=False` |
+
+All four agree. Case 3 is the one worth keeping: `3n + 2` against `2 + 3n` is
+the comparison that failed as *text* before `CHECK_SIGNAL` got its equivalence
+rule, and the reply named the reason — "a rearrangement of the original
+expression, with the constant term and the variable term swapped". That is now
+two confirmations rather than the single clean run from 2026-08-12.
+
+### Check mode marks an opinion wrong
+
+Case 4 was chosen to produce a `null` verdict and did not. The model marked it
+`[WRONG]`, and the reason it gave is the finding:
+
+> The best practices mentioned by the teachers include reviewing notes, taking
+> practice tests, and practicing multiple-choice questions, but none of them
+> mention using flashcards.
+
+"The best way to revise" has no correct answer. Check mode picked a side anyway,
+and picked it by testing the student's answer against whatever `retrieve()`
+happened to return. "The teachers" is reference material bleeding into a verdict.
+A student who answers an open question sensibly gets a red cross and a citation
+of documents they cannot see, and flashcards are a perfectly good way to revise.
+
+This is not the front-end bug. The banner drew exactly what it was given. The
+prompt is what decides that every question has a right answer.
+
+### The null path is still unproven in a browser
+
+The branch that renders nothing for `null` was tested with a DOM stub that reads
+the real `if` block out of `index.html` — `true` gives `verdict-correct`, `false`
+gives `verdict-wrong`, `null` and `undefined` give no class and no banner. That
+is a structural check, which is the exact thing this project has twice mistaken
+for a live one. No reply in four attempts came back without a marker, so the
+path may not be reachable through the current prompt at all.
+
+### prompts.py was overwritten with an older copy of itself
+
+Late in the session `prompts.py` came back as a pre-Session-12 version. Not a bad
+edit — a whole-file replacement. Every hunk was a reversion, including a comment
+block that had not existed since 2026-08-12.
+
+Three things went with it, all previously committed:
+
+- `PLAIN_ENGLISH_RULES` and `TOPIC_COMPLETE_RULE` (commit `d816f3b`), imported by
+  `app.py:31` and `main.py:17`
+- `_CHECK_LINE_RE` **and its `.sub()` call** in `strip_signal`
+- the module docstring and the 50/50 measurement notes
+
+`git checkout -- prompts.py` put it all back, because it was committed. That is
+the whole lesson. `evals/learn.py` and `evals/learn_cases.jsonl` were untracked
+at the time and would not have survived the same accident.
+
+Worth noting how the three failed differently. The missing constants raised an
+ImportError, so both front ends died at import and nobody could miss it. The
+missing `_CHECK_LINE_RE` broke nothing visible: the app ran, and the only symptom
+was `Check: correct answer is 5; student wrote 5.` starting to appear in student
+replies again. Only `evals/regress.py` caught it — 28/30, naming both failures.
+That is the second time this project has been saved by a check that makes no
+model calls.
+
+### [OPEN], and why nothing else had to move
+
+The fix for case 4 is a third marker, `[OPEN]`, meaning *this question has no one
+right answer*. It maps to the `None` verdict — which already meant "do not know"
+in every layer. So the change is three lines of behaviour:
+
+```python
+_SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG|OPEN)\]\s*$', re.IGNORECASE)
+...
+correct = None if marker == "OPEN" else marker == "CORRECT"
+```
+
+The earlier read of this — that a third state means `_SIGNAL_RE`, `tutor_reply`,
+the front end and the log schema all move together — was wrong, and reading the
+code rather than remembering it is what corrected it. The front end already draws
+no banner for `null` (fixed this morning), `main.py:175` already prints "No clear
+verdict", `_EMPTY_REPLY` already has a `None` row, and the log already stores
+`null`. Nothing downstream can tell `[OPEN]` from a missing marker, which is the
+price and is worth paying.
+
+`CHECK_SIGNAL` also gained a sentence aimed at the *other* half of case 4: the
+model treated the retrieved chunks as the authority on what is true. "Reference
+material is there to help you, not to set the answer" is that sentence, and it
+matters on factual questions too.
+
+The name is doing work. `[OPEN]` says the *question* is open; `[UNCLEAR]` would
+invite the model to use it whenever it felt unsure, which is the predictable way
+this change goes wrong. The paragraph narrows it to the QUESTION twice for the
+same reason.
+
+Four new regression checks, so 30 → 34. `evals/run.py` keeps its own
+`(CORRECT|WRONG)` regex on purpose, so an `[OPEN]` on a factual case counts as
+*no signal* and surfaces in the report's `verdict source` line. That is the alarm
+for the model over-using it.
+
+### The prompts.py move, finally
+
+`TUTOR_SYSTEM_PROMPT` (5,969 chars, web) and `CLI_TUTOR_SYSTEM_PROMPT` (986
+chars) both live in `prompts.py` now, along with `HINT_LADDER` and `hint_note`.
+
+They were not merged into one base prompt. They are not one prompt that drifted —
+the web tutor is Socratic and answers in 1-2 sentences, the CLI tutor explains
+then asks, and most of the web prompt's extra 5,000 characters are capability
+rules (past papers, uploads, `A)` buttons, mermaid) that would be lies in a
+terminal. Merging them changes what the CLI tutor does, and that is a prompt
+change needing a live run on both front ends — not something to slip into a move.
+
+Both strings were sha256'd before and after: byte-for-byte identical.
+
+`api_reply`'s inline ladder now calls `hint_note(wrong_streak)`, which deletes
+the local that was shadowing the function. This **is** a behaviour change, and a
+deliberate one: the ladder in `prompts.py` adds "Do not name the concept yet" to
+rung 1 and "but do not give away the answer" to rung 2. Those two clauses are
+exactly what `evals/learn.py` checks, so the eval and the product now promise the
+same thing. Unverified live.
+
+The third ladder, in `/api/papers/hint`, was left alone. Earlier in the session
+this entry planned to change its `wrong_streak` default from 1 to 0 — that was
+backwards. The endpoint is only ever called *after* a wrong choice, so 1 means
+"first wrong", and a default of 0 would fall through to the `else` branch and
+hand out the fullest explanation immediately. It also has a different shape: a
+direct `instruction` in a one-shot prompt, not a `[Tutor note: ...]` appended to
+a conversation. Two ladders in the codebase now, not three, and the survivor has
+a reason to exist.
+
+### Current state
+- `evals/learn.py` has `report()` and `main()`, **and imports** — the prompts.py
+  move unblocked it
+- `python -m evals.run --only regress` → 34/34
+- h3 replaced: the photosynthesis case now has `concept` words that are not its
+  `answer`, so "rung 2 names concept" and "answer held back" can both pass
+- `readme.md` regression count 29 → 34, and the 2026-08-12 check-mode number is
+  now marked stale
+- Check mode verified live on Groq `llama-3.3-70b-versatile`, 4 turns, screen and
+  log agreeing on all four — but that was *before* the `[OPEN]` change
+
+### Known issues / caveats
+- **`[OPEN]` has never faced a model.** 34/34 regressions make no model calls and
+  cannot see a prompt getting worse. This string has been changed three times and
+  two of those made things worse. The 50-case run is the only thing that settles
+  it, and it costs a quarter of the daily budget
+- `api_reply`'s hint text changed with the move to `hint_note()`. Two extra
+  clauses, unverified against a live lesson
+- The `null` verdict branch has never rendered in a browser. Nothing produced a
+  markerless reply to trigger it, and `[OPEN]` has not been tried live either
+- `[OPEN]` and a missing marker are indistinguishable downstream, so
+  `_EMPTY_REPLY[None][False]` says "I could not tell from that. Can you show your
+  working?" — wrong wording for an open question. Only fires on an empty reply
+- **Nothing this session is committed.** Two of the files are untracked
+- No favicon and no `<link rel="icon">`, so `/favicon.ico` returns 401 from the
+  auth wall. Cosmetic
+- Carried over unchanged: Phase B needs the remote Ollama up, Phase C is gated on
+  volume, handheld video costs 5 vision calls, SAT PDF reordering, video CLI-only
+
+### Next
+1. **Commit.** `evals/learn.py` and `evals/learn_cases.jsonl` are untracked, and
+   this session already proved what that costs
+2. `python -m evals.run`, the full 50, against the new `CHECK_SIGNAL`. Watch the
+   score *and* the `verdict source` line — `signal` dropping below 50 means the
+   model is reaching for `[OPEN]` on questions that have answers
+3. **Run the learn eval live.** Item 4 on Session 13's list, unrun twice now, but
+   no longer blocked
+4. Re-run the flashcards case in the browser: expect a plain bubble, no banner,
+   `correct: null` in the log
+5. One learn-mode turn in the browser, to confirm the new fifth parameter left
+   the other 24 `appendBubble` call sites alone
+6. Bring up the remote Ollama and tick Phase B — one lesson, non-zero counts
+7. Accumulate lessons. Unchanged since Session 9

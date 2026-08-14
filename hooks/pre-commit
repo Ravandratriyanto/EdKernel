@@ -148,16 +148,23 @@ EOF
 fi
 
 
-# --- 3. Pyflakes: undefined names ------------------------------------------
+# --- 3. Pyflakes: undefined names and shadowed definitions ------------------
 #
 # The syntax check catches typos that stop a file parsing. It cannot catch a
 # typo that still parses — `sqlite3.exeucte` or a lost `import`, which look
 # fine to the compiler and fail only when the line runs. Pyflakes reads the
 # same class of bug from the AST.
 #
-# Filtered to `undefined name` / `undefined local`. Pyflakes also flags unused
-# imports and unused locals, both of which have real reasons to exist (re-exports,
-# side-effect imports, work-in-progress code) and would block legitimate commits.
+# Filtered to `undefined name` / `undefined local` / `redefinition of unused`.
+# Pyflakes also flags unused imports and unused locals, both of which have real
+# reasons to exist (re-exports, side-effect imports, work-in-progress code) and
+# would block legitimate commits.
+#
+# The redefinition case is here because of Session 12: `_ollama_usage` was typed
+# in twice, the new version above the original, and the second `def` silently
+# replaced the first. No error, no warning, and the new code never ran — the
+# conclusion would have been "the guard doesn't work" when it was never called.
+# A second `def` of the same name in one file is nearly always that mistake.
 #
 # Skipped for files that failed the syntax check above, which pyflakes would
 # just repeat. Skipped entirely when pyflakes isn't installed, with one warning.
@@ -181,11 +188,11 @@ else
         # pyflakes with no args reads stdin and labels it <stdin>; substitute
         # the real path back in so the message is grep-able and clickable.
         findings=$(git show ":$path" | "$pyflakes_py" -m pyflakes 2>&1 \
-                   | grep -E 'undefined (name|local)' \
+                   | grep -E 'undefined (name|local)|redefinition of unused' \
                    | sed "s|<stdin>|$path|g" || true)
         if [[ -n "$findings" ]]; then
             if (( lint_bad == 0 )); then
-                echo "COMMIT BLOCKED — staged Python has undefined names:" >&2
+                echo "COMMIT BLOCKED — staged Python has undefined or shadowed names:" >&2
                 echo >&2
             fi
             lint_bad=1
@@ -196,7 +203,8 @@ else
     if (( lint_bad )); then
         cat >&2 <<'EOF'
 
-Fix the reference or add the missing import, then `git add` the file again.
+Fix the reference, add the missing import, or delete the duplicate definition,
+then `git add` the file again.
 
 Override with: git commit --no-verify
 EOF

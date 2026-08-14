@@ -1,0 +1,5 @@
+{"id": "h1", "topic": "solving linear equations", "question": "Solve 3x + 7 = 22", "wrong": "x = 9.67", "concept": ["subtract", "both sides", "inverse"], "answer": "5"}
+{"id": "h2", "topic": "quadratic factorising", "question": "Factorise x^2 + 5x + 6", "wrong": "(x+1)(x+6)", "concept": ["multiply", "add", "pair", "factors"], "answer": "(x+2)(x+3)"}
+{"id": "h3", "topic": "photosynthesis", "question": "Which gas do plants release during photosynthesis?", "wrong": "carbon dioxide", "concept": ["water", "split", "light", "chlorophyll"], "answer": "oxygen"}
+{"id": "h4", "topic": "the chain rule", "question": "Differentiate (2x + 1)^3", "wrong": "3(2x+1)^2", "concept": ["chain", "inside", "outside", "multiply"], "answer": "6(2x+1)^2"}
+{"id": "h5", "topic": "percentage change", "question": "A price rises from 40 to 50. What is the percentage increase?", "wrong": "20%", "concept": ["divide", "original", "difference"], "answer": "25%"}

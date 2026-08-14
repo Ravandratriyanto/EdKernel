@@ -168,25 +168,39 @@ proven wrong rather than just written differently. Model-generated keys were
 wrong 2 times in 3 before the verification pass existed, and an eval with a bad
 key fails you for being right.
 
-`evals/regress.py` is 29 checks for bugs already fixed once — the unclosed
+`evals/regress.py` is 34 checks for bugs already fixed once — the unclosed
 `<think>`, `NH3` not being raised to `NH^3`, the running footer, `_dedupe`
 collapsing one page but not two, the login rate limiter, a bare `[CORRECT]`
-reaching the student as an empty bubble, and the `Check:` scaffolding line
-leaking into a reply. No model calls, so there is no excuse to skip it.
+reaching the student as an empty bubble, the `Check:` scaffolding line leaking
+into a reply, and an open question being marked wrong. No model calls, so there
+is no excuse to skip it.
 
 **Run this before and after any prompt change.** Two regressions shipped here
 because a change was checked structurally and never against real model output.
 
 As of 2026-08-12, against Groq `llama-3.3-70b-versatile`: **50/50 on check mode,
-29/29 regressions, 50/50 replies carrying a verdict signal, no errors.**
+30/30 regressions, 50/50 replies carrying a verdict signal, no errors.**
 
-That is one clean run, not proof the marker problem is gone. `CHECK_SIGNAL` now
-asks for a `Check: correct answer is X; student wrote Y` line before the marker,
-plus a rule that equivalent forms count as matching. The rule is the part that
-matters: without it the model compared the two answers as *text* and failed
-`3n + 2` against `2 + 3n`. With it, correct answers scored 25/25. Two earlier
-attempts made things worse — read the comments above `CHECK_SIGNAL` in
-`prompts.py` before trying a third.
+**That check-mode number is stale.** `CHECK_SIGNAL` gained an `[OPEN]` branch on
+2026-08-14 and has not been re-measured against the 50-case set since. Regressions
+are 34/34 as of 2026-08-14, but those make no model calls and cannot see a prompt
+getting worse.
+
+Even before it went stale it was one clean run, not proof the marker problem is
+gone. `CHECK_SIGNAL` asks for a `Check: correct answer is X; student wrote Y` line
+before the marker, plus a rule that equivalent forms count as matching. The rule
+is the part that matters: without it the model compared the two answers as *text*
+and failed `3n + 2` against `2 + 3n`. With it, correct answers scored 25/25. Three
+attempts have changed this string and two made things worse — read the comments
+above `CHECK_SIGNAL` in `prompts.py` before trying a fourth.
+
+`[OPEN]` is the third. It exists because check mode marked *"flashcards"* wrong
+for revising, on the grounds that the retrieved reference chunks did not mention
+them. It maps to the same `None` verdict a missing marker gives, so no other
+layer changed. The risk it carries is the model reaching for it on questions that
+do have answers; `evals/run.py` keeps its own `(CORRECT|WRONG)` regex on purpose,
+so an `[OPEN]` there counts as *no signal* and shows up in the `verdict source`
+line of the report. Watch that line.
 
 The `Check:` line is scaffolding and never reaches the student; `_CHECK_LINE_RE`
 strips it. Reword one and you must reword the other.

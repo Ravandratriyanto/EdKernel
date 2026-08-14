@@ -14,7 +14,7 @@ from video.frame_extractor import ExtractError
 # Shared with app.py so the two front ends cannot drift on the verdict signal.
 from prompts import (
     build_check_prompt, strip_signal,
-    PLAIN_ENGLISH_RULES, TOPIC_COMPLETE_RULE,
+    CLI_TUTOR_SYSTEM_PROMPT as TUTOR_SYSTEM_PROMPT,
 )
 
 load_dotenv()
@@ -37,14 +37,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vision-model", default="",
                         help="Overrides the provider's default image model")
     return parser
-
-TUTOR_SYSTEM_PROMPT = (
-    "You are a patient, encouraging SAT/A-level tutor. "
-    f"{PLAIN_ENGLISH_RULES} "
-    "Teach one concept at a time. After each explanation, ask the student exactly ONE question to check understanding. "
-    "When the student answers, give brief feedback and either move to the next concept or re-explain if they struggled. "
-    f"{TOPIC_COMPLETE_RULE}"
-)
 
 def question_from_image(path: str, model: str, host: str,
                         provider: str, api_key: str, vision_model: str) -> str:

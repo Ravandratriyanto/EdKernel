@@ -149,6 +149,23 @@
       border-bottom-right-radius: 4px;
     }
 
+    /* Check mode's verdict. Only ever drawn when the model actually signalled:
+       a null verdict means strip_signal found no marker, which is "do not know"
+       and must not look like a cross. Those replies get an ordinary bubble. */
+    .tutor .bubble.verdict-correct { border-left: 3px solid #16a34a; }
+    .tutor .bubble.verdict-wrong   { border-left: 3px solid #dc2626; }
+
+    .verdict {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+    .verdict.verdict-correct { color: #16a34a; }
+    .verdict.verdict-wrong   { color: #dc2626; }
+
     .bubble p { margin-bottom: 0.5em; }
     .bubble p:last-child { margin-bottom: 0; }
     .bubble strong { font-weight: 600; }
@@ -693,7 +710,7 @@
   }
 
   /* ---- bubbles ---- */
-  function appendBubble(role, text, attach, onOptionSelect) {
+  function appendBubble(role, text, attach, onOptionSelect, verdict) {
     const area = document.getElementById('chat-area');
     const row  = document.createElement('div');
     row.className = `bubble-row ${role === 'tutor' ? 'tutor' : 'student'}`;
@@ -708,6 +725,20 @@
     const options = role === 'tutor' ? extractOptions(text) : [];
     const displayText = options.length > 0 ? stripOptions(text) : text;
     bubble.innerHTML = marked.parse(displayText);
+
+    // The backend has always returned `correct` and the front end has always
+    // thrown it away, so a wrong answer came back as a worked solution with
+    // nothing saying it was wrong. Seen live 2026-08-14 on 3x + 7 = 22.
+    //
+    // Strictly true/false. `correct` is null when the model sent no marker,
+    // and null is not wrong — an == comparison would draw a cross on a reply
+    // that never carried a verdict at all.
+    if (verdict === true || verdict === false) {
+      const cls = verdict ? 'verdict-correct' : 'verdict-wrong';
+      bubble.classList.add(cls);
+      bubble.insertAdjacentHTML('afterbegin',
+        `<div class="verdict ${cls}">${verdict ? '✓ Correct' : '✗ Not correct'}</div>`);
+    }
 
     if (attach) {
       if (attach.type === 'image') {
@@ -1007,7 +1038,7 @@
       });
       const data = await res.json();
       removeThinking();
-      appendBubble('tutor', data.response);
+      appendBubble('tutor', data.response, null, null, data.correct);
     } catch (e) {
       removeThinking();
       appendBubble('tutor', `Error: ${e.message}`);
