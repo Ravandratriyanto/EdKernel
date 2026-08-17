@@ -157,6 +157,28 @@ _STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', r
 # "Check: does that make sense?" is left alone.
 _CHECK_LINE_RE = re.compile(r'^[ \t]*Check:\s*correct answer is\b[^\n]*\n?',
                             re.MULTILINE | re.IGNORECASE)
+# A verdict marker that landed mid-reply instead of at the end. The model is
+# told to write it last with nothing after it; when it disobeys, the bracket
+# reaches the student — "That is [WRONG] Plants release oxygen...". Neither
+# guard above catches that: _SIGNAL_RE is anchored to end-of-string and
+# _STRAY_MARKER_RE needs the marker alone on its own line.
+#
+# Two passes. This one fires only at a sentence boundary and captures up to 40
+# characters of lead-in, so a dangling "That is" leaves with the marker —
+# deleting the bracket alone would strand it as broken English. The 40-char cap
+# and the excluded .!? are what stop it eating real content.
+_LEAD_IN_MARKER_RE = re.compile(
+    r'(?:^|(?<=[.!?])|(?<=\n))[ \t]*([^.!?\n]{0,40}?)[ \t]*'
+    r'\[(?:CORRECT|WRONG|OPEN)\][ \t]*',
+    re.IGNORECASE)
+
+# The sweep for what the first pass cannot reach — a marker sitting after a
+# clause too long to be a verdict phrase. There the surrounding words are real,
+# so only the bracket goes. This cannot touch "[0, 5]" or "[SOURCE A]": the
+# alternation is literal and those three words are the only ones it knows.
+_INLINE_MARKER_RE = re.compile(r'[ \t]*\[(?:CORRECT|WRONG|OPEN)\][ \t]*',
+                               re.IGNORECASE)
+
 
 CHECK_SIGNAL = (
     "First decide whether the question has one correct answer.\n"
@@ -294,5 +316,8 @@ def strip_signal(text: str) -> tuple:
     else:
         clean, correct = text, None
     clean = _STRAY_MARKER_RE.sub('', clean)
+    clean = _LEAD_IN_MARKER_RE.sub(' ', clean)
+    clean = _INLINE_MARKER_RE.sub(' ', clean)
     clean = _CHECK_LINE_RE.sub('', clean)
+
     return re.sub(r'\n{3,}', '\n\n', clean).strip(), correct

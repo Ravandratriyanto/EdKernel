@@ -178,16 +178,17 @@ is no excuse to skip it.
 **Run this before and after any prompt change.** Two regressions shipped here
 because a change was checked structurally and never against real model output.
 
-As of 2026-08-12, against Groq `llama-3.3-70b-versatile`: **50/50 on check mode,
-30/30 regressions, 50/50 replies carrying a verdict signal, no errors.**
+As of 2026-08-17, against Groq `llama-3.3-70b-versatile`: **50/50 on check mode,
+34/34 regressions, 50/50 replies carrying a verdict signal, 0 unparsed.**
 
-**That check-mode number is stale.** `CHECK_SIGNAL` gained an `[OPEN]` branch on
-2026-08-14 and has not been re-measured against the 50-case set since. Regressions
-are 34/34 as of 2026-08-14, but those make no model calls and cannot see a prompt
-getting worse.
+This is the first run since `CHECK_SIGNAL` gained its `[OPEN]` branch on
+2026-08-14. It took two invocations: 48 cases landed, and q19 and q32 died on a
+per-minute 429 after exhausting all four retries, so they were re-run alone with
+`--case q19 q32 --jobs 1`. Both passed. Nothing was scored from a failed call —
+the first run reported those two as `error`, not as wrong answers.
 
-Even before it went stale it was one clean run, not proof the marker problem is
-gone. `CHECK_SIGNAL` asks for a `Check: correct answer is X; student wrote Y` line
+Two clean runs now, not one, but still not proof the marker problem is gone.
+`CHECK_SIGNAL` asks for a `Check: correct answer is X; student wrote Y` line
 before the marker, plus a rule that equivalent forms count as matching. The rule
 is the part that matters: without it the model compared the two answers as *text*
 and failed `3n + 2` against `2 + 3n`. With it, correct answers scored 25/25. Three
@@ -201,6 +202,9 @@ layer changed. The risk it carries is the model reaching for it on questions tha
 do have answers; `evals/run.py` keeps its own `(CORRECT|WRONG)` regex on purpose,
 so an `[OPEN]` there counts as *no signal* and shows up in the `verdict source`
 line of the report. Watch that line.
+
+Measured 2026-08-17: `unparsed 0` across all 50, so the model reached for `[OPEN]`
+on none of the questions that do have answers. One run, on one model.
 
 The `Check:` line is scaffolding and never reaches the student; `_CHECK_LINE_RE`
 strips it. Reword one and you must reword the other.

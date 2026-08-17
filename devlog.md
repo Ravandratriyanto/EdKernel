@@ -2118,3 +2118,161 @@ a reason to exist.
    the other 24 `appendBubble` call sites alone
 6. Bring up the remote Ollama and tick Phase B — one lesson, non-zero counts
 7. Accumulate lessons. Unchanged since Session 9
+
+
+## Session 15 — 2026-08-17
+
+Three days off. The session started by asking what was left, which the Next list
+answered accurately for once. Two numbers got measured, one of them turned out to
+be measuring the wrong thing, and a marker leak surfaced that had been reachable
+since the `[CORRECT]`/`[WRONG]` convention was written.
+
+### Check mode, finally re-measured with `[OPEN]` in it
+
+**50/50, signal 50, prose 0, unparsed 0.** Groq `llama-3.3-70b-versatile`.
+
+This was the run Session 14 could not afford. `[OPEN]` had never faced a model,
+and the risk it carried was the model reaching for it on questions that do have
+answers — which shows up as `unparsed` in the `verdict source` line, because
+`evals/run.py` keeps its own `(CORRECT|WRONG)` regex on purpose. It reached for
+it zero times in 50.
+
+It took two invocations. 48 cases landed; q19 and q32 died on a per-minute 429
+after exhausting all four retries, and were re-run alone with `--case q19 q32
+--jobs 1`. Both passed. Nothing was scored from a failed call — the first run
+reported those two as `error`, not as wrong answers, which is the Session 12 fix
+doing its job.
+
+Worth noting for next time: at `--jobs 4` all four workers back off together and
+wake into the same 12,000 TPM ceiling, so a couple of casualties per 50-case run
+is the normal outcome, not bad luck.
+
+### The learn eval ran for the first time, and was wrong
+
+`evals/learn.py` has been runnable since the Session 14 prompts.py move and had
+never been run. First run: **0/5**. It was not the ladder.
+
+`run_case` looped `for streak in range(ATTEMPTS)` — 0, 1, 2. But `hint_note(0)`
+returns `""`, because a streak of 0 is a first attempt and gets no note. So the
+three replies collected were *no note*, rung 1, rung 2, while `judge()` read them
+as rungs 1, 2, 3. Every check landed a turn late, and rung 3 never ran at all.
+
+The tell was h1. `hints[1]` — the real rung 1, told "Do not name the concept yet"
+— replied *"What can you do to the equation 3x + 7 = 22 to get rid of the 7?"*
+That is rung 1 doing exactly its job, and it was failed for not naming the
+concept, which is rung 2's promise.
+
+Fixed to `range(1, ATTEMPTS + 1)`, and the `rung {i}` labels in `report()` became
+`rung {i + 1}` to match — the ladder has no rung 0.
+
+### The real score, and what it says
+
+**1/5.** A real number this time.
+
+```
+hints differ               5/5
+rung 1 withholds concept   1/5
+rung 2 names concept       4/5
+answer held back           4/5
+```
+
+Rung 1 is the problem. `HINT_LADDER[1]` says "Do not name the concept yet" and
+the tutor named it in four cases out of five. That is a prompt finding, not a
+harness one, and it is the first time this has been measured at all.
+
+But the checker is blunt enough that the number is softer than it looks. `_names`
+is a plain substring test with no word boundaries, so h3's `concept` word "light"
+matched inside *"sunlight"* — the tutor said "sunlight, water and carbon dioxide"
+and scored as naming two concepts. `_leaks` already has digit guards for exactly
+this class of mistake; `_names` has none. And h2's concept list is "multiply" and
+"add", which a rung-1 hint about factorising can hardly avoid.
+
+So some of the 4/5 failure is real and some is the ruler. Not worth another live
+run until `_names` gets word boundaries.
+
+### A misplaced marker was reaching the student
+
+The first learn run turned up this reply, live:
+
+> That is **[WRONG]** Plants release oxygen during photosynthesis. What do plants
+> use from the air to make glucose?
+
+`strip_signal` returned it untouched — verdict `None`, bracket still in the body.
+Both guards miss a marker mid-sentence: `_SIGNAL_RE` is anchored to end-of-string
+and `_STRAY_MARKER_RE` needs the marker alone on its own line. This has been
+reachable since the convention was written; nothing had produced one before.
+
+Fixed with two passes in `prompts.py`, because deleting the bracket alone strands
+the lead-in and *"That is Plants release oxygen"* reads worse than the leak:
+
+- `_LEAD_IN_MARKER_RE` fires only at a sentence boundary and captures up to 40
+  characters of lead-in, so a dangling "That is" leaves with the marker
+- `_INLINE_MARKER_RE` sweeps whatever the first pass cannot reach — a marker
+  after a clause too long to be a verdict phrase — and takes only the bracket
+
+The 40-character cap and the excluded `.!?` are the whole design. They are what
+tell "That is [WRONG] Plants..." from "...which reverses the order [WRONG] so try
+again", where the words before the marker are real content.
+
+**The verdict is deliberately discarded.** The model plainly meant "wrong", and an
+inline marker still yields `None`. Promoting it would stop `_SIGNAL_RE`'s end
+anchor being the only thing that decides a verdict, and a tutor sentence like "if
+you see [WRONG] on your screen" would start parsing as one. The cost is a real
+signal lost whenever the model misplaces its marker; downstream that reads as "do
+not know", which is the safe direction.
+
+Typed in by hand, and it took two passes to land — an indentation error from a
+duplicated line, then `[\t]` where `[ \t]` was meant, which made the second regex
+match only tabs and require one. That second version imported cleanly and silently
+did nothing, which is the failure mode worth remembering.
+
+### Three regressions added, 34 → 37
+
+- a mid-sentence `[WRONG]` does not reach the student
+- a marker after a long clause loses the bracket, not the words
+- stripping inline markers leaves brackets that are not markers
+
+The first two were checked by pointing both regexes at a pattern that matches
+nothing and confirming they flip to failing. They do. The third stays green
+without the fix — it guards a future over-broad edit to the alternation rather
+than pinning this bug, the same way "[OPEN] does not swallow the real verdicts"
+already does.
+
+### Current state
+- `python -m evals.run --only regress` → **37/37**
+- check mode **50/50** on Groq `llama-3.3-70b-versatile`, `unparsed 0`
+- hint ladder **1/5**, first honest measurement
+- `readme.md` check-mode number no longer stale; the `[OPEN]` paragraph carries
+  the `unparsed 0` result
+- roughly half the day's Groq budget spent: 52 check calls, 30 learn calls
+
+### Known issues / caveats
+- **Rung 1 of `HINT_LADDER` is not obeyed** — concept named in 4 of 5 cases.
+  Partly real, partly `_names` having no word boundaries
+- `_names` is a plain substring test. "light" matches inside "sunlight". `_leaks`
+  solved this class of problem already and the fix was not carried across
+- `evals/learn.py` sends two user messages back to back — the opening "start with
+  this question" and the student's wrong answer, with no assistant turn between.
+  The tutor never gets to *ask*, so its first reply opens the lesson and marks an
+  answer at once. A fair simulation of a student who answers immediately, but not
+  the flow `api_reply` takes
+- **The marker fix has not been seen to catch a live stray marker.** The re-run
+  did not reproduce one. Seven cases and three regressions cover it structurally;
+  no live turn has exercised it
+- `_leaks` cannot tell "the answer is X" from a multiple-choice option list. It
+  flagged h4 for `6(2x+1)^2` when that was option C of a pick-one
+- Carried over unchanged: Phase B needs the remote Ollama up, Phase C is gated on
+  volume, handheld video costs 5 vision calls, SAT PDF reordering, video CLI-only,
+  no favicon so `/favicon.ico` returns 401
+
+### Next
+1. Give `_names` word boundaries, the way `_leaks` already has digit guards, then
+   re-run the learn eval. The 1/5 is not trustworthy until then
+2. Rung 1 of `HINT_LADDER`. Once the ruler is fixed this is prompt work, and
+   prompt work needs live runs on both front ends
+3. Bring up the remote Ollama and tick Phase B — one lesson, non-zero token
+   counts. Unchanged since Session 12
+4. Two browser checks still unrun: the flashcards case (plain bubble, no banner,
+   `correct: null` in the log) and one learn turn to confirm the fifth
+   `appendBubble` parameter left the other 24 call sites alone
+5. Accumulate lessons. Unchanged since Session 9

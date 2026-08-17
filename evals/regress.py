@@ -316,6 +316,47 @@ def _open_keeps_other_verdicts():
             and strip_signal("No.\n[WRONG]")[1] is False)
 
 
+# --- a misplaced marker never reaches the student -------------------------
+
+@check("a mid-sentence [WRONG] does not reach the student")
+def _inline_marker_stripped():
+    # Seen live 2026-08-17 in the learn eval, case h3: the tutor opened with
+    # "That is [WRONG] Plants release oxygen during photosynthesis." Both
+    # existing guards miss it — _SIGNAL_RE is anchored to end-of-string and
+    # _STRAY_MARKER_RE needs the marker alone on its own line.
+    #
+    # The dangling "That is" must go too. Deleting the bracket on its own
+    # strands it, and "That is Plants release oxygen" reads worse than the leak.
+    text, correct = strip_signal(
+        "That is [WRONG] Plants release oxygen during photosynthesis.")
+    return ("[WRONG]" not in text
+            and not text.startswith("That is")
+            and text == "Plants release oxygen during photosynthesis."
+            and correct is None)
+
+
+@check("a marker after a long clause loses the bracket, not the words")
+def _inline_marker_keeps_real_words():
+    # The second pass. Here the text before the marker is real content, not a
+    # verdict phrase, so only the bracket goes. The 40-character cap on the
+    # first pass is what tells the two cases apart — delete the cap and this
+    # sentence loses its opening words.
+    text, _ = strip_signal(
+        "You divided by three before subtracting seven, "
+        "which reverses the order [WRONG] so try again.")
+    return text == ("You divided by three before subtracting seven, "
+                    "which reverses the order so try again.")
+
+
+@check("stripping inline markers leaves brackets that are not markers")
+def _inline_marker_spares_other_brackets():
+    # The risk the two new passes carry. Interval notation is ordinary maths in
+    # a tutor reply, and widening the alternation to anything bracketed would
+    # eat it silently.
+    text, _ = strip_signal("The range is [0, 5] and the domain is all reals.")
+    return text == "The range is [0, 5] and the domain is all reals."
+
+
 # --- the harness itself --------------------------------------------------
 
 @check("a case with no verdict is not scored as a correct rejection")
