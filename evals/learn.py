@@ -34,8 +34,26 @@ ATTEMPTS = 3
 def _norm(text: str ) -> str:
     return re.sub(r"\s+", " ", text).strip().casefold()
 def _names(text: str, words) -> bool:
-    low = text.casefold()
-    return any(w.casefold() in low for w in words)
+    r"""Does this hint name any of the concept words?
+    A plain substring test fails here the way it failed in _leaks, but for the
+    opposite reason. There the danger was being too strict; here it is being too
+    loose. h3's concept word "light" matched inside "sunlight", so a rung-1 hint
+    saying "sunlight, water and carbon dioxide" scored as naming a concept it had
+    actually withheld, and the ladder was marked broken when it was not.
+
+    So the boundary goes on the FRONT only. "light" no longer matches inside
+    "sunlight", but "subtracting" still counts as naming "subtract" — an
+    inflection is the same concept, and a \b on both ends would throw those away.
+
+    The tail is a known ending rather than a character count. \w{0,3} was tried
+    first and lost "splitting" (split + four), while widening it to four let
+    "address" match "add". The optional \w is the doubled consonant in
+    "splitting" and "adding"; without it those need a longer allowance than
+    "address" can be kept out of.
+    """
+    return any(re.search(r'\b' + re.escape(w) + r'\w?(?:s|es|ed|ing)?\b',
+                         text, re.I)
+               for w in words)
 def _leaks(text: str, answer: str) -> bool:
     r"""Is the final answer sitting in this text?
 

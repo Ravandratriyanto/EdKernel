@@ -359,6 +359,39 @@ def _inline_marker_spares_other_brackets():
 
 # --- the harness itself --------------------------------------------------
 
+@check("a concept word does not match inside a longer word")
+def _names_needs_a_word_boundary():
+    """_names was a plain substring test, so it read concepts that were not there.
+
+    Seen 2026-08-17: h3's concept word "light" matched inside "sunlight". The
+    tutor said "sunlight, water and carbon dioxide" — a rung-1 hint withholding
+    the concept — and scored as naming it. The ladder was marked broken when it
+    was behaving.
+    """
+    from evals.learn import _names
+
+    return (not _names("sunlight, water and carbon dioxide", ["light"])
+            and not _names("the address of the school", ["add"])
+            and not _names("additional working is needed", ["add"])
+            and _names("sunlight, water and carbon dioxide", ["water"]))
+
+
+@check("an inflected concept word still counts as naming it")
+def _names_allows_inflections():
+    """The other half, and the reason \\b cannot go on both ends.
+
+    "subtracting" is the same concept as "subtract". A boundary at each end
+    would reject it and under-count instead of over-counting — the mirror of
+    the bug above, and just as wrong. _leaks made the matching call for its own
+    reasons and its comment says so.
+    """
+    from evals.learn import _names
+
+    return (_names("subtracting 7 from both sides", ["subtract"])
+            and _names("splitting the water molecule", ["split"])
+            and _names("adds up to five", ["add"]))
+
+
 @check("a case with no verdict is not scored as a correct rejection")
 def _no_verdict_is_not_a_pass():
     """got=None once counted as a rejection, because `not None` is True.

@@ -2239,12 +2239,16 @@ than pinning this bug, the same way "[OPEN] does not swallow the real verdicts"
 already does.
 
 ### Current state
-- `python -m evals.run --only regress` → **37/37**
+- `python -m evals.run --only regress` → **39/39**
 - check mode **50/50** on Groq `llama-3.3-70b-versatile`, `unparsed 0`
 - hint ladder **1/5**, first honest measurement
 - `readme.md` check-mode number no longer stale; the `[OPEN]` paragraph carries
   the `unparsed 0` result
-- roughly half the day's Groq budget spent: 52 check calls, 30 learn calls
+- the day's Groq budget was spent in full — 100,000 TPD, 99,856 used. 52 check
+  calls and two learn runs did it. A learn call is far dearer than a check call:
+  each case is a three-turn conversation whose history grows every turn, so 30
+  learn calls cost more than 50 check calls. Budgeting by call count is wrong;
+  budget by tokens
 
 ### Known issues / caveats
 - **Rung 1 of `HINT_LADDER` is not obeyed** — concept named in 4 of 5 cases.
@@ -2265,9 +2269,42 @@ already does.
   volume, handheld video costs 5 vision calls, SAT PDF reordering, video CLI-only,
   no favicon so `/favicon.ico` returns 401
 
+### Late addition — `_names` fixed, re-run blocked
+
+`_names` now anchors on the front only: `\b` + the word + an optional doubled
+letter + a known ending (`s|es|ed|ing`). "light" no longer matches inside
+"sunlight", while "subtracting" still counts as naming "subtract" — a `\b` on
+both ends would have thrown the inflections away, which is the mistake `_leaks`
+avoided for its own reasons. 10 hand-written cases pass, including "address" not
+counting as "add" and "splitting" counting as "split".
+
+Two regressions pin it, 37 → 39, and they bracket the answer from both sides:
+
+| `_names` version                   | boundary check | inflection check |
+| ---------------------------------- | -------------- | ---------------- |
+| plain substring (the bug)          | **fails**      | passes           |
+| `\b` on both ends (over-correction)| passes         | **fails**        |
+| current                            | passes         | passes           |
+
+The second check does not catch the original bug — the substring test matched
+inflections too, because it matched everything. It exists for the *plausible
+wrong fix*, which is putting `\b` on both ends and quietly under-counting.
+
+The live re-run died on the daily limit, so **the 1/5 above is still the last
+measured number and it was measured with the broken `_names`.** Treat it as
+unreliable in both directions until the eval runs again.
+
+One rung-1 reply did land before the wall, on h1:
+
+> To get x by itself, you need to get rid of the 7 that's being added to 3x.
+> What operation can you do to both sides to make the 7 go away?
+
+Against the *fixed* `_names` that still names a concept — `both sides`. So the
+rung-1 problem is not purely an artefact of the substring bug. One data point.
+
 ### Next
-1. Give `_names` word boundaries, the way `_leaks` already has digit guards, then
-   re-run the learn eval. The 1/5 is not trustworthy until then
+1. Re-run the learn eval once the daily budget resets. `_names` is fixed but the
+   1/5 was measured before it, so there is currently no trustworthy score
 2. Rung 1 of `HINT_LADDER`. Once the ruler is fixed this is prompt work, and
    prompt work needs live runs on both front ends
 3. Bring up the remote Ollama and tick Phase B — one lesson, non-zero token
