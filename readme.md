@@ -178,14 +178,26 @@ is no excuse to skip it.
 **Run this before and after any prompt change.** Two regressions shipped here
 because a change was checked structurally and never against real model output.
 
-As of 2026-08-17, against Groq `llama-3.3-70b-versatile`: **50/50 on check mode,
-34/34 regressions, 50/50 replies carrying a verdict signal, 0 unparsed.**
+As of 2026-08-17, against Groq `openai/gpt-oss-120b`: **50/50 on check mode,
+39/39 regressions, 50/50 replies carrying a verdict signal, 0 unparsed.**
 
-This is the first run since `CHECK_SIGNAL` gained its `[OPEN]` branch on
-2026-08-14. It took two invocations: 48 cases landed, and q19 and q32 died on a
-per-minute 429 after exhausting all four retries, so they were re-run alone with
-`--case q19 q32 --jobs 1`. Both passed. Nothing was scored from a failed call —
-the first run reported those two as `error`, not as wrong answers.
+**`llama-3.3-70b-versatile` is gone.** It was decommissioned on 2026-08-17,
+mid-session — it served 52 calls that morning and returned `model_not_found` by
+the afternoon. The account has no Llama chat model at all now. Every number in
+this file and in `devlog.md` dated before that change was measured against it.
+
+The replacement is `openai/gpt-oss-120b`, and the 50-case set was re-run on it
+from scratch: same 50/50, same `unparsed 0`, so `CHECK_SIGNAL` and the `[OPEN]`
+branch both transfer. **Do not put `qwen/qwen3.6-27b` here** even though it is
+the vision model — it reasons out loud, and only the vision path calls
+`drop_reasoning()`, so `<think>` blocks would reach the student and `_SIGNAL_RE`
+would stop finding verdicts.
+
+That run also took two invocations. This model's per-minute ceiling is **8,000
+TPM, not 12,000**, so `--jobs 4` overruns it: q14, q15, q29 and q32 died on a 429
+and were re-run with `--jobs 1`. All four passed. Nothing was scored from a
+failed call — the first run reported them as `error`, not as wrong answers.
+Expect a few casualties on every full run and plan to re-run them alone.
 
 Two clean runs now, not one, but still not proof the marker problem is gone.
 `CHECK_SIGNAL` asks for a `Check: correct answer is X; student wrote Y` line
@@ -204,7 +216,10 @@ so an `[OPEN]` there counts as *no signal* and shows up in the `verdict source`
 line of the report. Watch that line.
 
 Measured 2026-08-17: `unparsed 0` across all 50, so the model reached for `[OPEN]`
-on none of the questions that do have answers. One run, on one model.
+on none of the questions that do have answers. Measured twice, on two different
+models — `llama-3.3-70b-versatile` before it was decommissioned and
+`openai/gpt-oss-120b` after — which is better evidence than one run, because the
+branch surviving a model swap unchanged is the thing that was in doubt.
 
 The `Check:` line is scaffolding and never reaches the student; `_CHECK_LINE_RE`
 strips it. Reword one and you must reword the other.

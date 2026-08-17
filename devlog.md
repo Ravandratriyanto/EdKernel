@@ -2240,7 +2240,8 @@ already does.
 
 ### Current state
 - `python -m evals.run --only regress` → **39/39**
-- check mode **50/50** on Groq `llama-3.3-70b-versatile`, `unparsed 0`
+- check mode **50/50** on Groq `openai/gpt-oss-120b`, `unparsed 0` — and 50/50 on
+  `llama-3.3-70b-versatile` earlier the same day, before it was decommissioned
 - hint ladder **1/5**, first honest measurement
 - `readme.md` check-mode number no longer stale; the `[OPEN]` paragraph carries
   the `unparsed 0` result
@@ -2302,9 +2303,83 @@ One rung-1 reply did land before the wall, on h1:
 Against the *fixed* `_names` that still names a concept — `both sides`. So the
 rung-1 problem is not purely an artefact of the substring bug. One data point.
 
+### The model was decommissioned mid-session
+
+Checking whether the daily budget had reset turned up something else: a probe
+call returned **404 `model_not_found`** for `llama-3.3-70b-versatile`. Not a
+rate limit. The same model had served 52 check calls that morning.
+
+`client.models.list()` shows 13 models on this account and **not one Llama chat
+model** among them. The two `meta-llama/llama-prompt-guard-2-*` entries are
+safety classifiers, not tutors.
+
+A first attempt to list models over raw `urllib` returned 403 with body
+`error code: 1010` — that is Cloudflare blocking a Python user-agent, not an
+auth failure. The Groq SDK lists fine. Worth remembering before concluding a key
+is dead.
+
+The web front end auto-filled that model name whenever Groq was selected
+(`static/index.html:563`), so choosing Groq in the UI 404'd on the first message.
+That was a live product break, not just an eval problem.
+
+Moved to **`openai/gpt-oss-120b`**. The 50-case set was re-run on it from
+scratch: **50/50, signal 50, prose 0, unparsed 0** — identical to the old model.
+`CHECK_SIGNAL` and the `[OPEN]` branch both transfer with no prompt work, which
+was not a given for a string that has been changed three times and made worse
+twice.
+
+`qwen/qwen3.6-27b` was rejected despite already being the vision model. It
+reasons out loud — the probe reply opened with `<think>` — and only the vision
+path calls `drop_reasoning()`. As the text model it would push `<think>` blocks
+to students and stop `_SIGNAL_RE` finding verdicts, since that regex is anchored
+to end-of-string.
+
+New rate-limit shape to plan around: this model allows **8,000 TPM, not 12,000**.
+At `--jobs 4` that cost q14, q15, q29 and q32 to 429s; all four passed on a
+`--jobs 1` re-run.
+
+Every number in this devlog dated before 2026-08-17 was measured against a model
+that no longer exists.
+
+### The learn eval, re-run on the new model
+
+**1/5** again, with a different shape:
+
+```
+hints differ               5/5
+rung 1 withholds concept   3/5   (was 1/5)
+rung 2 names concept       2/5   (was 4/5)
+answer held back           4/5
+```
+
+One genuine ladder failure, and it is the clearest product finding of the day.
+h3's rung 2 gave the answer away:
+
+> Photosynthesis releases the gas O₂ (**oxygen**). What is the name of that gas?
+
+`HINT_LADDER[2]` says "names the key concept, but do not give away the answer".
+It gave the answer, then asked a question it had just answered.
+
+The rest is still the ruler, in two new ways, both probed rather than assumed:
+
+- **`_names` misses noun forms.** h1's rung 2 said "Use *subtraction* to move the
+  7" and scored as not naming `subtract`. Adding `ion` to the suffix alternation
+  fixes that one. It does NOT fix `divide` → `division`, where the stem changes —
+  that needs both words in the concept list
+- **`_names` cannot see synonyms.** h5's rung 2 said "Percentage increase means
+  (new – old) ÷ old, then × 100", which is `difference`, `divide` and `original`
+  in symbols and everyday words. No regex reaches this
+
+Two fixes deep and the checker is still the dominant cause of failures. The right
+next move is widening the `concept` lists in `learn_cases.jsonl`, not a third
+regex. **There is still no trustworthy hint-ladder score.**
+
 ### Next
-1. Re-run the learn eval once the daily budget resets. `_names` is fixed but the
-   1/5 was measured before it, so there is currently no trustworthy score
+1. Widen the `concept` lists in `evals/learn_cases.jsonl` — synonyms, symbol
+   forms, noun forms — and add `ion` to `_names`. Then re-run. The 1/5 is a
+   measurement of the harness, not the tutor
+2. `HINT_LADDER[2]` leaked the answer on h3. Real, and reproducible from the
+   transcript above. Prompt work, so it needs live runs on both front ends
 2. Rung 1 of `HINT_LADDER`. Once the ruler is fixed this is prompt work, and
    prompt work needs live runs on both front ends
 3. Bring up the remote Ollama and tick Phase B — one lesson, non-zero token

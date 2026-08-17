@@ -559,8 +559,14 @@
     document.getElementById('btn-groq').classList.toggle('active', p === 'groq');
     document.getElementById('host-group').classList.toggle('hidden', p !== 'ollama');
     document.getElementById('key-group').classList.toggle('hidden', p !== 'groq');
+    /* llama-3.3-70b-versatile was decommissioned on 2026-08-17 and now 404s
+       with model_not_found. Do not put a Llama model back here — the account
+       has none. Note qwen/qwen3.6-27b is NOT a safe choice either: it reasons
+       out loud, and only the vision path calls drop_reasoning(), so <think>
+       blocks would reach the student and _SIGNAL_RE would stop finding
+       verdicts. */
     document.getElementById('input-model').value =
-      p === 'groq' ? 'llama-3.3-70b-versatile' : 'gemma4';
+      p === 'groq' ? 'openai/gpt-oss-120b' : 'gemma4';
   }
 
   /* ---- mode ---- */

@@ -1,7 +1,7 @@
 """Score learn mode's hint ladder.
 
     python -m evals.learn
-    python -m evals.learn --provider groq --model llama-3.3-70b-versatile
+    python -m evals.learn --provider groq --model openai/gpt-oss-120b
     python -m evals.learn --case h4 --repeat 5 --show
 
 Phase 5's definition of done is "three wrong answers in a row produce three
