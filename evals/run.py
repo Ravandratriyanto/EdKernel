@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from llm.client import generate
 from rag.retrieve import retrieve
-from prompts import build_check_prompt
+from prompts import build_check_prompt, strip_signal
 from evals import regress
 
 load_dotenv()
@@ -89,7 +89,13 @@ def score_one(case, provider, model, host, api_key, tries=4):
             raw = generate(prompt, model=model, host=host,
                            provider=provider, api_key=api_key)
             got, how = verdict(str(raw))
-            return {**case, "got": got, "how": how,
+            # The body the student would actually see. strip_signal is imported
+            # from the product on purpose, unlike _SIGNAL_RE above, which this
+            # file copies so it breaks when the signal moves. The question here
+            # is not "does our regex agree" but "what reaches the student", and
+            # only the product's own stripper can answer that.
+            body, _ = strip_signal(str(raw))
+            return {**case, "got": got, "how": how, "body": body,
                     "detail": str(raw)[-160:].replace("\n", " ")}
         except Exception as e:
             msg = str(e).lower()
@@ -98,7 +104,7 @@ def score_one(case, provider, model, host, api_key, tries=4):
             daily = "tpd" in msg or "per day" in msg
             retryable = ("429" in msg or "rate limit" in msg) and not daily
             if not retryable or attempt == tries - 1:
-                return {**case, "got": None, "how": "error",
+                return {**case, "got": None, "how": "error", "body": "",
                         "detail": f"{type(e).__name__}: {e}"}
             # Back off further each time: 5s, 10s, 20s.
             time.sleep(5 * 2 ** attempt)
@@ -138,6 +144,19 @@ def report(results, regressions):
         by = lambda h: sum(1 for r in results if r["how"] == h)
         print(f"  verdict source    signal {by('signal')}, prose {by('prose')}, "
               f"unparsed {by('unparsed')}, error {by('error')}")
+
+        # An empty body means the model sent a verdict and nothing else, so the
+        # student sees a canned _EMPTY_REPLY line and no teaching at all. This
+        # was 16/16 blank on 2026-08-18 underneath a 50/50 score: every number
+        # above reads the verdict only, so a tutor that judges perfectly and
+        # explains nothing scores full marks here. `replied` because `ran` is
+        # taken by the regressions block below.
+        replied = [r for r in results if r["how"] != "error"]
+        if replied:
+            blank = sum(1 for r in replied if not r["body"].strip())
+            short = sum(1 for r in replied if 0 < len(r["body"].strip()) < 80)
+            print(f"  explanation       blank {blank}/{len(replied)}, "
+                  f"under 80 chars {short}/{len(replied)}")
 
         # Per-case rollup when --repeat runs the same case more than once. The
         # aggregate above answers "how good is the tutor"; this answers "how

@@ -716,6 +716,33 @@
   }
 
   /* ---- bubbles ---- */
+  /* Rewrite LaTeX delimiters to the dollar forms before markdown touches them.
+
+     marked runs first and treats a backslash before punctuation as a markdown
+     escape, so \( \) \[ \] arrive at KaTeX as bare ( ) [ ] with no
+     delimiter left to match. Checked against marked 9.1.6, the version loaded
+     above: "\(\sin 2x\)" comes out of marked.parse as "(\sin 2x)".
+     Dollars pass through markdown untouched and are the only delimiters
+     renderMathInElement is configured for.
+
+     This lives here rather than in the prompt because the prompt cannot do it.
+     openai/gpt-oss-120b was told in plain words to use dollars and never
+     backslash-brackets, at the very end of the prompt where it is most likely
+     to comply, and ignored it on every reply (2026-08-18). Model formatting is
+     not something to depend on; a string replace is.
+
+     Fenced code blocks are left alone. A maths reply has no reason to contain
+     one, but a programming question does, and rewriting inside it would
+     corrupt the code being shown. */
+  function normaliseMath(text) {
+    /* Odd indices are the fenced blocks, because the delimiter is captured. */
+    return text.split(/(```[\s\S]*?```)/g).map((part, i) =>
+      i % 2 === 1 ? part
+                  : part.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+                        .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$')
+    ).join('');
+  }
+
   function appendBubble(role, text, attach, onOptionSelect, verdict) {
     const area = document.getElementById('chat-area');
     const row  = document.createElement('div');
@@ -730,7 +757,7 @@
 
     const options = role === 'tutor' ? extractOptions(text) : [];
     const displayText = options.length > 0 ? stripOptions(text) : text;
-    bubble.innerHTML = marked.parse(displayText);
+    bubble.innerHTML = marked.parse(normaliseMath(displayText));
 
     // The backend has always returned `correct` and the front end has always
     // thrown it away, so a wrong answer came back as a worked solution with

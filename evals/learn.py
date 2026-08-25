@@ -1,22 +1,3 @@
-"""Score learn mode's hint ladder.
-
-    python -m evals.learn
-    python -m evals.learn --provider groq --model openai/gpt-oss-120b
-    python -m evals.learn --case h4 --repeat 5 --show
-
-Phase 5's definition of done is "three wrong answers in a row produce three
-different, increasingly specific hints". That has only ever been checked by
-reading three replies by hand.
-
-Every case here costs three model calls, so there is no --only regress to hide
-behind: this file is model calls or nothing.
-
-What it cannot check is whether a hint is *good*. It checks the ladder's own
-promises — the hints differ, rung 1 withholds the concept, rung 2 names it, and
-the answer does not leak before rung 3. A tutor could pass all four and still
-teach badly.
-"""
-
 import argparse
 import json
 import os

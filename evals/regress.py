@@ -403,12 +403,14 @@ def _no_verdict_is_not_a_pass():
     import io, contextlib
     from evals.run import report
 
+    # "body" mirrors what score_one stores: "" on the error path, the stripped
+    # reply everywhere else. report() reads it for the blank-explanation count.
     results = [{"id": "x1", "topic": "t", "answer": "a", "correct": False,
-                "got": None, "how": "error", "detail": ""},
+                "got": None, "how": "error", "detail": "", "body": ""},
                {"id": "x2", "topic": "t", "answer": "a", "correct": False,
-                "got": False, "how": "signal", "detail": ""},
+                "got": False, "how": "signal", "detail": "", "body": "words"},
                {"id": "x3", "topic": "t", "answer": "a", "correct": True,
-                "got": True, "how": "signal", "detail": ""}]
+                "got": True, "how": "signal", "detail": "", "body": "words"}]
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         report(results, [])
@@ -422,11 +424,46 @@ def _no_verdict_is_a_miss():
     from evals.run import report
 
     results = [{"id": "x1", "topic": "t", "answer": "a", "correct": True,
-                "got": None, "how": "unparsed", "detail": ""}]
+                "got": None, "how": "unparsed", "detail": "", "body": "words"}]
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         code = report(results, [])
     return "check mode        0/1" in buf.getvalue() and code == 1
+
+
+@check("a verdict with no explanation is counted, not hidden by a passing score")
+def _blank_explanation_is_counted():
+    """Check mode scored 50/50 while every reply taught the student nothing.
+
+    On 2026-08-18 all 16 replies sampled were a Check: line and a marker with
+    no prose, so `strip_signal` returned "" and the student saw the canned
+    _EMPTY_REPLY. Every number in the report read the verdict alone, so the
+    harness could not see it. This pins the count that can.
+
+    The error case is excluded on purpose: a case that never reached the model
+    has an empty body because there was no reply, not because the reply was
+    silent, and counting it would blame the prompt for a rate limit.
+    """
+    import io, contextlib
+    from evals.run import report
+
+    results = [{"id": "x1", "topic": "t", "answer": "a", "correct": True,
+                "got": True, "how": "signal", "detail": "", "body": ""},
+               {"id": "x2", "topic": "t", "answer": "a", "correct": True,
+                "got": True, "how": "signal", "detail": "", "body": "   \n "},
+               {"id": "x3", "topic": "t", "answer": "a", "correct": True,
+                "got": True, "how": "signal", "detail": "", "body": "short one"},
+               {"id": "x4", "topic": "t", "answer": "a", "correct": True,
+                "got": True, "how": "signal", "detail": "", "body": "x" * 200},
+               {"id": "x5", "topic": "t", "answer": "a", "correct": False,
+                "got": None, "how": "error", "detail": "", "body": ""}]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        report(results, [])
+    out = buf.getvalue()
+    # 4 replies reached the model: two blank, one short, one full length.
+    return ("explanation       blank 2/4, under 80 chars 1/4" in out
+            and "check mode        4/5" in out)
 
 
 def run():

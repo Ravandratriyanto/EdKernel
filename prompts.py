@@ -261,6 +261,11 @@ def build_check_prompt(question: str, answer: str,
             f"Student's answer: {answer}\n\n"
             f"{note}"
             "Is the student's answer correct? Explain briefly.\n"
+            "Explain first, in two to four sentences of plain English:\n"
+            "- what the right answer is, and how you get to it\n"
+            "- if the student is wrong, the step where their answer goes wrong\n"
+            "Write for someone who is learning, not for a marker. A reply with no\n"
+            "explanation is no use to the student.\n\n"
             f"{CHECK_SIGNAL}")
 
 
