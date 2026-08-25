@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# ── the model ────────────────────────────────────────────────────────────────
+
 
 class CausalSelfAttention(nn.Module):
     """Every position looks at the positions before it, and mixes them together.
@@ -34,8 +34,6 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         assert cfg.n_embd % cfg.n_head == 0
-        # One matrix produces query, key and value for every head at once —
-        # cheaper than three separate matrices, then split apart below.
         self.qkv     = nn.Linear(cfg.n_embd, 3 * cfg.n_embd, bias=False)
         self.proj    = nn.Linear(cfg.n_embd, cfg.n_embd, bias=False)
         self.n_head  = cfg.n_head
@@ -44,24 +42,20 @@ class CausalSelfAttention(nn.Module):
         self.resid_drop = nn.Dropout(cfg.dropout)
 
     def forward(self, x):
-        B, T, C = x.shape                      # batch, time (positions), channels
+        B, T, C = x.shape                      
         q, k, v = self.qkv(x).split(C, dim=2)
 
-        # Split channels across heads: each head gets its own C//n_head slice
-        # and learns its own notion of "what should attend to what".
         head_dim = C // self.n_head
-        q = q.view(B, T, self.n_head, head_dim).transpose(1, 2)   # (B, nh, T, hd)
+        q = q.view(B, T, self.n_head, head_dim).transpose(1, 2)   
         k = k.view(B, T, self.n_head, head_dim).transpose(1, 2)
         v = v.view(B, T, self.n_head, head_dim).transpose(1, 2)
 
-        # is_causal=True is the mask that stops position t from seeing t+1.
-        # Without it the model would cheat by reading the answer.
         y = F.scaled_dot_product_attention(
             q, k, v, is_causal=True,
             dropout_p=self.dropout if self.training else 0.0,
         )
 
-        y = y.transpose(1, 2).contiguous().view(B, T, C)   # re-merge the heads
+        y = y.transpose(1, 2).contiguous().view(B, T, C)   
         return self.resid_drop(self.proj(y))
 
 
@@ -106,15 +100,13 @@ class TinyGPT(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.n_embd)  # what is this token?
-        self.pos_emb = nn.Embedding(cfg.block_size, cfg.n_embd)  # where is it?
+        self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.n_embd)  
+        self.pos_emb = nn.Embedding(cfg.block_size, cfg.n_embd)  
         self.drop    = nn.Dropout(cfg.dropout)
         self.blocks  = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layer)])
         self.ln_f    = nn.LayerNorm(cfg.n_embd)
         self.head    = nn.Linear(cfg.n_embd, cfg.vocab_size, bias=False)
 
-        # Weight tying: the matrix that maps token -> vector is the transpose of
-        # the one mapping vector -> token scores. Saves parameters and helps.
         self.head.weight = self.tok_emb.weight
 
         self.apply(self._init_weights)
@@ -140,8 +132,6 @@ class TinyGPT(nn.Module):
         if targets is None:
             return logits, None
 
-        # The entire training objective: at every position, predict the next
-        # token. Cross-entropy between predicted distribution and actual token.
         loss = F.cross_entropy(
             logits.view(-1, logits.size(-1)), targets.reshape(-1)
         )
@@ -150,10 +140,9 @@ class TinyGPT(nn.Module):
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         for _ in range(max_new_tokens):
-            # Crop to block_size — the model has no positions beyond that.
             idx_cond = idx[:, -self.cfg.block_size:]
             logits, _ = self(idx_cond)
-            logits = logits[:, -1, :] / temperature     # only the last position matters
+            logits = logits[:, -1, :] / temperature     
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < v[:, [-1]]] = -float("inf")
@@ -161,7 +150,7 @@ class TinyGPT(nn.Module):
             idx = torch.cat([idx, torch.multinomial(probs, num_samples=1)], dim=1)
         return idx
 
-# ── data ─────────────────────────────────────────────────────────────────────
+
 
 class CharTokenizer:
     """One character = one token.
@@ -209,7 +198,7 @@ def estimate_loss(model, splits, cfg, device, eval_iters):
     model.train()
     return out
 
-# ── training ─────────────────────────────────────────────────────────────────
+
 
 def lr_at(step, cfg):
     """Warm up, then cosine-decay. Stops the first steps from wrecking the model."""
@@ -256,8 +245,6 @@ def main():
     n      = int(0.9 * len(data))
     splits = {"train": data[:n], "val": data[n:]}
 
-    # A split shorter than one context window has no window to sample, and torch
-    # would fail deep inside get_batch with an unreadable error.
     for name, split in splits.items():
         if len(split) <= cfg.block_size + 1:
             raise SystemExit(
@@ -313,7 +300,6 @@ def main():
 
         opt.zero_grad(set_to_none=True)
         loss.backward()
-        # Clip gradients: one freak batch can otherwise blow the weights up.
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
 

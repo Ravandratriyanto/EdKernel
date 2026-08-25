@@ -28,18 +28,18 @@ def _client_and_ef(db_path: str):
                                  embedding_functions.DefaultEmbeddingFunction())
         return _clients[db_path]
 
-# Cosine distance: 0 is identical, 1 is unrelated.
-#
-# Calibrated over 20 topics the corpus covers and 10 it does not. The two
-# classes OVERLAP — the worst real topic ("big O notation", 0.605) scores
-# further away than the best unrelated one ("history of jazz", 0.495, which
-# genuinely matches an SAT reading passage about jazz tap). So no threshold
-# separates them cleanly and this number is a compromise, not a clean cut:
-# 0.60 keeps 19 of 20 real topics and admits 1 of 10 unrelated ones.
-#
-# It still earns its place. Without it Chroma returns its n nearest neighbours
-# however far away they are, so a maths lesson gets biology chunks prepended
-# as "Reference material:".
+
+
+
+
+
+
+
+
+
+
+
+
 MAX_DISTANCE = 0.60
 
 
@@ -59,7 +59,7 @@ def retrieve(query: str,
         collection = client.get_collection(name=collection_name,
                                            embedding_function=ef)
     except Exception:
-        return []          # never ingested — do not take a lesson down for it
+        return []          
 
     results = collection.query(
         query_texts=[query],

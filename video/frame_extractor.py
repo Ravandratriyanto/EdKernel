@@ -11,8 +11,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-SAMPLE_EVERY = 2.0      # seconds between candidate frames
-MAX_FRAMES = 8          # hard ceiling — every frame kept is one vision call
+SAMPLE_EVERY = 2.0      
+MAX_FRAMES = 8          
 _TIMEOUT = 120
 
 
@@ -32,13 +32,7 @@ def extract_frames(path: str, every: float = SAMPLE_EVERY,
         cmd = [
             "ffmpeg", "-loglevel", "error", "-nostdin",
             "-i", str(path),
-            # fps thins the stream first, then mpdecimate compares what is left.
-            # hi/lo/frac are how different two frames must be to count as new;
-            # these are ffmpeg's own defaults, written out so they can be tuned.
             "-vf", f"fps=1/{every},mpdecimate=hi=64*12:lo=64*5:frac=0.33",
-            # mpdecimate only *marks* frames as droppable. Without vfr, ffmpeg
-            # re-duplicates them to hold a constant frame rate and nothing is
-            # saved. Measured on a 12s two-page clip: 6 frames without, 2 with.
             "-fps_mode", "vfr",
             "-frames:v", str(max_frames),
             "-q:v", "3",
@@ -49,14 +43,9 @@ def extract_frames(path: str, every: float = SAMPLE_EVERY,
         except subprocess.TimeoutExpired:
             raise ExtractError(f"ffmpeg took longer than {_TIMEOUT}s on {path}")
 
-        # Judged on the frames, not on ffmpeg's exit code. A video with a
-        # damaged tail exits non-zero having already written good frames, and
-        # those are worth keeping — the same reasoning as the per-page try in
-        # rag/ingest.py.
         files = sorted(glob.glob(f"{tmp}/f*.jpg"))
         if not files:
             tail = (r.stderr or "").strip().splitlines()
             raise ExtractError(f"No frames from {path}"
                                + (f": {tail[-1]}" if tail else ""))
-        # Read inside the `with`. The temp dir is deleted on the way out.
         return [Path(f).read_bytes() for f in files]

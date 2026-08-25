@@ -13,8 +13,8 @@ from pathlib import Path
 LOG_DIR = Path(__file__).parent / ".logs"
 LOG_PATH = LOG_DIR / "sessions.jsonl"
 
-# Flask serves requests on threads, so two turns can finish at once. A record
-# here is bigger than the 4KB a kernel appends atomically, so take a lock.
+
+
 _lock = threading.Lock()
 
 
@@ -27,12 +27,10 @@ def log_turn(event: str, **fields) -> None:
             **fields,
         }
         LOG_DIR.mkdir(parents=True, exist_ok=True)
-        # default=str so an unexpected object stringifies instead of throwing.
         line = json.dumps(record, ensure_ascii=False, default=str)
         with _lock, LOG_PATH.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
     except Exception:
-        # A logging failure must never cost the student their lesson.
         pass
 
 
@@ -70,7 +68,7 @@ def read_records() -> list[dict]:
             try:
                 records.append(json.loads(line))
             except ValueError:
-                continue          # one bad line is not worth losing the history over
+                continue          
     return records
 
 
@@ -85,9 +83,9 @@ def list_sessions(user_id: int, limit: int = 50) -> list[dict]:
     for rec in read_records():
         sid = rec.get("session_id") or ""
         if not sid:
-            continue              # pre-sidebar rows — nothing to open them by
+            continue              
         if rec.get("user_id") != user_id:
-            continue              # someone else's lesson, or a pre-auth row
+            continue              
         s = sessions.get(sid)
         if s is None:
             s = sessions[sid] = {
@@ -102,7 +100,6 @@ def list_sessions(user_id: int, limit: int = 50) -> list[dict]:
         s["updated"] = rec.get("ts", s["updated"])
         if not s["title"]:
             s["title"] = (rec.get("topic") or rec.get("input") or "").strip()
-    # ISO-8601 timestamps sort correctly as plain strings, so no date parsing.
     return sorted(sessions.values(),
                   key=lambda s: s["updated"], reverse=True)[:limit]
 

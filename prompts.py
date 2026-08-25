@@ -10,10 +10,10 @@ a pair.
 
 import re
 
-# Style rules both front ends send verbatim. The two prompts drifted 7x measured
-# in Session 7 — the growth is app.py-only capability rules, but the shared style
-# block also picked up small edits in one file and not the other. Splitting it
-# out means the next edit lands in both or in neither.
+
+
+
+
 PLAIN_ENGLISH_RULES = (
     "Write in the simplest English you can. Short sentences. Everyday words a "
     "12-year-old would understand. "
@@ -32,15 +32,15 @@ TOPIC_COMPLETE_RULE = (
     "response with the exact phrase 'Topic complete.'"
 )
 
-# The two tutor prompts. They are NOT one prompt that drifted — they teach
-# differently on purpose. The web tutor is Socratic and answers in 1-2 sentences;
-# the CLI tutor explains, then asks. Most of the web prompt's extra 5,000
-# characters are web-only capability rules (past papers, uploads, A) buttons,
-# mermaid) that would be lies in a terminal.
-#
-# They live here anyway. Side by side, a change to one is visibly a change to
-# only one — which is the whole failure this file exists to stop, and which
-# happened three times while they sat in separate files.
+
+
+
+
+
+
+
+
+
 TUTOR_SYSTEM_PROMPT = (
     "You are a Socratic SAT/A-level tutor. Your job is to guide the student to discover answers themselves — never lecture or dump information. "
     f"{PLAIN_ENGLISH_RULES} "
@@ -107,12 +107,12 @@ CLI_TUTOR_SYSTEM_PROMPT = (
     f"{TOPIC_COMPLETE_RULE}"
 )
 
-# The hint ladder, injected as a note on the student's own message so the model
-# reads it as context for the turn rather than as a new instruction.
-#
-# Index 0 is the empty string, so hint_note(0) costs nothing on a first attempt.
-# The tuple is indexed rather than branched so that "how many rungs are there"
-# has one answer, which is what evals/learn.py measures.
+
+
+
+
+
+
 HINT_LADDER = (
     "",
     "[Tutor note: student answered this wrong once — give a slightly more "
@@ -135,47 +135,47 @@ def hint_note(wrong_streak: int) -> str:
         return ""
     return "\n\n" + HINT_LADDER[min(wrong_streak, len(HINT_LADDER) - 1)]
 
-# The verdict marker. Anchored to end-of-string, so it must be the last thing
-# in the reply — that is why the instruction below says to write nothing after
-# it. Change one of these two and you must change the other.
-#
-# [OPEN] means "this question has no single right answer" and maps to the None
-# verdict, which already meant "do not know" everywhere downstream. Reusing None
-# is why nothing else had to move: the front end already draws no banner for it,
-# main.py already prints "No clear verdict", and the log already stores null.
+
+
+
+
+
+
+
+
 _SIGNAL_RE = re.compile(r'\s*\[(CORRECT|WRONG|OPEN)\]\s*$', re.IGNORECASE)
 
-# Models mimic the bracket convention they see — the [CORRECT]/[WRONG] signal and
-# the [Tutor note: ...] lines we inject — and invent markers of their own, e.g.
-# [WAITING FOR RESPONSE]. Anchored to a whole line so it can't eat interval
-# notation like [0, 5] or a citation mid-sentence.
+
+
+
+
 _STRAY_MARKER_RE = re.compile(r'^[ \t]*\[[A-Z][A-Z0-9 _:-]{2,40}\][ \t]*$\n?', re.MULTILINE)
 
-# The "Check: correct answer is X; student wrote Y" line that CHECK_SIGNAL asks
-# for is scaffolding for the model, not something to show. Matched on the full
-# instructed form rather than a bare "Check:", so an ordinary tutor line like
-# "Check: does that make sense?" is left alone.
+
+
+
+
 _CHECK_LINE_RE = re.compile(r'^[ \t]*Check:\s*correct answer is\b[^\n]*\n?',
                             re.MULTILINE | re.IGNORECASE)
-# A verdict marker that landed mid-reply instead of at the end. The model is
-# told to write it last with nothing after it; when it disobeys, the bracket
-# reaches the student — "That is [WRONG] Plants release oxygen...". Neither
-# guard above catches that: _SIGNAL_RE is anchored to end-of-string and
-# _STRAY_MARKER_RE needs the marker alone on its own line.
-#
-# Two passes. This one fires only at a sentence boundary and captures up to 40
-# characters of lead-in, so a dangling "That is" leaves with the marker —
-# deleting the bracket alone would strand it as broken English. The 40-char cap
-# and the excluded .!? are what stop it eating real content.
+
+
+
+
+
+
+
+
+
+
 _LEAD_IN_MARKER_RE = re.compile(
     r'(?:^|(?<=[.!?])|(?<=\n))[ \t]*([^.!?\n]{0,40}?)[ \t]*'
     r'\[(?:CORRECT|WRONG|OPEN)\][ \t]*',
     re.IGNORECASE)
 
-# The sweep for what the first pass cannot reach — a marker sitting after a
-# clause too long to be a verdict phrase. There the surrounding words are real,
-# so only the bracket goes. This cannot touch "[0, 5]" or "[SOURCE A]": the
-# alternation is literal and those three words are the only ones it knows.
+
+
+
+
 _INLINE_MARKER_RE = re.compile(r'[ \t]*\[(?:CORRECT|WRONG|OPEN)\][ \t]*',
                                re.IGNORECASE)
 
@@ -206,45 +206,45 @@ CHECK_SIGNAL = (
     "or exactly [WRONG] if they do not. Keep the square brackets — a bare word "
     "without them does not count. Write nothing after that line."
 )
-# Measured 2026-08-12 on the 50-case set: 50/50, every verdict from the signal.
-# The previous wording — the marker instruction alone, no Check: line — scored
-# 49/50. Treat one case as noise; what this actually buys is below.
-#
-# The Check: line is scaffolding. `_CHECK_LINE_RE` strips it before the reply
-# reaches a student, so changing its wording means changing that regex too.
-#
-# Two earlier attempts failed and are recorded so they are not retried blind:
-#
-# 1. "that line judges the student, not your explanation" (2026-08-09) biased
-#    the model toward [WRONG]. "accepts correct" fell 15/15 -> 12/15: it marked
-#    answers wrong straight after explaining they were right.
-# 2. The Check: line WITHOUT the equivalence sentence (2026-08-10) made the
-#    model compare the two answers as *text*. It wrote "correct answer is
-#    2 + 3n; student wrote 3n + 2" and marked it [WRONG]. Systematic, not
-#    random — it failed any correct answer written in a different order.
-#
-# The equivalence sentence is the part that fixes (2), and that — not the extra
-# point — is the evidence for this wording: 25/25 on correct answers, with the
-# text-comparison failure absent from all of them.
-#
-# Both attempts, and this one, aim at the same defect: the marker coming loose
-# from the reasoning. 50/50 is one clean run, not proof it is gone.
-#
-# 3. The [OPEN] branch and the reference-material sentence (2026-08-14) are the
-#    third change to this string. Both come from one live turn: asked "what is
-#    the best way to revise SAT" with the answer "flashcards", check mode
-#    replied "the best practices mentioned by the teachers ... none of them
-#    mention using flashcards" and marked it [WRONG]. Two faults in one reply —
-#    it assumed every question has a right answer, and it treated whatever
-#    retrieve() returned as the authority on what is true.
-#
-#    The predictable way this goes wrong is the model reaching for [OPEN] on a
-#    question it merely finds hard, which is why the paragraph narrows it to the
-#    QUESTION twice. Watch the "accepts correct" and "verdict source" lines in
-#    the 50-case report: attempt 1 above showed up as a drop in the first, and
-#    over-use of [OPEN] shows up in the second, because evals/run.py keeps its own
-#    (CORRECT|WRONG) regex and counts an [OPEN] as no signal at all.
-#    UNMEASURED against the 50-case set as of 2026-08-14.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def build_check_prompt(question: str, answer: str,
@@ -269,10 +269,9 @@ def build_check_prompt(question: str, answer: str,
             f"{CHECK_SIGNAL}")
 
 
-# What to say when the model sent a verdict and nothing else. Short, plain, and
-# ending in a question, so the lesson keeps its shape.
+
+
 _EMPTY_REPLY = {
-    # Learn mode: end on a question, so the lesson keeps its shape.
     True:  {True: "That's right. Ready for the next step?", False: "That's right."},
     False: {True: "Not quite. Want to try that again?",     False: "Not quite."},
     None:  {True: "Can you say a bit more about that?",

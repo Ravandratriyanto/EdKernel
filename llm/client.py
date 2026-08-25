@@ -2,8 +2,8 @@ import sys
 
 from ollama import Client as OllamaClient
 
-# Fires once per process, not once per call — a warning on every turn is noise
-# you learn to ignore, which defeats the point.
+
+
 _warned_no_usage = False
 
 
@@ -19,7 +19,6 @@ class LLMText(str):
     """
 
     def __new__(cls, text: str, usage: dict | None = None):
-        # str is immutable, so the value is fixed in __new__, not __init__.
         obj = super().__new__(cls, text or "")
         obj.usage = usage or {}
         return obj
@@ -64,7 +63,6 @@ def chat(messages: list[dict], model: str = "gemma4", host: str = "http://localh
 
 def _groq_chat(messages: list[dict], model: str, api_key: str) -> LLMText:
     from groq import Groq
-    # Strip image data — Groq text models don't support multimodal
     clean = [{"role": m["role"], "content": m["content"]} for m in messages]
     client = Groq(api_key=api_key)
     r = client.chat.completions.create(model=model, messages=clean)

@@ -4,7 +4,7 @@ Groq's text models drop image data, so images are transcribed to plain text
 first and fed into the normal learn/check flow — which every provider accepts.
 """
 
-# Groq's multimodal model. Overridable per-request via the "vision_model" field.
+
 GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
 
 TRANSCRIBE_PROMPT = (

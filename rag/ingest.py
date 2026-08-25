@@ -18,19 +18,19 @@ from pypdf import PdfReader
 
 import pdftext
 
-# pypdf is loud about malformed cross-reference tables in scanned papers, and
-# every one of those warnings is about a file we are about to skip anyway.
+
+
 warnings.filterwarnings("ignore")
 logging.getLogger("pypdf").setLevel(logging.CRITICAL)
 
 DB_PATH = "data/chroma"
 COLLECTION = "reference"
 
-# Punctuation that belongs in real prose. Anything else counts towards the junk
-# score — chart pages extract as ASCII art and are almost all box-drawing.
+
+
 _OK_PUNCT = ".,;:!?'\"()-%$/=+"
-_MAX_JUNK = 0.08     # measured: real pages sit far below this, charts far above
-_MIN_PAGE = 200      # chars; shorter than this is a header or a blank scan
+_MAX_JUNK = 0.08     
+_MIN_PAGE = 200      
 _MIN_CHUNK = 120
 
 
@@ -60,9 +60,7 @@ def _page_texts(pdf_path: str):
         try:
             pages.append(pdftext.clean(pdftext.page_text(reader.pages[i])))
         except Exception:
-            break           # abandon the rest of this file, keep what we have
-    # Footers can only be spotted by comparing pages, so this runs after the
-    # loop rather than inside it — the per-page recovery above still holds.
+            break           
     yield from enumerate(pdftext.strip_repeats(pages))
 
 
@@ -75,12 +73,10 @@ def _chunk(text: str, size: int = 900, overlap: int = 150) -> list[str]:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     parts, buf = [], ""
-    # (?<=[.!?]) is a lookbehind: split *after* a sentence-ending mark without
-    # consuming it, so the punctuation stays attached to the sentence.
     for sentence in re.split(r"(?<=[.!?])\s+", text):
         if len(buf) + len(sentence) + 1 > size and buf:
             parts.append(buf.strip())
-            buf = buf[-overlap:] + " " + sentence   # carry context across the seam
+            buf = buf[-overlap:] + " " + sentence   
         else:
             buf += (" " if buf else "") + sentence
     if buf.strip():
@@ -134,8 +130,6 @@ def build(text_folder: str = "data/reference",
     client = chromadb.PersistentClient(path=db_path)
     ef = embedding_functions.DefaultEmbeddingFunction()
 
-    # Deleted and recreated rather than get_or_create: the cosine metric is set
-    # at creation time and Chroma will not apply it to a collection that exists.
     try:
         client.delete_collection(collection_name)
     except Exception:
@@ -143,7 +137,7 @@ def build(text_folder: str = "data/reference",
     collection = client.create_collection(
         name=collection_name,
         embedding_function=ef,
-        metadata={"hnsw:space": "cosine"},   # bounded 0-1, so one threshold works
+        metadata={"hnsw:space": "cosine"},   
     )
 
     print("reference notes:")
@@ -158,8 +152,6 @@ def build(text_folder: str = "data/reference",
         print("nothing to ingest")
         return 0
 
-    # Batched because embedding 3000+ chunks in one call is slow to fail and
-    # gives no progress. 400 keeps memory flat on an 8GB box.
     for i in range(0, len(docs), 400):
         collection.upsert(documents=docs[i:i + 400],
                           ids=ids[i:i + 400],

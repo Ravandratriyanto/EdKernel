@@ -38,8 +38,6 @@ class RateLimiter:
         if hits:
             self._hits[key] = hits
         else:
-            # Do not keep an empty list around: this dict is only ever pruned
-            # by being read, so an untouched key would otherwise leak forever.
             self._hits.pop(key, None)
         return hits
 
@@ -56,7 +54,6 @@ class RateLimiter:
             for key in keys:
                 hits = self._fresh(key, now)
                 if len(hits) >= self.max_failures:
-                    # The block lifts when the oldest failure leaves the window.
                     worst = max(worst, int(self.window_seconds - (now - hits[0])) + 1)
         return worst
 

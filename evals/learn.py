@@ -69,11 +69,6 @@ def run_case(case, provider, model, host, api_key, tries=4):
                                     f"Start with this question: {case['question']}"},
     ]
     hints = []
-    # Streaks start at 1, not 0. hint_note(0) is "first attempt" and returns an
-    # empty string, so range(ATTEMPTS) collected an unguided reply plus rungs 1
-    # and 2, while judge() read them as rungs 1, 2 and 3 — every check landed a
-    # turn late and rung 3 never ran at all. It scored 0/5 on 2026-08-17 with a
-    # ladder that was mostly behaving.
     for streak in range(1, ATTEMPTS + 1):
         note = hint_note(streak)
         messages.append({"role": "user", "content": case["wrong"] + note})
@@ -86,8 +81,7 @@ def run_case(case, provider, model, host, api_key, tries=4):
             except Exception as e:
                 msg = str(e).lower()
                 daily = "tpd" in msg or "per day" in msg
-                if not (("429" in msg or "rate limit" in msg) and not daily) \
-                        or attempt == tries - 1:
+                if not (("429" in msg or "rate limit" in msg) and not daily)                        or attempt == tries - 1:
                     return {**case, "hints": hints, "error": f"{type(e).__name__}: {e}"}
                 time.sleep(5 * 2 ** attempt)
 
@@ -133,18 +127,12 @@ def report(results, show=False):
         print("no cases ran")
         return 1
 
-    # A case passes only when all four checks pass. Partial credit would hide
-    # the thing this exists to find, which is *which rung* is broken.
     judged = [(r, judge(r)) for r in results]
     passed = [r for r, checks in judged if all(ok for _, ok, _ in checks)]
 
     pct = 100 * len(passed) / len(judged)
     print(f"\nhint ladder       {len(passed)}/{len(judged)}  ({pct:.0f}%)")
 
-    # Per-check tally. The line above says how bad it is; this says where.
-    # Insertion order is judge()'s own order, so the rungs print in ladder
-    # order — except "ran", which only exists for a case that never finished
-    # and is pushed to the end.
     tally = {}
     for _, checks in judged:
         for name, ok, _ in checks:
@@ -154,8 +142,6 @@ def report(results, show=False):
         hit, total = tally[name]
         print(f"  {name:26} {hit}/{total}")
 
-    # Per-case rollup when --repeat runs the same case more than once. The
-    # aggregate answers "is the ladder working"; this answers "is h4 flaky".
     ids = [r["id"] for r, _ in judged]
     if len(set(ids)) < len(ids):
         print("\nper case:")
@@ -173,10 +159,6 @@ def report(results, show=False):
             for name, ok, detail in checks:
                 if not ok:
                     print(f"    FAIL  {name} — {detail}")
-            # The hints are the evidence. Without them a failure says the
-            # ladder is broken but never which sentence broke it.
-            # +1 because hints[0] is rung 1. The ladder has no rung 0 — that is
-            # the first attempt, which gets no note and is never collected here.
             for i, h in enumerate(r["hints"]):
                 print(f"    rung {i + 1}  {_trim(h)}")
 
@@ -217,8 +199,6 @@ def main():
         wanted = set(args.case)
         missing = wanted - {c["id"] for c in cases}
         if missing:
-            # Fail early rather than silently running a smaller set — a typo in
-            # --case would otherwise pass with a flattering score.
             raise SystemExit(f"Unknown case id(s): {', '.join(sorted(missing))}")
         cases = [c for c in cases if c["id"] in wanted]
     cases = cases * args.repeat

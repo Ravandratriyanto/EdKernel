@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 from llm.client import generate, chat
 from rag.retrieve import retrieve
 from vision.image_handler import transcribe
-# The module, not the function — the wrapper below shares its name.
+
 from video import video_handler
 from video.frame_extractor import ExtractError
-# Shared with app.py so the two front ends cannot drift on the verdict signal.
+
 from prompts import (
     build_check_prompt, strip_signal,
     CLI_TUTOR_SYSTEM_PROMPT as TUTOR_SYSTEM_PROMPT,
@@ -45,9 +45,6 @@ def question_from_image(path: str, model: str, host: str,
     if not image_path.is_file():
         raise SystemExit(f"No such image: {path}")
 
-    # _mime_for() falls back to image/png for anything it doesn't know, so an
-    # unsupported file would be sent with the wrong content type rather than
-    # rejected. Cheaper to stop here than to burn a model call finding out.
     if image_path.suffix.lower() not in ALLOWED_IMAGES:
         allowed = ", ".join(sorted(ALLOWED_IMAGES))
         raise SystemExit(f"Unsupported image type '{image_path.suffix}'. Use one of: {allowed}")
@@ -77,9 +74,6 @@ def question_from_video(path: str, model: str, host: str,
         raise SystemExit(f"Unsupported video type '{video_path.suffix}'. Use one of: {allowed}")
 
     def progress(n, total):
-        # flush=True because Python buffers print when output is not a
-        # terminal, and progress you see after the work finishes is not
-        # progress. One vision call per frame, so this can be a slow wait.
         print(f"  reading frame {n} of {total}...", flush=True)
 
     try:
@@ -130,7 +124,6 @@ def learn_mode(topic: str, model: str, host: str,
 def main():
     args = build_arg_parser().parse_args()
 
-    # A typed key wins, otherwise fall back to .env — same rule the web app uses.
     api_key = args.api_key.strip() or os.environ.get("API_KEY", "").strip()
     if args.provider == "groq" and not api_key:
         raise SystemExit("Groq needs a key: pass --api-key or set API_KEY in .env")
@@ -138,11 +131,9 @@ def main():
     if args.mode == "check" and not args.answer:
         raise SystemExit("Error: --answer is required in check mode")
 
-    # From here down neither mode knows or cares where the question came from.
     if args.image:
         question = question_from_image(args.image, args.model, args.ollama_host,
                                        args.provider, api_key, args.vision_model)
-        # Transcription is the one lossy step, so show it before it's used.
         print(f"\n--- Read from {args.image} ---\n{question}\n")
     elif args.video:
         question = question_from_video(args.video, args.model, args.ollama_host,
@@ -160,7 +151,6 @@ def main():
                                     context_prefix=context_prefix)
         raw = generate(prompt, model=args.model, host=args.ollama_host,
                        provider=args.provider, api_key=api_key)
-        # The marker is for machines, so strip it and say the verdict in words.
         response, correct = strip_signal(raw)
         print(response)
         verdict = {True: "Correct", False: "Not correct",

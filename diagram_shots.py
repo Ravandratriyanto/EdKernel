@@ -17,11 +17,11 @@ from chromadb.utils import embedding_functions
 
 from diagram_examples import EXAMPLES
 
-# Cosine similarity, so 1.0 is identical and 0.0 unrelated — the opposite
-# direction to rag/retrieve.py's distance. Below this, nothing is close enough
-# to help and an example would only mislead. Measured: "plot f(x) = x^2 and its
-# derivative" falls under it and gets no examples, which is what keeps this off
-# the existing maths path.
+
+
+
+
+
 MIN_SIMILARITY = 0.35
 
 DEFAULT_K = 2
@@ -35,8 +35,6 @@ def _load():
     if _cache is None:
         ef = embedding_functions.DefaultEmbeddingFunction()
         vecs = np.array(ef([e["description"] for e in EXAMPLES]), dtype=float)
-        # Divide each row by its own length, so a dot product IS the cosine.
-        # keepdims=True keeps the result a column, so it broadcasts down rows.
         vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
         _cache = (vecs, ef)
     return _cache
@@ -49,11 +47,10 @@ def find_shots(description: str, k: int = DEFAULT_K,
         vecs, ef = _load()
         q = np.array(ef([description])[0], dtype=float)
     except Exception:
-        return []          # never cost a student a graph over this
+        return []          
 
     q /= np.linalg.norm(q)
     sims = vecs @ q
-    # argsort is ascending, so reverse it to get best-first.
     order = np.argsort(sims)[::-1][:k]
     return [EXAMPLES[i] for i in order if sims[i] >= min_similarity]
 

@@ -14,14 +14,14 @@ import sqlite3
 import time
 from pathlib import Path
 
-# .logs/ is gitignored. A plain "logs" directory would not be.
+
 DB_PATH = Path(__file__).parent / ".logs" / "users.db"
 
-# Stored alongside each hash, so these can be raised later without
-# invalidating existing passwords.
+
+
 _N, _R, _P, _DKLEN, _SALT_BYTES = 2 ** 14, 8, 1, 32, 16
 
-SESSION_TTL_SECONDS = 30 * 24 * 60 * 60      # 30 days
+SESSION_TTL_SECONDS = 30 * 24 * 60 * 60      
 MIN_PASSWORD_LENGTH = 8
 
 
@@ -88,7 +88,6 @@ def _verify_password(password: str, stored: str) -> bool:
         )
     except (ValueError, TypeError):
         return False
-    # Constant time, so the hash can't be guessed a character at a time.
     return secrets.compare_digest(dk.hex(), hash_hex)
 
 
@@ -118,7 +117,6 @@ def create_user(username: str, password: str) -> int:
             )
         return cur.lastrowid
     except sqlite3.IntegrityError:
-        # The UNIQUE constraint is what settles two people registering at once.
         raise UserError("That username is taken.")
     finally:
         conn.close()
@@ -136,8 +134,6 @@ def authenticate(username: str, password: str) -> int | None:
         conn.close()
 
     if row is None:
-        # Hash anyway. Returning early here would make an unknown username
-        # measurably faster, which is a way to enumerate real ones.
         _hash_password(password or "")
         return None
     if not _verify_password(password or "", row["password_hash"]):

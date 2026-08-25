@@ -18,8 +18,6 @@ def page_text(page) -> str:
     runs = []
 
     def visit(text, cm, tm, font_dict, font_size):
-        # pypdf reports font_size as 1.0 on most runs and hides the real scale
-        # in the matrices, so the size has to be multiplied out.
         if text:
             runs.append([text, tm[5] * cm[3], abs(font_size * tm[0] * cm[0])])
 
@@ -31,9 +29,6 @@ def page_text(page) -> str:
         if not stripped:
             out.append(text)
             continue
-        # A superscript sits higher than the run before it and is set smaller.
-        # Compare against the previous run, not the last normal one — a stale
-        # baseline is what turns the subscript in NH3 into NH^3.
         raised = (prev_y is not None
                   and size < prev_sz * 0.85
                   and 0 < y - prev_y <= prev_sz * 0.7)
@@ -47,9 +42,9 @@ def page_text(page) -> str:
 
 def clean(s: str) -> str:
     """Repair the noise that survives extraction."""
-    s = _LIG.sub(r"\1\2", s)        # "simplifi  es" -> "simplifies"
-    s = _DOTS.sub(" ___ ", s)       # answer rules -> one short blank
-    s = _URL.sub(r"\1.", s)         # "www .site" -> "www.site"
+    s = _LIG.sub(r"\1\2", s)        
+    s = _DOTS.sub(" ___ ", s)       
+    s = _URL.sub(r"\1.", s)         
     s = re.sub(r"[ \t]{2,}", " ", s)
     return re.sub(r"\n{3,}", "\n\n", s)
 
@@ -57,10 +52,9 @@ def clean(s: str) -> str:
 def strip_repeats(pages: list[str], min_share: float = 0.6) -> list[str]:
     """Drop lines that appear on most pages — running heads and footers."""
     if len(pages) < 4:
-        return pages                # too few to tell a footer from content
+        return pages                
     seen = collections.Counter()
     for p in pages:
-        # set() first: a line repeated twice on one page still counts once.
         for line in set(l.strip() for l in p.splitlines() if len(l.strip()) > 12):
             seen[line] += 1
     cut = {line for line, n in seen.items() if n >= len(pages) * min_share}
@@ -75,5 +69,5 @@ def doc_pages(reader) -> list[str]:
         try:
             pages.append(clean(page_text(reader.pages[i])))
         except Exception:
-            break                   # keep what was readable before the fault
+            break                   
     return strip_repeats(pages)

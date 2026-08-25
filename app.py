@@ -25,7 +25,7 @@ from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 import pdftext
 import users
 from ratelimit import RateLimiter
-# Shared with main.py so the two front ends cannot drift on the verdict signal.
+
 from prompts import (
     build_check_prompt, tutor_reply as _tutor_reply,
     TUTOR_SYSTEM_PROMPT, hint_note,
@@ -34,25 +34,25 @@ load_dotenv()
 
 app = Flask(__name__, static_folder="static")
 
-# ── auth ─────────────────────────────────────────────────────────────────────
+
 
 users.init()
-# Timed-out rows serve no purpose and user_for_token already refuses them.
-# Only runs at boot, which is enough for a server that is restarted often; a
-# long-lived one is also swept on each successful login below.
+
+
+
 users.purge_expired()
 
 SESSION_COOKIE = "ollm_session"
 
-# A secure cookie is only sent over https. Setting it on plain http does not
-# warn — the browser silently drops the cookie and the app looks broken with no
-# error anywhere. So it follows the deployment: export OLLM_HTTPS=1 when this
-# sits behind TLS, and leave it unset on localhost.
+
+
+
+
 COOKIE_SECURE = os.environ.get("OLLM_HTTPS", "").strip().lower() in {"1", "true", "yes"}
 
-# 8 failures per 15 minutes, counted against the IP and the username separately.
-# Aimed at online guessing, not at a determined attacker: see ratelimit.py for
-# what this does not cover.
+
+
+
 _login_limiter = RateLimiter(max_failures=8, window_seconds=15 * 60)
 
 
@@ -66,9 +66,9 @@ def _login_keys(username: str) -> tuple:
     return (f"ip:{request.remote_addr}",
             f"user:{(username or '').strip().lower()}")
 
-# Endpoints reachable without logging in. Everything else is closed by
-# default — a new route is protected the moment it exists, rather than the
-# moment somebody remembers to decorate it.
+
+
+
 _OPEN_ENDPOINTS = {"index", "static", "api_register", "api_login",
                    "api_logout", "api_me"}
 
@@ -90,9 +90,9 @@ def _auth_response(user: dict, token: str):
     resp.set_cookie(
         SESSION_COOKIE, token,
         max_age=users.SESSION_TTL_SECONDS,
-        httponly=True,          # JavaScript can't read it, so an XSS bug can't steal it
+        httponly=True,          
         samesite="Lax",
-        secure=COOKIE_SECURE,   # https only when OLLM_HTTPS is set
+        secure=COOKIE_SECURE,   
     )
     return resp
 
@@ -101,11 +101,6 @@ def _auth_response(user: dict, token: str):
 def api_register():
     data = request.json or {}
 
-    # Registration is an enumeration oracle: "That username is taken" confirms
-    # an account exists, which is exactly what api_login refuses to reveal. The
-    # message has to stay — someone picking a name deserves to know it is gone
-    # — so the rate limit is what stops it being read in bulk. IP only: keying
-    # on the username would let anyone lock a name out of being registered.
     ip_key = f"register-ip:{request.remote_addr}"
     wait = _login_limiter.retry_after(ip_key)
     if wait:
@@ -133,8 +128,6 @@ def api_login():
 
     wait = _login_limiter.retry_after(*keys)
     if wait:
-        # Checked before the password is verified, so a blocked caller cannot
-        # use this endpoint to test guesses at all.
         resp = jsonify({"error": "Too many failed logins. Try again later."})
         resp.headers["Retry-After"] = str(wait)
         return resp, 429
@@ -142,12 +135,8 @@ def api_login():
     uid = users.authenticate(data.get("username", ""), data.get("password", ""))
     if uid is None:
         _login_limiter.record_failure(*keys)
-        # One message for both cases. "No such user" would confirm which
-        # usernames exist.
         return jsonify({"error": "Wrong username or password."}), 401
 
-    # A correct password clears the count, so a student who mistypes four times
-    # and then gets it right is not left half-way to a lockout.
     _login_limiter.clear(*keys)
     users.purge_expired()
     return _auth_response({"id": uid, "username": username},
@@ -192,10 +181,10 @@ GRAPH_SYSTEM_PROMPT = (
     "- Never put a marker at a point that is not on a curve you plotted."
 )
 
-# Generated plotting code is checked against an allowlist before it runs, so a
-# construct nobody thought of is blocked by default rather than allowed by
-# default. The abstract bases (ast.operator and friends) cover every arithmetic
-# and comparison operator without listing them one by one.
+
+
+
+
 _GRAPH_ALLOWED_NODES = (
     ast.Module, ast.Expr, ast.Assign, ast.AugAssign, ast.For, ast.If, ast.Pass,
     ast.Call, ast.keyword, ast.Name, ast.Attribute, ast.Subscript, ast.Slice, ast.Starred,
@@ -205,18 +194,18 @@ _GRAPH_ALLOWED_NODES = (
     ast.operator, ast.unaryop, ast.boolop, ast.cmpop, ast.expr_context,
 )
 
-# These write files or open windows — the route renders the figure itself.
+
 _GRAPH_BANNED_ATTRS = {"savefig", "show", "close", "imsave"}
 
-# None of these are in _GRAPH_BUILTINS, so they would already die with a
-# NameError. Naming them here rejects the code before it runs and says why.
+
+
 _GRAPH_BANNED_NAMES = {
     "exec", "eval", "compile", "open", "input", "breakpoint", "help",
     "globals", "locals", "vars", "dir", "getattr", "setattr", "delattr",
 }
 
-# exec() with no "__builtins__" key gets the real builtins injected, which is
-# what left __import__ reachable. An explicit minimal set closes that.
+
+
 _GRAPH_BUILTINS = {
     "abs": abs, "min": min, "max": max, "sum": sum, "round": round, "pow": pow,
     "range": range, "len": len, "enumerate": enumerate, "zip": zip,
@@ -236,8 +225,6 @@ def _check_graph_code(code: str) -> str | None:
     for node in ast.walk(tree):
         if not isinstance(node, _GRAPH_ALLOWED_NODES):
             return f"{type(node).__name__} is not allowed"
-        # Leading underscores are how you climb out of a restricted namespace,
-        # e.g. ().__class__.__base__.__subclasses__().
         if isinstance(node, ast.Attribute):
             if node.attr.startswith("_"):
                 return f"attribute {node.attr!r} is not allowed"
@@ -260,10 +247,10 @@ def _render_png() -> str:
     return base64.b64encode(buf.read()).decode("utf-8")
 
 
-# A hardcoded run of numbers is data somebody typed, not data derived from a
-# formula. When the model types it, the numbers are invented — asked for the
-# price of gold it produced twelve monthly figures to two decimal places. The
-# figure gets stamped so an invented series cannot look like a measured one.
+
+
+
+
 _LITERAL_DATA_MIN = 4
 
 
@@ -275,8 +262,6 @@ def _has_literal_data(code: str) -> bool:
         return False
     for node in ast.walk(tree):
         if isinstance(node, (ast.List, ast.Tuple)):
-            # bool subclasses int, so [True, False, True, False] would otherwise
-            # count as four numbers.
             numbers = [e for e in node.elts
                        if isinstance(e, ast.Constant)
                        and isinstance(e.value, (int, float))
@@ -289,12 +274,12 @@ def _has_literal_data(code: str) -> bool:
 ALLOWED_IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 PDF_TEXT_LIMIT  = 8000
 
-# Downloaded past papers are cached here so the browser can ask for them by id
-# instead of by URL — see _fetch_pdf for why that matters.
+
+
 PAPER_CACHE_DIR = Path(__file__).parent / "data" / "papers"
-PAPER_MAX_BYTES = 20 * 1024 * 1024   # a scanned A-level paper can be big; 20MB is plenty
-PAPER_MAX_FETCH = 3                  # per search, to keep the request from crawling
-VERIFY_OVERSHOOT = 3                 # spare questions, since the answer check drops some
+PAPER_MAX_BYTES = 20 * 1024 * 1024   
+PAPER_MAX_FETCH = 3                  
+VERIFY_OVERSHOOT = 3                 
 _PAPER_ID_RE    = re.compile(r'^[0-9a-f]{16}$')
 _GREETING_RE = re.compile(
     r"^\s*(?:h(?:i|ey|ello|igh)|yo|sup|good\s+(?:morning|afternoon|evening))"
@@ -309,8 +294,8 @@ def _pdf_text(data: bytes) -> str:
     return "\n".join(pdftext.doc_pages(reader))
 
 
-# A numbered question ("12." or "12)") at the start of a line, and the symbols
-# that show up in maths but almost never in a copyright notice.
+
+
 _QUESTION_NUM_RE = re.compile(r'^\s*\d{1,2}[\.\)]\s+\S', re.MULTILINE)
 _MATH_CHARS      = set("=+×÷≤≥∫√^")
 
@@ -345,8 +330,6 @@ def _question_pages(data: bytes, budget: int = 7000) -> tuple[bool, str]:
     if not scored:
         return has_text, ""
 
-    # Best pages first to fill the budget, then restore document order so a
-    # multi-page question still reads correctly.
     scored.sort(key=lambda t: -t[0])
     kept, total = [], 0
     for score, i, text in scored:
@@ -362,7 +345,7 @@ def _question_pages(data: bytes, budget: int = 7000) -> tuple[bool, str]:
 def index():
     return send_from_directory("static", "index.html")
 
-# ── file upload ──────────────────────────────────────────────────────────────
+
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
@@ -383,7 +366,7 @@ def api_upload():
 
     return jsonify({"error": f"Unsupported file type: {ext}"}), 400
 
-# ── graph generation ─────────────────────────────────────────────────────────
+
 
 @app.route("/api/graph", methods=["POST"])
 def api_graph():
@@ -398,7 +381,7 @@ def api_graph():
         return jsonify({"error": "No description provided"}), 400
 
     messages = [{"role": "system", "content": GRAPH_SYSTEM_PROMPT}]
-    messages += shot_messages(description)     # [] when nothing is close enough
+    messages += shot_messages(description)     
     messages.append({"role": "user",
                      "content": f"Generate a graph for: {description}"})
     raw_code = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
@@ -409,7 +392,6 @@ def api_graph():
                                  "ask for a diagram that shows the shape of the "
                                  "relationship instead."}), 400
 
-    # Strip accidental markdown fences and any savefig/show/close calls
     code = re.sub(r"^```(?:python)?\n?", "", raw_code.strip())
     code = re.sub(r"\n?```$", "", code)
     code = re.sub(r"plt\.(savefig|show|close)\(.*?\)\n?", "", code)
@@ -421,7 +403,7 @@ def api_graph():
 
     try:
         plt.close("all")
-        exec(code, {"__builtins__": _GRAPH_BUILTINS, "plt": plt, "np": np})  # noqa: S102
+        exec(code, {"__builtins__": _GRAPH_BUILTINS, "plt": plt, "np": np})  
         if _has_literal_data(code):
             plt.gcf().text(0.99, 0.01, "Illustrative — values are not real data",
                            ha="right", va="bottom", fontsize=7, color="#b45309")
@@ -430,7 +412,7 @@ def api_graph():
         plt.close("all")
         return jsonify({"error": str(e)}), 500
 
-# ── learn endpoints ──────────────────────────────────────────────────────────
+
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
@@ -453,7 +435,6 @@ def api_start():
 
     messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}, user_msg]
     started  = time.monotonic()
-    # Keep the raw reply: _tutor_reply returns a plain str, which drops .usage.
     raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
     response, _ = _tutor_reply(raw)
     messages.append({"role": "assistant", "content": response})
@@ -485,10 +466,6 @@ def api_reply():
     tavily_key   = _key(data, "tavily_key", "TAVILY_KEY")
     topic        = data.get("topic", "")
 
-    # "just give me the papers" — fetch them instead of tutoring at the student.
-    # The reply is written here rather than by the model: the model has no way to
-    # know whether the download actually succeeded, and this turn must not be
-    # answered with another Socratic question.
     if _mentions_papers(user_input):
         started = time.monotonic()
         intent = _paper_intent(user_input, topic, model=model, host=host,
@@ -497,8 +474,6 @@ def api_reply():
             reply, papers = _papers_for_chat(intent["topic"], tavily_key)
             messages.append({"role": "user", "content": user_input})
             messages.append({"role": "assistant", "content": reply})
-            # This branch used to return without logging, which left a hole in
-            # the middle of any session that fetched papers.
             log_turn("papers",
                      session_id=data.get("session_id", ""),
                      user_id=g.user["id"],
@@ -507,7 +482,7 @@ def api_reply():
                      input=user_input, output=reply,
                      correct=None, wrong_streak=wrong_streak,
                      attachment=attachment_meta(attachment),
-                     tokens={},          # _paper_intent's usage is not metered yet
+                     tokens={},          
                      latency_ms=round((time.monotonic() - started) * 1000))
             return jsonify({
                 "response": reply,
@@ -516,7 +491,6 @@ def api_reply():
                 "correct": None,
                 "papers": papers,
             })
-        # Not a papers request after all — fall through to the tutor as normal.
 
     user_msg = {"role": "user", "content": user_input + hint_note(wrong_streak)}
     if attachment:
@@ -546,10 +520,10 @@ def api_reply():
         "correct": correct,
     })
 
-# ── session history ──────────────────────────────────────────────────────────
+
 
 _SESSION_ID_MAX = 64
-# The events that make up a lesson. A "check" is a one-shot, not a conversation.
+
 _REPLAYABLE = ("start", "reply", "papers")
 
 
@@ -570,8 +544,6 @@ def _rebuild_messages(turns: list[dict]) -> list[dict]:
             text = f"Teach me about: {text}"
         meta = turn.get("attachment")
         if meta:
-            # The bytes were never logged, by design. Name the file so the tutor
-            # does not answer as if the student had sent nothing at all.
             text += (f"\n\n[The student attached a {meta.get('type', 'file')}: "
                      f"{meta.get('name', '')}. It is not available in this "
                      f"resumed session.]")
@@ -591,14 +563,10 @@ def api_session(session_id: str):
         return jsonify({"error": "bad session id"}), 400
     turns = session_turns(session_id, g.user["id"])
     if not turns:
-        # Same 404 whether the session is missing or belongs to someone else,
-        # so the reply never confirms that another student's lesson exists.
         return jsonify({"error": "no such session"}), 404
 
-    # Show exactly the turns the rebuild used, so the transcript on screen can
-    # never disagree with the history the model is given.
     lesson = [t for t in turns if t.get("event") in _REPLAYABLE]
-    shown  = lesson or turns            # a check-only session still shows its turns
+    shown  = lesson or turns            
 
     return jsonify({
         "session_id": session_id,
@@ -612,7 +580,7 @@ def api_session(session_id: str):
         "resumable": bool(lesson),
     })
 
-# ── check endpoint ───────────────────────────────────────────────────────────
+
 
 @app.route("/api/check", methods=["POST"])
 def api_check():
@@ -658,7 +626,6 @@ def api_check():
 
     pdf_context = f"Attached document:\n{attachment['text']}\n\n" if attachment and attachment.get("type") == "pdf" else ""
 
-    # Providers without image input get the question transcribed to text instead.
     image_context = ""
     if attachment and attachment.get("type") == "image":
         image_context = _transcription_note(attachment, provider, model, host, api_key, vision_model).strip() + "\n\n"
@@ -680,7 +647,7 @@ def api_check():
              latency_ms=round((time.monotonic() - started) * 1000))
     return jsonify({"response": response, "correct": correct})
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _apply_attachment(msg: dict, attachment: dict, provider: str, model: str = "",
                       host: str = "", api_key: str = "", vision_model: str = ""):
@@ -709,7 +676,7 @@ def _transcription_note(attachment: dict, provider: str, model: str, host: str,
 def _strip_images(messages: list) -> list:
     return [{"role": m["role"], "content": m["content"]} for m in messages]
 
-# ── past papers ─────────────────────────────────────────────────────────────
+
 
 PAPER_DOMAINS = [
     "physicsandmathstutor.com",
@@ -766,8 +733,6 @@ def _fetch_pdf(url: str) -> bytes | None:
     try:
         with requests.get(url, timeout=20, stream=True) as resp:
             resp.raise_for_status()
-            # Servers hand back HTML error pages with a 200 all the time, so
-            # trust the bytes over the headers.
             ctype = resp.headers.get("Content-Type", "").lower()
             if "pdf" not in ctype and not url.lower().endswith(".pdf"):
                 return None
@@ -790,7 +755,6 @@ def _cache_paper(url: str, title: str, data: bytes) -> str:
     paper_id = hashlib.sha256(url.encode()).hexdigest()[:16]
     PAPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     (PAPER_CACHE_DIR / f"{paper_id}.pdf").write_bytes(data)
-    # Sidecar so the download name and source survive a restart.
     (PAPER_CACHE_DIR / f"{paper_id}.json").write_text(
         json.dumps({"url": url, "title": title}))
     return paper_id
@@ -798,7 +762,6 @@ def _cache_paper(url: str, title: str, data: bytes) -> str:
 
 @app.route("/api/papers/download/<paper_id>")
 def api_paper_download(paper_id: str):
-    # The id is used to build a path, so it must be exactly what we generated.
     if not _PAPER_ID_RE.match(paper_id):
         return jsonify({"error": "Bad paper id"}), 400
 
@@ -808,7 +771,6 @@ def api_paper_download(paper_id: str):
 
     meta_path = PAPER_CACHE_DIR / f"{paper_id}.json"
     title = json.loads(meta_path.read_text()).get("title", "") if meta_path.is_file() else ""
-    # The title comes from a page we don't control, so never trust it as a filename.
     name = secure_filename(title) or paper_id
     if not name.lower().endswith(".pdf"):
         name += ".pdf"
@@ -887,8 +849,6 @@ def _verify_questions(questions: list[dict], **llm) -> tuple[list[dict], int]:
     try:
         reply = chat([{"role": "user", "content": VERIFY_PROMPT.format(questions=asked)}], **llm)
     except Exception:
-        # A failed check must not cost the student their questions; fall back to
-        # the unverified set rather than returning nothing.
         return questions, 0
 
     tail = reply.rsplit("FINAL", 1)[-1]
@@ -897,8 +857,6 @@ def _verify_questions(questions: list[dict], **llm) -> tuple[list[dict], int]:
     kept = []
     for i, q in enumerate(questions, 1):
         verdict = verdicts.get(i)
-        # No verdict parsed → keep it. Absence of evidence isn't a wrong answer,
-        # and silently dropping questions on a formatting wobble is worse.
         if verdict is None or verdict == q["answer"]:
             kept.append(q)
     return kept, len(questions) - len(kept)
@@ -928,9 +886,6 @@ def api_papers():
     if not results:
         return jsonify({"error": "No past paper content found for that topic. Try a more specific query."}), 404
 
-    # Real papers first: download what we can and use its actual text, which is
-    # far better grounding than a search snippet. Falls back to snippets when a
-    # topic turns up no usable PDFs.
     papers, paper_texts = _collect_papers(results)
 
     if paper_texts:
@@ -941,8 +896,6 @@ def api_papers():
 
     sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in results[:5]]
 
-    # Over-generate, because verification drops whatever it cannot confirm and
-    # the student should still end up with the number they asked for.
     prompt = PAPER_GEN_PROMPT.format(n=n_questions + VERIFY_OVERSHOOT, content=combined)
     try:
         raw = chat(
@@ -966,8 +919,6 @@ def api_papers():
         "questions": _format_questions(verified),
         "sources": sources,
         "papers": papers,
-        # Lets the UI say where the questions came from, instead of implying
-        # they are straight off a real paper when they came from snippets.
         "grounded": bool(paper_texts),
         "dropped": dropped,
     })
@@ -1056,28 +1007,28 @@ def _collect_papers(results: list[dict]) -> tuple[list[dict], list[str]]:
     return papers, paper_texts
 
 
-# ── "just give me the papers" detection ─────────────────────────────────────
-# Two stages. The keyword rules below are a cheap prefilter that decides whether
-# a turn is worth asking about; _paper_intent() then makes one structured call to
-# decide intent and topic together. The original objection to a classifier was
-# that it would cost a call on every tutor turn — it does not, because a message
-# that never mentions papers never gets that far.
-#
-# The regexes stay as the fallback for when that call fails, so a flaky model
-# cannot cost the student the feature.
 
-# Bare "papers" is included but only in the plural: "take some papers" is a
-# request, while "explain this paper I uploaded" is not — and the fetch-verb
-# requirement rules out "explain these papers" anyway.
+
+
+
+
+
+
+
+
+
+
+
+
 _PAPER_NOUN = r"(?:past[\s-]?papers?|exam papers?|pdfs?|mark schemes?|real (?:exam )?questions?|papers)"
 _FETCH_VERB = r"(?:get|give|fetch|find|download|send|show|grab|take|provide|need|want|have)"
 _NEGATION   = r"(?:don'?t|do not|not|no need|nope|never|rather not|without)"
 _ABOUT_RE = re.compile(r"^\s*(?:what|why|how|explain|describe|tell me about)\b", re.IGNORECASE)
-# A verb, then the noun within a short window — "give me some past papers" hits,
-# "what is a past paper?" does not.
+
+
 _WANTS_PAPERS_RE = re.compile(
     rf"\b{_FETCH_VERB}\b[^.?!]{{0,40}}?\b{_PAPER_NOUN}\b", re.IGNORECASE)
-# Negation anywhere before the noun in the same breath cancels it.
+
 _NOT_PAPERS_RE = re.compile(
     rf"\b{_NEGATION}\b[^.?!]{{0,40}}?\b{_PAPER_NOUN}\b", re.IGNORECASE)
 
@@ -1088,19 +1039,17 @@ def _wants_papers(text: str) -> bool:
         return False
     if _WANTS_PAPERS_RE.search(text):
         return True
-    # No fetch verb. On a short message the noun is the whole request, but a
-    # question *about* papers is not a request for one.
     if _ABOUT_RE.search(text):
         return False
     return len(text.split()) <= 8 and bool(re.search(_PAPER_NOUN, text, re.I))
 
-# "past papers on trigonometry" / "a paper for calculus" — an explicit subject in
-# the request beats the lesson topic.
+
+
 _TOPIC_IN_REQUEST_RE = re.compile(
     rf"{_PAPER_NOUN}\s+(?:on|for|about|in)\s+([a-z0-9][a-z0-9 '\-]{{2,50}})", re.IGNORECASE)
 
 
-# "past papers for trigonometry please" — the politeness is not part of the topic.
+
 _TOPIC_TRAIL_RE = re.compile(r"\b(?:please|pls|thanks|thank you|now|asap|ok)\b\s*$", re.IGNORECASE)
 
 
@@ -1110,16 +1059,16 @@ def _stated_topic(user_input: str) -> str:
     return _TOPIC_TRAIL_RE.sub("", m.group(1)).strip() if m else ""
 
 
-# The prefilter. Deliberately far wider than _wants_papers: no verb requirement
-# and no negation cancel, because "can you not just fetch the whole pdf" is a
-# request and the negation rule got that exactly backwards. The regex stops
-# adjudicating and only decides whether a question is worth asking.
-#
-# Bare "paper" is singular here, unlike _PAPER_NOUN, which keeps it plural-only
-# so the fallback behaves as it always has. "why won't you give me the paper" is
-# a real request and has to reach the classifier; "explain this paper I uploaded"
-# reaches it too and comes back false, which costs one call and gets the right
-# answer instead of a lucky one.
+
+
+
+
+
+
+
+
+
+
 _MENTIONS_PAPERS_RE = re.compile(rf"\b(?:{_PAPER_NOUN}|paper)\b", re.IGNORECASE)
 
 
@@ -1147,8 +1096,8 @@ PAPER_INTENT_PROMPT = (
     "Student message: {message}"
 )
 
-# Greedy on purpose: models wrap JSON in fences and prose, and the outermost
-# {...} is the object we want.
+
+
 _JSON_OBJ_RE = re.compile(r'\{.*\}', re.DOTALL)
 
 
@@ -1177,7 +1126,6 @@ def _paper_intent(user_input: str, lesson_topic: str, **llm) -> dict:
     except (ValueError, TypeError):
         return fallback
 
-    # A model that returns the wrong shape is a failed call, not a "no".
     if not isinstance(data.get("wants_papers"), bool):
         return fallback
 
@@ -1186,10 +1134,10 @@ def _paper_intent(user_input: str, lesson_topic: str, **llm) -> dict:
     return {"wants_papers": data["wants_papers"], "topic": topic}
 
 
-# A topic can still arrive as a whole sentence through the fallback path, and
-# "3 papers on Can you please help me fetch AS level papers of Computer Science"
-# reads like a bug. Past a certain length it has stopped being a subject, so the
-# sentence drops the clause rather than swallowing it whole.
+
+
+
+
 _TOPIC_PHRASE_MAX_WORDS = 6
 _TOPIC_PHRASE_MAX_CHARS = 40
 
@@ -1230,7 +1178,6 @@ def _papers_for_chat(topic: str, tavily_key: str) -> tuple[str, list]:
         return (f"I couldn't find a downloadable paper{_topic_phrase(topic)}. "
                 "Try naming the exam board or a narrower subject.", [])
 
-    # Say plainly what they got, including what is not usable and why.
     plural = "paper" if len(papers) == 1 else "papers"
     reply = (f"Here {'is' if len(papers) == 1 else 'are'} {len(papers)} {plural}"
              f"{_topic_phrase(topic)} — click to download.")

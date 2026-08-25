@@ -488,10 +488,8 @@
 
 <div id="chat-area"></div>
 
-<!-- hidden file input -->
 <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" class="hidden" onchange="handleFileChange()" />
 
-<!-- Learn panel -->
 <div id="learn-panel">
   <div id="topic-row">
     <div id="learn-attach-strip" class="attach-strip hidden"></div>
@@ -513,7 +511,6 @@
   </div>
 </div>
 
-<!-- Check panel -->
 <div id="check-panel" class="hidden">
   <div id="check-attach-strip" class="attach-strip hidden"></div>
   <div class="input-row" style="align-items:stretch">
@@ -538,17 +535,10 @@
   let provider = 'ollama';
   let wrongStreak = 0;
   let paperTimer = null;
-  // Ties every turn of one lesson together in the session log. Generated here
-  // because the server keeps no session state — it is handed back each turn.
   let sessionId = crypto.randomUUID();
-  // Kept because the topic input is cleared and hidden once a lesson starts,
-  // but a mid-lesson "get me a past paper" still needs to know the subject.
   let currentTopic = '';
-  // Which sidebar row is highlighted. Not the same as sessionId: a brand new
-  // lesson has an id but no log rows yet, so there is nothing to highlight.
   let currentSessionOpen = null;
 
-  // past-papers quiz state
   let paperMode = false;
   let paperQuestions = [];
   let paperIndex = 0;
@@ -636,7 +626,6 @@
   /* ---- paste an image straight from the clipboard ---- */
   const PASTE_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
 
-  // Whichever input the user can actually see is the one the paste belongs to.
   function activeAttachTarget() {
     if (mode === 'check') return 'check';
     return document.getElementById('answer-row').classList.contains('hidden') ? 'learn' : 'answer';
@@ -759,13 +748,6 @@
     const displayText = options.length > 0 ? stripOptions(text) : text;
     bubble.innerHTML = marked.parse(normaliseMath(displayText));
 
-    // The backend has always returned `correct` and the front end has always
-    // thrown it away, so a wrong answer came back as a worked solution with
-    // nothing saying it was wrong. Seen live 2026-08-14 on 3x + 7 = 22.
-    //
-    // Strictly true/false. `correct` is null when the model sent no marker,
-    // and null is not wrong — an == comparison would draw a cross on a reply
-    // that never carried a verdict at all.
     if (verdict === true || verdict === false) {
       const cls = verdict ? 'verdict-correct' : 'verdict-wrong';
       bubble.classList.add(cls);
@@ -842,7 +824,6 @@
       const data = await res.json();
       renderSessions(data.sessions || []);
     } catch (e) {
-      // The sidebar is a convenience. It must never cost the student a lesson.
     }
   }
 
@@ -859,8 +840,6 @@
 
       const title = document.createElement('div');
       title.className = 'session-title';
-      // textContent, not innerHTML — a topic is student input and must not be
-      // able to inject markup into the page.
       title.textContent = s.title || '(untitled)';
 
       const meta = document.createElement('div');
@@ -903,13 +882,10 @@
       messages           = data.messages;
 
       data.turns.forEach(t => {
-        // A "start" turn's input is the topic, which never appeared as a bubble
-        // the first time round — so it must not appear on replay either.
         if (t.event !== 'start') appendBubble('student', t.input);
         appendBubble('tutor', t.output);
       });
 
-      // The topic row is hidden mid-lesson, so resuming has to open the answer row.
       document.getElementById('topic-row').classList.add('hidden');
       document.getElementById('answer-row').classList.toggle('hidden', !data.resumable);
       if (data.resumable) {
@@ -1027,7 +1003,6 @@
       if (data.correct === false) wrongStreak += 1;
       appendBubble('tutor', data.response);
       loadSessions();          // turn count and timestamp just changed
-      // Papers fetched mid-lesson: show the downloads, leave the lesson alone.
       if (data.papers && data.papers.length) showPapers(data.papers, null, 0);
 
       if (data.done) {
@@ -1097,7 +1072,6 @@
         wrap.innerHTML = svg;
         pre.replaceWith(wrap);
       } catch (e) {
-        // Fallback: show raw code in a styled block instead of erroring
         const fallback = document.createElement('pre');
         fallback.style.cssText = 'background:#f3f4f6;border-radius:8px;padding:10px;font-size:0.8rem;overflow-x:auto;margin-top:8px';
         fallback.textContent = code;
@@ -1113,13 +1087,11 @@
       const description = block.textContent.trim();
       const pre = block.parentElement;
 
-      // Replace with a loading placeholder immediately
       const placeholder = document.createElement('div');
       placeholder.className = 'graph-img';
       placeholder.innerHTML = '<div style="padding:12px;color:#9ca3af;font-size:0.85rem">Generating graph...</div>';
       pre.replaceWith(placeholder);
 
-      // Fire off the graph request
       fetch('/api/graph', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1226,8 +1198,6 @@
     }
     return questions;
   }
-  // The papers request takes 20-100s — search, download, generate, verify — and
-  // three dots for that long reads as hung. An elapsed clock shows it is alive.
   function showSearchStatus() {
     const area = document.getElementById('chat-area');
     const el = document.createElement('div');
@@ -1276,12 +1246,8 @@
       area.appendChild(bar);
     }
 
-    // Nothing was generated on a mid-lesson fetch, so there is no provenance to
-    // describe — the chips speak for themselves.
     if (grounded === null) { area.scrollTop = area.scrollHeight; return; }
 
-    // Be explicit about provenance: "past papers" must not imply these are the
-    // real questions when they were generated from search snippets.
     const note = document.createElement('div');
     note.className = 'grounding-note';
     note.textContent = grounded
@@ -1341,7 +1307,6 @@
     if (busy) return;
     busy = true;
 
-    // Colour the chosen button, disable all
     optRow.querySelectorAll('.option-btn').forEach(btn => {
       btn.disabled = true;
       const btnLetter = btn.textContent.trim()[0];
@@ -1385,12 +1350,10 @@
       }
 
       if (wrongStreak >= 3) {
-        // Move on after 3 wrong answers
         paperIndex++;
         busy = false;
         showPaperQuestion();
       } else {
-        // Re-show the same question with fresh buttons
         busy = false;
         const text = q.text + '\n\n' + q.options.map(o => `${o.letter}) ${o.text}`).join('\n');
         appendBubble('tutor', text, null, (l, t, row) => selectPaperOption(l, t, row, q));
@@ -1407,8 +1370,6 @@
       return;
     }
     currentTopic = topic;
-    // No key check here — the server falls back to TAVILY_KEY in .env, and only
-    // it knows whether that fallback exists. It returns a clear error if not.
 
     busy = true;
     paperMode = true;
@@ -1477,7 +1438,6 @@
     }
   }
 
-  // ── auth ───────────────────────────────────────────────────────────────────
 
   let authMode = 'login';   // or 'register'
 
@@ -1535,7 +1495,6 @@
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST' });
-    // Drop the in-page lesson too, or the next person at this machine reads it.
     messages = [];
     clearChat();
     document.getElementById('session-list').innerHTML = '';
@@ -1543,8 +1502,6 @@
     showAuthGate();
   }
 
-  // Any request can come back 401 once the 30-day session expires. Catching it
-  // in one place beats checking the status at all ten call sites.
   const _fetch = window.fetch.bind(window);
   window.fetch = async (...args) => {
     const res = await _fetch(...args);
@@ -1552,8 +1509,6 @@
     return res;
   };
 
-  // Decide login screen or app before painting anything. loadSessions() is
-  // called from enterApp, not here — it would 401 while logged out.
   fetch('/api/me')
     .then(r => r.json())
     .then(d => { if (d.user) enterApp(d.user); })
