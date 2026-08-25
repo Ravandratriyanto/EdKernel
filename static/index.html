@@ -723,13 +723,45 @@
      Fenced code blocks are left alone. A maths reply has no reason to contain
      one, but a programming question does, and rewriting inside it would
      corrupt the code being shown. */
+  /* A currency dollar must never reach renderMathInElement. marked turns "\$"
+     into a bare "$" — a CommonMark escape — and KaTeX then pairs the dollars
+     up and renders the words between them as maths. Measured 2026-08-25 on the
+     real reply to a discount question: five spurious .katex spans in one
+     paragraph, with "which is" and "then it is reduced by" coming out as
+     italic variables and the sentence collapsing into itself. Escaping does
+     not save it; a bare "$80 ... $60" breaks the same way.
+
+     An HTML entity cannot fix this. KaTeX walks text nodes, where the browser
+     has already decoded &#36; back to "$" — the same trap that made an earlier
+     test of this file report a false pass.
+
+     So the dollar leaves as a private-use codepoint KaTeX cannot match, and
+     restoreDollars puts it back once the maths is rendered. */
+  const DOLLAR = '\uE000';
+
   function normaliseMath(text) {
     /* Odd indices are the fenced blocks, because the delimiter is captured. */
     return text.split(/(```[\s\S]*?```)/g).map((part, i) =>
       i % 2 === 1 ? part
-                  : part.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+                  /* Currency first. Run after the bracket rewrites below and
+                     "\[5x\]" would become "$$5x$$", whose second $ is followed
+                     by a digit — the rule here would then eat a real delimiter. */
+                  : part.replace(/\\\$/g, DOLLAR)
+                        .replace(/\$(?=\d)/g, DOLLAR)
+                        .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
                         .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$')
     ).join('');
+  }
+
+  /* After KaTeX, never before. Replacing on innerHTML would corrupt the markup
+     renderMathInElement has just built, so this walks text nodes only. */
+  function restoreDollars(el) {
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      if (n.nodeValue.includes(DOLLAR)) {
+        n.nodeValue = n.nodeValue.split(DOLLAR).join('$');
+      }
+    }
   }
 
   function appendBubble(role, text, attach, onOptionSelect, verdict) {
@@ -779,6 +811,7 @@
         { left: '$',  right: '$',  display: false },
       ]
     });
+    restoreDollars(bubble);
     renderMermaidIn(bubble);
     renderGraphBlocksIn(bubble);
 
