@@ -141,13 +141,12 @@ def build_tutor_prompt(flavour: str = "SAT/A-level exam preparation",
 
 HINT_LADDER = (
     "",
-    "[Tutor note: student answered wrong once. Ask a verification question only: "
-    "tell them to substitute their answer back, expand their expression, or check "
-    "whether their answer satisfies the original problem. Do not name any method, "
-    "operation, or concept. One question only.]",
-    "[Tutor note: student answered wrong twice. Name the key concept or method "
-    "they are missing — but do not state the final answer (the number, word, or "
-    "expression) itself. End with one question.]",
+    "[Tutor note: student answered wrong once. Ask one short question that nudges "
+    "them to re-examine their answer — without naming any method, operation, concept, "
+    "or step. Do not hint at what they did wrong. One question only.]",
+    "[Tutor note: student answered wrong twice. You MUST explicitly name the key "
+    "concept, term, or method they are missing — say its name plainly. Do not state "
+    "the final answer (the number, word, or expression) itself. End with one question.]",
     "[Tutor note: student answered this wrong 3+ times — directly explain the "
     "concept they are missing, then ask them to apply it.]",
 )

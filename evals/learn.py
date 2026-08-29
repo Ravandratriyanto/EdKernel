@@ -6,9 +6,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dotenv import load_dotenv 
-from core.llm.client import chat 
+from core.llm.client import chat
 from core.rag.retrieve import retrieve
 from core.prompts import TUTOR_SYSTEM_PROMPT, hint_note, strip_signal
+from core.vision.image_handler import drop_reasoning
 load_dotenv()
 CASES = Path(__file__).parent / "learn_cases.jsonl"
 ATTEMPTS = 3
@@ -85,7 +86,7 @@ def run_case(case, provider, model, host, api_key, tries=4):
                     return {**case, "hints": hints, "error": f"{type(e).__name__}: {e}"}
                 time.sleep(5 * 2 ** attempt)
 
-        reply, _ = strip_signal(str(raw))
+        reply, _ = strip_signal(drop_reasoning(str(raw)))
         hints.append(reply)
     return {**case, "hints": hints, "error": None}
 def judge(result):
