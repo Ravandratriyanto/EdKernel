@@ -163,4 +163,22 @@ def build(text_folder: str = "data/reference",
 
 
 if __name__ == "__main__":
-    build()
+    import argparse
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+    p = argparse.ArgumentParser(description="Build a ChromaDB collection from reference material")
+    p.add_argument("--curriculum", metavar="ID",
+                   help="Curriculum id (e.g. sat-alevel). Reads paths and collection "
+                        "name from curricula/<id>/manifest.json. If omitted, uses the "
+                        "legacy data/reference + data/papers paths.")
+    args = p.parse_args()
+
+    if args.curriculum:
+        import curricula as cur
+        manifest = cur.load(args.curriculum)
+        build(text_folder=cur.reference_dir(manifest),
+              pdf_folder=cur.papers_dir(manifest),
+              collection_name=manifest["collection"])
+    else:
+        build()

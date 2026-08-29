@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EdKernel — Codebase Flowcharts</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d0d0d;
+    color: #e8e8e8;
+    line-height: 1.6;
+  }
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-bottom: 2px solid #f2ff00;
+    padding: 2rem 3rem;
+  }
+  header h1 { font-size: 2rem; color: #f2ff00; letter-spacing: 2px; }
+  header p  { color: #aaa; margin-top: 0.4rem; font-size: 0.95rem; }
+
+  nav {
+    background: #111;
+    padding: 1rem 3rem;
+    border-bottom: 1px solid #222;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  nav a {
+    color: #aaa;
+    text-decoration: none;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #333;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+  nav a:hover { color: #f2ff00; border-color: #f2ff00; }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 2rem 3rem; }
+
+  .section {
+    margin-bottom: 3rem;
+    border: 1px solid #222;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .section-header h2 {
+    font-size: 1.1rem;
+    font-family: 'Courier New', monospace;
+    color: #f2ff00;
+  }
+  .section-header .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .badge-core    { background: #1a3a1a; color: #6fdd6f; border: 1px solid #2e6b2e; }
+  .badge-rag     { background: #1a2a3a; color: #6fb3dd; border: 1px solid #2e4e6b; }
+  .badge-vision  { background: #3a1a3a; color: #dd6fdd; border: 1px solid #6b2e6b; }
+  .badge-auth    { background: #3a2a1a; color: #dda06f; border: 1px solid #6b4e2e; }
+  .badge-eval    { background: #2a1a3a; color: #9a6fdd; border: 1px solid #4e2e6b; }
+  .badge-arch    { background: #2a2a1a; color: #dddd6f; border: 1px solid #6b6b2e; }
+  .badge-curric  { background: #1a3a3a; color: #6fdddd; border: 1px solid #2e6b6b; }
+  .badge-api     { background: #1a2a2a; color: #6fddaa; border: 1px solid #2e6b55; }
+
+  .section-desc {
+    padding: 0 1.5rem 1rem;
+    color: #888;
+    font-size: 0.88rem;
+  }
+
+  .chart-area {
+    background: #fafafa;
+    padding: 1.5rem;
+    overflow-x: auto;
+  }
+  .chart-area .mermaid { display: flex; justify-content: center; }
+
+  .color-arch   .section-header { background: #1a1a0d; }
+  .color-core   .section-header { background: #0d1a0d; }
+  .color-rag    .section-header { background: #0d1520; }
+  .color-vision .section-header { background: #1a0d1a; }
+  .color-auth   .section-header { background: #1a140d; }
+  .color-eval   .section-header { background: #120d1a; }
+  .color-curric .section-header { background: #0d1a1a; }
+  .color-api    .section-header { background: #0d1a15; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>EdKernel — Codebase Flowcharts</h1>
+  <p>One diagram per concern · Updated 2026-08-29 · core/ restructure + /v1/ API</p>
+</header>
+
+<nav>
+  <a href="#arch">System Architecture</a>
+  <a href="#core-pkg">core/ Package</a>
+  <a href="#user-flows">User Flows</a>
+  <a href="#curricula">Curricula &amp; Question Bank</a>
+  <a href="#paper-import">Past Paper Import</a>
+  <a href="#app-routes">app.py Routes</a>
+  <a href="#v1-api">api_v1.py (/v1/)</a>
+  <a href="#llm-client">core/llm/client.py</a>
+  <a href="#prompts">core/prompts.py</a>
+  <a href="#rag-ingest">core/rag/ingest.py</a>
+  <a href="#rag-retrieve">core/rag/retrieve.py</a>
+  <a href="#settings">settings.py</a>
+  <a href="#vision">core/vision/image_handler.py</a>
+  <a href="#users">users.py</a>
+  <a href="#ratelimit">ratelimit.py</a>
+  <a href="#eval-run">evals/run.py</a>
+  <a href="#eval-learn">evals/learn.py</a>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════ ARCHITECTURE ═══════════════════════ -->
+<div class="section color-arch" id="arch">
+  <div class="section-header">
+    <h2>System Architecture — How it all connects</h2>
+    <span class="badge badge-arch">OVERVIEW</span>
+  </div>
+  <div class="section-desc">Top-level view. Three browser UIs and one CLI share the same Flask backend. core/ is the AI engine — pure Python, no Flask. api_v1.py exposes core/ as a stateless REST API for third-party integrations. Curricula are first-class objects with their own RAG collections.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+graph TD
+    STUDENT["Student\nindex.html\n3-view UI"]
+    TEACHER["Teacher\nteacher.html"]
+    ADMIN["Admin\nadmin.html"]
+    DEV["Dev panel\ndev.html"]
+    CLI["CLI\nmain.py"]
+    THIRD["Third-party\nintegration"]
+
+    STUDENT -->|HTTP + cookie| APP
+    TEACHER -->|HTTP + cookie| APP
+    ADMIN   -->|HTTP + cookie| APP
+    DEV     -->|HTTP| APP
+    CLI --> CORE
+    THIRD -->|"Bearer token\nHTTP"| V1
+
+    APP["app.py\nFlask — 48 routes"]
+    V1["api_v1.py\nBlueprint /v1/\n6 endpoint groups"]
+
+    APP --> AUTH["users.py\nAuth + sessions\n+ API keys"]
+    APP --> RL["ratelimit.py"]
+    APP --> SET["settings.py\nFeature flags"]
+    APP --> CUR["curricula.py\nManifest loader"]
+    APP --> SLOG["sessionlog.py\nLesson log"]
+    APP --> CORE
+
+    V1 --> AUTH
+    V1 --> CORE
+
+    CORE["core/\nAI engine\nno Flask dependency"]
+
+    CORE --> LLM["core/llm/client.py\nOllama / Groq"]
+    CORE --> RAG["core/rag/retrieve.py\nVector search"]
+    CORE --> PROM["core/prompts.py\nShared prompts"]
+    CORE --> VIS["core/vision/\nImage + step check"]
+
+    CUR --> CDIR[("curricula/\nmanifest · topics\nquestions · reference/\npapers/")]
+
+    RAG --> CDB[("ChromaDB\none collection\nper curriculum")]
+    INGEST["core/rag/ingest.py\n--curriculum flag"] --> CDB
+    INGEST --> CDIR
+
+    LLM --> OLL["Ollama\nlocalhost:11434"]
+    LLM --> GROQ["Groq API\ncloud LPU"]
+
+    EVALS["evals/\nrun · regress · learn"] -.->|test calls| CORE
+
+    style APP   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style CORE  fill:#0d2a0d,stroke:#6fdd6f,color:#e8e8e8
+    style V1    fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
+    style CDB   fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style CDIR  fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
+    style GROQ  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style OLL   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CORE PACKAGE ═══════════════════════ -->
+<div class="section color-core" id="core-pkg">
+  <div class="section-header">
+    <h2>core/ — The AI engine</h2>
+    <span class="badge badge-core">CORE</span>
+  </div>
+  <div class="section-desc">Pure Python. No Flask, no SQLite, no HTTP. Everything in here is callable by app.py, api_v1.py, main.py (CLI), and evals — without booting a server. The boundary that earns the "kernel" name: any external LMS can call these functions directly.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph CORE["core/ — AI engine"]
+        direction TB
+
+        subgraph LLM["core/llm/"]
+            LC["client.py\ngenerate() + chat()\nOllama / Groq\nLLMText with token counts"]
+        end
+
+        subgraph PRMT["core/prompts.py"]
+            PP["TUTOR_SYSTEM_PROMPT\nCLI_TUTOR_SYSTEM_PROMPT\nbuild_check_prompt()\nhint_note() / strip_signal()\ntutor_reply()"]
+        end
+
+        subgraph RAG["core/rag/"]
+            RR["retrieve.py\nChromaDB query\nper-curriculum collection"]
+            RI["ingest.py\nbuild() — rebuild collection\nchunk + embed texts + PDFs"]
+        end
+
+        subgraph VIS["core/vision/"]
+            IH["image_handler.py\ntranscribe() — image → text\ndrop_reasoning() — strip think blocks"]
+            SC["step_checker.py\ncheck_working() — find first wrong step\nOpenCV segment + transcribe each line"]
+            PP2["preprocess.py\nOpenCV binarise + rectify"]
+            SEG["segment.py\nhorizontal line segmentation"]
+        end
+
+        subgraph VID["core/video/"]
+            VH["video_handler.py\nquestion_from_video()\ndedupe + merge frames"]
+            FE["frame_extractor.py\nextract key frames from video"]
+        end
+
+        subgraph TASKS["core/ — task modules"]
+            CK["check.py\nrun(question, answer, context, **llm)\n→ feedback + correct bool"]
+            TU["tutor.py\nstart(topic, context, question_bank, **llm)\nreply(messages, student_message, **llm)\n→ reply + correct + messages"]
+            QQ["questions.py\nextract_from_paper(pdf_bytes, **llm)\n→ list of question dicts"]
+        end
+    end
+
+    LC --> CK
+    LC --> TU
+    LC --> QQ
+    LC --> SC
+    LC --> VH
+    PP --> CK
+    PP --> TU
+    RR --> CK
+    IH --> SC
+    IH --> VH
+    PP2 --> SC
+    SEG --> SC
+
+    style LC  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style CK  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style TU  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style QQ  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style RR  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style RI  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style IH  fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style SC  fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ USER FLOWS ═══════════════════════ -->
+<div class="section color-arch" id="user-flows">
+  <div class="section-header">
+    <h2>User Flows — What each role sees</h2>
+    <span class="badge badge-arch">OVERVIEW</span>
+  </div>
+  <div class="section-desc">Three roles, three front-ends. Feature flags in settings.json (toggled via /dev) control auth and stub data at runtime without a deploy. Admin panel now includes API key management.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph STUDENT_FLOW["Student — index.html"]
+        S1["Classes grid\nlist of curricula"] --> S2["Class canvas\nbanner + tabs"]
+        S2 --> S3A["Classwork tab\ntopics + reference files"]
+        S2 --> S3B["Questions tab\nview + add questions"]
+        S2 --> S4["Open AI Tutor button\nchat view"]
+        S4 --> S5["AI tutor\nSocratic lesson\nquestion bank injected\ninto system prompt"]
+        S4 --> S6["Practice button\nauto-starts quiz\npre-fills topic"]
+    end
+
+    subgraph TEACHER_FLOW["Teacher — teacher.html"]
+        T1["Pick curriculum"] --> T2["Edit topics"]
+        T2 --> T3["Upload reference files\nspec PDFs, mark schemes"]
+        T3 --> T4["Manage question bank\nadd, delete questions"]
+        T4 --> T5["Import past paper\npaste URL → extract questions"]
+        T5 --> T6["Re-ingest RAG\ntrigger ChromaDB rebuild"]
+    end
+
+    subgraph ADMIN_FLOW["Admin — admin.html"]
+        A1["Create curriculum\nid + name + subjects"] --> A2["Edit manifest\nflavour, level, collection"]
+        A2 --> A3["Add topics"]
+        A3 --> A4["Manage users\nset roles"]
+        A4 --> A5["Re-ingest RAG"]
+        A5 --> A6["API keys\ncreate label → token shown once\nrevoke key"]
+    end
+
+    subgraph DEV_FLOW["Dev — /dev"]
+        D1["Toggle: Login required"]
+        D2["Toggle: Stub curriculum"]
+        D3["Toggle: LLM rate limiting"]
+    end
+
+    subgraph THIRD_FLOW["Third-party — /v1/"]
+        V1["Bearer token auth"]
+        V1 --> V2["POST /v1/tutor/start\nPOST /v1/tutor/reply"]
+        V1 --> V3["POST /v1/check"]
+        V1 --> V4["POST /v1/questions/extract"]
+    end
+
+    style S5  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style T5  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style A1  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style V1  fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CURRICULA ═══════════════════════ -->
+<div class="section color-curric" id="curricula">
+  <div class="section-header">
+    <h2>Curricula &amp; Question Bank</h2>
+    <span class="badge badge-curric">CURRICULA</span>
+  </div>
+  <div class="section-desc">Each curriculum lives in its own directory. The tutor loads the question bank on every session start and injects up to 20 questions into the system prompt so the AI can quiz students from real questions.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph DISK["curricula/&lt;id&gt;/ on disk"]
+        MAN["manifest.json\nname, flavour, collection\nlevel, subjects"]
+        TOP["topics.json\narray of topic objects\nname, subtopics, objectives"]
+        QS["questions.json\narray of questions\ntext, answer, marks, image"]
+        REF["reference/\n.txt spec notes\nmark schemes\nofficial PDFs"]
+        PAP["papers/\npast paper PDFs\n(for RAG ingest)"]
+    end
+
+    subgraph LOAD["curricula.py — load()"]
+        CL["load(curriculum_id)\nread manifest.json\nvalidate required fields\nreturn dict"]
+    end
+
+    subgraph INJECT["api_start() — question injection"]
+        QI["read questions.json\ntake first 20\nbuild bullet list with answers\nappend to system prompt\n'never reveal answer until attempted'"]
+    end
+
+    subgraph ROUTES["Routes that touch questions"]
+        RQ1["GET /api/curricula/cid/questions\nstudent reads question bank"]
+        RQ2["POST /api/curricula/cid/questions\nstudent adds a question\n(text + optional base64 image)"]
+        RQ3["GET /api/teacher/curricula/cid/questions\nteacher reads"]
+        RQ4["POST /api/teacher/curricula/cid/questions\nteacher adds"]
+        RQ5["DELETE /api/teacher/curricula/cid/questions/qid\nteacher deletes"]
+    end
+
+    MAN --> CL
+    CL --> INJECT
+    QS --> INJECT
+    INJECT --> TUTOR["Tutor system prompt\nknows the question bank\nquizzes student one at a time"]
+
+    RQ2 --> QS
+    RQ4 --> QS
+    RQ5 --> QS
+
+    REF --> INGEST2["core/rag/ingest.py\n--curriculum flag\nbuilds per-curriculum\nChromaDB collection"]
+    PAP --> INGEST2
+
+    style TUTOR    fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style INGEST2  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style QS       fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ PAST PAPER IMPORT ═══════════════════════ -->
+<div class="section color-curric" id="paper-import">
+  <div class="section-header">
+    <h2>Past Paper Import — Question extraction</h2>
+    <span class="badge badge-curric">CURRICULA</span>
+  </div>
+  <div class="section-desc">Teacher pastes a URL from an allowed revision site. The server fetches the PDF, core/questions.py extracts text and asks the LLM to copy each real question (swapping variables), then appends them to questions.json. Non-maths subjects only — pypdf corrupts equations.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    URL["Teacher pastes PDF URL\ne.g. PapaCambridge"] --> ALLOW{"_allowed_paper_host()\ncheck against PAPER_DOMAINS\nparse hostname strictly"}
+    ALLOW -->|blocked| E403["403 domain not allowed"]
+    ALLOW -->|ok| FETCH["_fetch_pdf()\nHTTP GET with timeout\ncheck Content-Type\nsize cap 15 MB"]
+    FETCH -->|fail| E502["502 Could not fetch"]
+    FETCH -->|ok| CORE["core.questions.extract_from_paper(pdf_bytes, **llm)"]
+    CORE --> PYPDF["pypdf PdfReader\nextract text per page\njoin pages"]
+    PYPDF --> TEXTLEN{"text length\n< 100 chars?"}
+    TEXTLEN -->|yes| E422["422 extraction failed\n(scanned / maths PDF)"]
+    TEXTLEN -->|ok| LLM["LLM extract prompt\nCopy each question verbatim\nSwap numbers and variables\nReturn JSON array only"]
+    LLM --> PARSE["re.search for JSON array\nparse with json.loads"]
+    PARSE -->|no array| E500["500 LLM parse error"]
+    PARSE -->|ok| MERGE["load existing questions.json\nappend new questions\n_save_questions(cid, merged)"]
+    MERGE --> RET["200 imported: N"]
+
+    NOTE["Maths / Physics:\nequations corrupted by pypdf\nVision pipeline needed\n(future work)"]
+
+    style RET   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style CORE  fill:#0d2a0d,stroke:#6fdd6f,color:#e8e8e8
+    style E403  fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style E502  fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style E422  fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style E500  fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style NOTE  fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ APP.PY ROUTES ═══════════════════════ -->
+<div class="section color-core" id="app-routes">
+  <div class="section-header">
+    <h2>app.py — Route map (48 routes + /v1/ Blueprint)</h2>
+    <span class="badge badge-core">CORE</span>
+  </div>
+  <div class="section-desc">Routes are grouped by role. Auth check runs in before_request — g.user is set from the session cookie. Open endpoints skip auth. DEV_BYPASS_AUTH or settings.auth_required=false grants everyone admin. /v1/ is a separate Blueprint with Bearer token auth.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    REQ["HTTP request"] --> BEF["before_request\nuser_for_token(cookie) → g.user\ncheck settings.auth_required\ncheck DEV_BYPASS_AUTH"]
+    BEF --> OPEN{"open endpoint?"}
+    OPEN -->|no, unauthenticated| R401["401 Not logged in"]
+    OPEN -->|yes or authenticated| ROLE
+
+    ROLE --> AUTH_R["Auth\nPOST /api/register\nPOST /api/login\nPOST /api/logout\nGET  /api/me"]
+
+    ROLE --> TUTOR_R["Tutor core\nPOST /api/start — begin lesson\nPOST /api/reply — continue\nPOST /api/check — answer check\nPOST /api/check_working — step check\nPOST /api/upload — file attach\nPOST /api/graph — matplotlib\nPOST /api/papers — MCQ from papers\nPOST /api/papers/hint — hint\nGET  /api/papers/download/id"]
+
+    ROLE --> SESSION_R["Sessions\nGET /api/sessions\nGET /api/sessions/id"]
+
+    ROLE --> STUDENT_R["Student curricula\nGET  /api/curricula\nGET  /api/curricula/cid/info\nGET  /api/curricula/cid/questions\nPOST /api/curricula/cid/questions\nGET  /api/curricula/cid/materials\nGET  /api/curricula/cid/materials/file"]
+
+    ROLE --> TEACHER_R["Teacher\nGET    /teacher\nGET    /api/teacher/curricula\nGET    /api/teacher/curricula/cid\nPUT    /api/teacher/curricula/cid/topics\nPOST   /api/teacher/curricula/cid/upload\nGET    /api/teacher/curricula/cid/files\nDELETE /api/teacher/curricula/cid/files/f\nGET    /api/teacher/curricula/cid/questions\nPOST   /api/teacher/curricula/cid/questions\nDELETE /api/teacher/curricula/cid/questions/qid\nPOST   /api/teacher/curricula/cid/ingest"]
+
+    ROLE --> ADMIN_R["Admin\nGET    /admin\nGET    /api/admin/curricula\nGET    /api/admin/curricula/cid\nPUT    /api/admin/curricula/cid\nPOST   /api/admin/curricula\nPOST   /api/admin/curricula/cid/ingest\nPOST   /api/admin/curricula/cid/import-paper-questions\nGET    /api/admin/users\nPUT    /api/admin/users/uid/role\nGET    /api/admin/api-keys\nPOST   /api/admin/api-keys\nDELETE /api/admin/api-keys/kid"]
+
+    ROLE --> DEV_R["Dev panel (no auth)\nGET /dev\nGET /api/dev/settings\nPUT /api/dev/settings"]
+
+    V1_R["api_v1.py Blueprint /v1/\nBearer token auth (separate from cookie)\nGET  /v1/ping\nPOST /v1/check\nPOST /v1/tutor/start\nPOST /v1/tutor/reply\nPOST /v1/questions/extract\nGET  /v1/keys\nPOST /v1/keys\nDELETE /v1/keys/kid"]
+
+    style TUTOR_R   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style STUDENT_R fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
+    style TEACHER_R fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style ADMIN_R   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style DEV_R     fill:#2a2a2a,stroke:#888,color:#e8e8e8
+    style R401      fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style V1_R      fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ api_v1.py ═══════════════════════ -->
+<div class="section color-api" id="v1-api">
+  <div class="section-header">
+    <h2>api_v1.py — Stateless REST API (/v1/)</h2>
+    <span class="badge badge-api">API</span>
+  </div>
+  <div class="section-desc">Flask Blueprint registered at /v1/. No cookies, no sessions, no HTML. Callers own their full message history (OpenAI pattern). Auth via Authorization: Bearer token — SHA-256 stored in api_keys table, plaintext never saved. Each route calls directly into core/.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    REQ2["HTTP request\nAuthorization: Bearer token"] --> AUTH["require_auth decorator\nSHA-256 token → user_for_api_key()\n401 if unknown"]
+
+    AUTH --> PING["GET /v1/ping\nno auth — health check"]
+
+    AUTH --> CHECK2["POST /v1/check\n{question, answer, context}\n→ core.check.run()\n→ {feedback, correct}"]
+
+    AUTH --> TSTART["POST /v1/tutor/start\n{topic, context, question_bank}\n→ core.tutor.start()\n→ {reply, correct, messages}"]
+
+    AUTH --> TREPLY["POST /v1/tutor/reply\n{messages, message, wrong_streak}\n→ core.tutor.reply()\n→ {reply, correct, messages}"]
+
+    AUTH --> QEXT["POST /v1/questions/extract\nmultipart: file (PDF)\n→ core.questions.extract_from_paper()\n→ {questions, count}"]
+
+    AUTH --> KGET["GET /v1/keys\n→ list keys (label + date)"]
+    AUTH --> KPOST["POST /v1/keys\n{label}\n→ {token} — shown once"]
+    AUTH --> KDEL["DELETE /v1/keys/id\nrevoke key"]
+
+    KPOST --> MINT["users.create_api_key()\ntoken_urlsafe(32)\nstore SHA-256 only"]
+
+    style AUTH  fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
+    style MINT  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style TSTART fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style TREPLY fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ settings.py ═══════════════════════ -->
+<div class="section color-auth" id="settings">
+  <div class="section-header">
+    <h2>settings.py — Feature flags</h2>
+    <span class="badge badge-auth">CONFIG</span>
+  </div>
+  <div class="section-desc">Runtime toggles stored in settings.json (gitignored). The dev panel at /dev writes this file. DEV_BYPASS_AUTH env var overrides auth_required as a hard fallback so scripts still work without the server.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph FLAGS["Flags — defaults"]
+        F1["auth_required: true\nfalse = everyone is treated as admin"]
+        F2["stub_testing: true\ntrue = demo curriculum shown to students"]
+        F3["rate_limiting: true\nfalse = no 20-req/min cap during testing"]
+    end
+
+    subgraph IO["Read / Write"]
+        LOAD["load()\nread settings.json\nmerge with DEFAULTS\nreturn dict"]
+        SAVE["save(data)\ncoerce all values to bool\nwrite settings.json\nreturn merged dict"]
+    end
+
+    DEV["PUT /api/dev/settings\n(no auth)"] --> SAVE
+    GET["GET /api/dev/settings\n(no auth)"] --> LOAD
+
+    LOAD --> BEF2["before_request\ncheck auth_required\nAND DEV_BYPASS_AUTH env var"]
+    LOAD --> RLC["_check_llm_rate()\nskip if rate_limiting is false"]
+    LOAD --> CURIC["GET /api/curricula\nfilter demo if stub_testing is false"]
+
+    style SAVE fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style LOAD fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ core/llm/client.py ═══════════════════════ -->
+<div class="section color-core" id="llm-client">
+  <div class="section-header">
+    <h2>core/llm/client.py</h2>
+    <span class="badge badge-core">CORE</span>
+  </div>
+  <div class="section-desc">The only file that talks to the model. Every prompt enters here and every reply comes out here. Returns LLMText — a str subclass that carries token counts so the session log can meter without changing any call site.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    CALL["caller passes messages + provider"] --> WHICH{"provider?"}
+
+    WHICH -->|groq| GC["_groq_chat()"]
+    WHICH -->|ollama| OC["OllamaClient.chat() / .generate()"]
+
+    GC --> GAPI["Groq API\nchat.completions.create()"]
+    GAPI --> GUSAGE["read usage\nprompt_tokens + completion_tokens"]
+    GUSAGE --> WRAP
+
+    OC --> OAPI["Ollama\nclient.chat() or client.generate()"]
+    OAPI --> OUSAGE["_ollama_usage()\nread prompt_eval_count + eval_count"]
+    OUSAGE --> WARN{"counts zero?"}
+    WARN -->|yes, first time| STDERR["warn to stderr"]
+    WARN -->|no| WRAP
+    STDERR --> WRAP
+
+    WRAP["LLMText(text, usage)\nstr subclass with .usage dict"] --> RET["return to caller"]
+
+    style WRAP fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style RET  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ core/prompts.py ═══════════════════════ -->
+<div class="section color-core" id="prompts">
+  <div class="section-header">
+    <h2>core/prompts.py</h2>
+    <span class="badge badge-core">CORE</span>
+  </div>
+  <div class="section-desc">All shared prompt strings and the signal parser. The [CORRECT]/[WRONG]/[OPEN] instruction and the regex that reads it live side by side here so they can't drift apart. _SIGNAL_RE is anchored to end-of-string — the signal must be the last thing in a reply.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph CONSTANTS["Prompt constants"]
+        PER["PLAIN_ENGLISH_RULES"]
+        TSP["TUTOR_SYSTEM_PROMPT\nSocratic web tutor\nquestion bank slot injected at runtime"]
+        CTSP["CLI_TUTOR_SYSTEM_PROMPT"]
+        HL["HINT_LADDER\n4 rungs: empty / nudge / concept / explain"]
+        CS["CHECK_SIGNAL\ncheck vs open question rule"]
+    end
+
+    subgraph FUNCTIONS["Functions"]
+        HN["hint_note(wrong_streak) → rung text"]
+        BCP["build_check_prompt(question, answer, context)"]
+        SS["strip_signal(text) → text, True/False/None"]
+        TR["tutor_reply(raw) → text, correct"]
+    end
+
+    SS --> SRE["_SIGNAL_RE\nanchored to end-of-string\nCORRECT / WRONG / OPEN"]
+    SS --> STRAY["_STRAY_MARKER_RE\ndrop stray markers"]
+    TR --> SS
+    TR --> EMPTY["_EMPTY_REPLY fallback"]
+
+    style SRE  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style TR   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ core/rag/ingest.py ═══════════════════════ -->
+<div class="section color-rag" id="rag-ingest">
+  <div class="section-header">
+    <h2>core/rag/ingest.py</h2>
+    <span class="badge badge-rag">RAG</span>
+  </div>
+  <div class="section-desc">Builds ChromaDB vector stores. Curriculum-aware — pass --curriculum &lt;id&gt; to build one collection for that curriculum using its own reference/ and papers/ directories. Each curriculum has its own isolated collection name from manifest.json.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    START["python -m core.rag.ingest\n--curriculum merdeka-indonesia-curriculum"] --> CUR2["load curriculum manifest\nget collection name\nget reference_dir + papers_dir"]
+
+    CUR2 --> BUILD["build(collection_name, ref_dir, papers_dir)"]
+    BUILD --> DEL["delete old collection"]
+    DEL --> CREATE["create collection\ncosine distance metric"]
+
+    CREATE --> TXT["_collect_texts()\nreference/*.txt"]
+    CREATE --> PDF["_collect_pdfs()\npapers/*.pdf"]
+
+    TXT --> CHUNK1["_chunk()\n900-char target, 150 overlap"]
+    PDF --> PAGES["_page_texts()\npypdf per page"]
+    PAGES --> PDFCLEAN["pdftext.clean() + strip_repeats()"]
+    PDFCLEAN --> FILTER["filter: len > 200, junk_ratio < 8%"]
+    FILTER --> CHUNK2["_chunk()"]
+
+    CHUNK1 --> MERGE["merge all chunks"]
+    CHUNK2 --> MERGE
+
+    MERGE --> UPSERT["collection.upsert()\nbatches of 400"]
+    UPSERT --> DONE["print total chunks"]
+
+    style DONE  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style UPSERT fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ core/rag/retrieve.py ═══════════════════════ -->
+<div class="section color-rag" id="rag-retrieve">
+  <div class="section-header">
+    <h2>core/rag/retrieve.py</h2>
+    <span class="badge badge-rag">RAG</span>
+  </div>
+  <div class="section-desc">Called on every lesson turn to find relevant reference chunks from the curriculum's own collection. Thread-safe — the client and embedding model are built once behind a lock.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    CALL["retrieve(query, collection_name, n_results=3)"] --> LOCK["acquire _lock\ncheck _clients cache"]
+
+    LOCK --> HIT{"client cached?"}
+    HIT -->|yes| USE["use cached client"]
+    HIT -->|no| BUILD["PersistentClient()\n+ DefaultEmbeddingFunction()\nstore in _clients"]
+    BUILD --> USE
+
+    USE --> COLL["client.get_collection(collection_name)"]
+    COLL --> ERR{"collection missing?"}
+    ERR -->|yes| EMPTY["return []\ntutor runs ungrounded"]
+    ERR -->|no| QUERY["collection.query(query_texts)"]
+
+    QUERY --> FILTER2["filter: distance <= 0.60"]
+    FILTER2 --> NONE{"any kept?"}
+    NONE -->|no| EMPTY
+    NONE -->|yes| RET["return text chunks"]
+
+    style EMPTY fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style RET   fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ core/vision/image_handler.py ═══════════════════════ -->
+<div class="section color-vision" id="vision">
+  <div class="section-header">
+    <h2>core/vision/image_handler.py</h2>
+    <span class="badge badge-vision">VISION</span>
+  </div>
+  <div class="section-desc">Turns a photographed question into plain text. Routes to Groq vision or Ollama. Strips the reasoning model's &lt;think&gt; blocks — without this, 3000 chars of model monologue reach the tutor as the question.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    CALL["transcribe(b64, name, provider, ...)"] --> WHICH{"provider?"}
+    WHICH -->|groq| GR["_groq_transcribe()\nmodel: qwen/qwen3.6-27b"]
+    WHICH -->|ollama| OL["OllamaClient.chat()\nnative images key"]
+
+    GR --> GRAW["raw response text"]
+    OL --> ORAW["raw response text"]
+
+    GRAW --> DR["drop_reasoning(text)"]
+    ORAW --> DR
+
+    DR --> CLOSED{"contains closing\n</think>?"}
+    CLOSED -->|yes| AFTER["take text after </think>"]
+    CLOSED -->|no| OPEN{"contains opening\n<think>?"}
+    OPEN -->|yes| BLANK["return empty string\nunclosed = unusable"]
+    OPEN -->|no| PASS["return as-is"]
+
+    AFTER --> OUT["plain-text transcription"]
+    PASS  --> OUT
+
+    style OUT   fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style BLANK fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ users.py ═══════════════════════ -->
+<div class="section color-auth" id="users">
+  <div class="section-header">
+    <h2>users.py</h2>
+    <span class="badge badge-auth">AUTH</span>
+  </div>
+  <div class="section-desc">SQLite-backed accounts. Three tables: users, sessions, api_keys. Passwords and API keys both stored as SHA-256 / scrypt hashes — a leaked DB yields no working credentials. Roles: student / teacher / admin. API keys are minted with token_urlsafe(32) and the plaintext is returned once.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph INIT["Boot"]
+        I["init()\ncreate users + sessions + api_keys tables"]
+        PE["purge_expired()\ndelete sessions past expires_at"]
+    end
+
+    subgraph REGISTER["Register / Login"]
+        CU["create_user(username, password, role)"]
+        CU --> HASH["_hash_password()\nrandom 16-byte salt\nscrypt hash"]
+        HASH --> INSERT["INSERT INTO users"]
+        AU["authenticate(username, password)"]
+        AU --> VERIFY["_verify_password()\ntiming-safe compare"]
+        VERIFY --> CS["create_session() → token\nstore SHA-256 only"]
+    end
+
+    subgraph APIKEYS["API Keys"]
+        CAK["create_api_key(owner_id, label)\ntoken_urlsafe(32)\nstore SHA-256\nreturn plaintext once"]
+        LAK["list_api_keys(owner_id)\nreturn id, label, created_at\nnever the hash"]
+        RAK["revoke_api_key(key_id, owner_id)"]
+        UFT2["user_for_api_key(token)\nSHA-256 lookup\nreturn user dict or None"]
+    end
+
+    V1["api_v1.py\nBearer token"] --> UFT2
+    ADM["Admin panel\n/api/admin/api-keys"] --> CAK
+    ADM --> LAK
+    ADM --> RAK
+
+    style HASH   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style CAK    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style UFT2   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ratelimit.py ═══════════════════════ -->
+<div class="section color-auth" id="ratelimit">
+  <div class="section-header">
+    <h2>ratelimit.py</h2>
+    <span class="badge badge-auth">AUTH</span>
+  </div>
+  <div class="section-desc">Sliding window failure counter for the login route. Checks both IP and username. Disabled at runtime when settings.rate_limiting is false (useful for automated testing).</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    FLAG{"settings.rate_limiting?"}
+    FLAG -->|false| SKIP["skip all checks\nreturn 0"]
+    FLAG -->|true| CHECK
+
+    subgraph CHECK["Before login attempt"]
+        RA["retry_after(ip_key, user_key)"]
+        RA --> FRESH["_fresh() — drop timestamps older than window"]
+        FRESH --> COUNT{"failures >= 8\nfor ANY key?"}
+        COUNT -->|no| ZERO["return 0 — allow"]
+        COUNT -->|yes| WAIT["return seconds to wait\ncaller returns 429"]
+    end
+
+    subgraph RECORD["After failed login"]
+        RF["record_failure(ip_key, user_key)\nappend timestamp to both keys"]
+    end
+
+    subgraph CLEAR["After successful login"]
+        CL["clear(ip_key, user_key)\ndelete both keys"]
+    end
+
+    style ZERO fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style WAIT fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style SKIP fill:#2a2a2a,stroke:#888,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ evals/run.py ═══════════════════════ -->
+<div class="section color-eval" id="eval-run">
+  <div class="section-header">
+    <h2>evals/run.py</h2>
+    <span class="badge badge-eval">EVAL</span>
+  </div>
+  <div class="section-desc">Scores check mode against 50 questions with sympy-verified answer keys. Retries on per-minute 429s, fails fast on daily limit. Score moves ~2 points between runs because temperature is not pinned.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    RUN["python -m evals.run"] --> ARGS2["parse args\nload cases.jsonl"]
+    ARGS2 --> POOL["ThreadPoolExecutor\nrun each case concurrently"]
+    POOL --> SINGLE["run_case(case)\nbuild_check_prompt()\nretrieve() RAG context"]
+    SINGLE --> RETRY["generate() with retry\n429/min → back off 60s\n429/day → fail fast"]
+    RETRY --> PARSE2["_SIGNAL_RE: CORRECT/WRONG/OPEN\nfall back to prose keywords"]
+    PARSE2 --> COMPARE["got == case.correct?"]
+    COMPARE --> REPORT["X/50\nverdict source breakdown\nsignal / prose / unparsed / error"]
+
+    style REPORT fill:#2a1a3a,stroke:#9a6fdd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ evals/learn.py ═══════════════════════ -->
+<div class="section color-eval" id="eval-learn">
+  <div class="section-header">
+    <h2>evals/learn.py</h2>
+    <span class="badge badge-eval">EVAL</span>
+  </div>
+  <div class="section-desc">Scores the hint ladder. Sends the same wrong answer three times at increasing wrong_streak values and judges whether the replies obey the ladder's promises. Current score: 1/5 — rung 1 names the concept too early.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    RUN3["python -m evals.learn"] --> LCASES["load learn_cases.jsonl\n5 cases"]
+    LCASES --> RUNCASE["for streak in 1, 2, 3\nbuild messages + hint_note(streak)\nchat() → collect 3 replies"]
+    RUNCASE --> JUDGE["judge(hints, concept, answer)"]
+
+    subgraph CHECKS["4 checks per case"]
+        J1["hints differ — rung1 != rung2 != rung3"]
+        J2["rung 1 withholds concept — _names() == False"]
+        J3["rung 2 names concept — _names() == True"]
+        J4["answer held back — _leaks() == False"]
+    end
+
+    JUDGE --> J1
+    JUDGE --> J2
+    JUDGE --> J3
+    JUDGE --> J4
+    J1 --> SCORE["pass all 4 → case passes"]
+    J2 --> SCORE
+    J3 --> SCORE
+    J4 --> SCORE
+    SCORE --> REPORT2["X/5 cases\nper-check breakdown"]
+
+    style REPORT2 fill:#2a1a3a,stroke:#9a6fdd,color:#e8e8e8
+    style J2      fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'default',
+  themeVariables: {
+    primaryColor:       '#1a3a1a',
+    primaryTextColor:   '#e8e8e8',
+    primaryBorderColor: '#6fdd6f',
+    lineColor:          '#888',
+    secondaryColor:     '#1a2a3a',
+    tertiaryColor:      '#2a1a3a',
+    background:         '#fafafa',
+    mainBkg:            '#f0f0f0',
+    nodeBorder:         '#aaa',
+    clusterBkg:         '#f8f8f8',
+    titleColor:         '#111',
+    edgeLabelBackground:'#ffffff',
+    fontFamily:         'Segoe UI, system-ui, sans-serif',
+    fontSize:           '13px',
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 20,
+    useMaxWidth: true,
+  },
+});
+</script>
+</body>
+</html>

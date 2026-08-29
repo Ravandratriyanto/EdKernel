@@ -6,9 +6,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dotenv import load_dotenv 
-from llm.client import chat 
-from rag.retrieve import retrieve
-from prompts import TUTOR_SYSTEM_PROMPT, hint_note, strip_signal
+from core.llm.client import chat 
+from core.rag.retrieve import retrieve
+from core.prompts import TUTOR_SYSTEM_PROMPT, hint_note, strip_signal
 load_dotenv()
 CASES = Path(__file__).parent / "learn_cases.jsonl"
 ATTEMPTS = 3
@@ -32,7 +32,7 @@ def _names(text: str, words) -> bool:
     "splitting" and "adding"; without it those need a longer allowance than
     "address" can be kept out of.
     """
-    return any(re.search(r'\b' + re.escape(w) + r'\w?(?:s|es|ed|ing)?\b',
+    return any(re.search(r'\b' + re.escape(w) + r'\w?(?:s|es|ed|ing|ion)?\b',
                          text, re.I)
                for w in words)
 def _leaks(text: str, answer: str) -> bool:

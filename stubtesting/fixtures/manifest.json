@@ -1,0 +1,8 @@
+{
+  "id": "demo",
+  "name": "Demo Curriculum",
+  "prompt_flavour": "introductory computer science exam preparation",
+  "collection": "demo",
+  "reference_dir": "stubtesting/fixtures",
+  "papers_dir": "stubtesting/fixtures"
+}

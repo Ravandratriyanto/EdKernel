@@ -1,0 +1,16 @@
+{
+  "id": "sat-alevel",
+  "name": "SAT / A-level",
+  "level": "secondary",
+  "subjects": [
+    "maths",
+    "biology",
+    "economics",
+    "chemistry"
+  ],
+  "tutor_style": "Socratic",
+  "prompt_flavour": "SAT/A-level exam preparation",
+  "collection": "sat_alevel",
+  "reference_dir": "data/reference",
+  "papers_dir": "data/papers"
+}

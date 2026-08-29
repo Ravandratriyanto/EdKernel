@@ -1,0 +1,57 @@
+## Overview  
+These notes explain how to organise an **introductory computer‑science exam‑preparation course** by using the same building blocks that curriculum designers and teachers use in any subject.  The focus is on the *structure* of the course – what should be included in a curriculum plan, a syllabus, and the learning‑outcome statements – rather than on specific programming topics (which are outside the supplied sources).
+
+---
+
+## Main Topics  
+
+| Topic | What the sources say | How it applies to a CS exam‑prep course |
+|------|----------------------|----------------------------------------|
+| **Curriculum Intent** | Describes what students should know and be able to do; includes goals, standards, unit goals, lesson objectives. | Write a clear intent such as “Students will be able to solve basic algorithmic problems and explain core CS concepts on the exam.” |
+| **Purpose & Outcome Statements** | Purpose statement – what the curriculum will achieve. Outcome statement – what students will be able to do with the information. | Purpose: “Prepare learners for the introductory CS exam.” <br>Outcome: “Students will write simple programs, trace execution, and interpret output.” |
+| **Essential Resources** | Lists the materials teachers and students will use. | Textbook, practice problem sets, coding environment, video tutorials. |
+| **Strategic Framework (Teaching Approach)** | The overall pedagogical method (e.g., project‑based, concept‑based). | Use a mix of guided practice, concept‑based learning, and short coding projects. |
+| **Verification Method** | How to know teaching is effective (assessments, data). | Weekly quizzes, practice exams, and a final capstone project. |
+| **Standards Alignment** | Alignment with federal, state, or school standards. | Map the course to the exam’s official content specifications. |
+| **Integrated / Core Curriculum** | Connects learning across subjects (e.g., water‑quality project linking science, math, writing, technology). | Integrate math (e.g., logarithms) and logical reasoning into programming tasks. |
+| **Concept‑Based Learning (CBC)** | Emphasises “know, do, understand” rather than rote memorisation. | Design activities where students *know* a concept (e.g., loops), *do* the skill (write a loop), and *understand* why it works (explain its flow). |
+| **Capstone Project** | Final assessment that gauges overall learning. | A mini‑software project that requires students to apply all exam topics. |
+| **Syllabus Design** | Should be motivational, structural, learner‑centered; aligns goals, assignments, and activities. | Provide a clear weekly roadmap, explain grading, and list study‑tips to build self‑efficacy. |
+| **Learning Outcomes (Student‑focused)** | Phrase outcomes as “Students will be able to…” with an action verb and cognitive process. | Example: “Students will be able to **debug** a simple program by tracing variable values.” |
+
+---
+
+## Key Concepts  
+
+1. **Curriculum Intent & Goals** – The overarching “why” of the course.  
+2. **Purpose Statement** – The specific aim (e.g., exam readiness).  
+3. **Outcome Statement** – The measurable student abilities after the course.  
+4. **Essential Resources** – All tools and materials required for learning.  
+5. **Strategic Framework** – The teaching model (project‑based, concept‑based, etc.).  
+6. **Verification Method** – Methods for checking progress (quizzes, practice tests).  
+7. **Standards Alignment** – Mapping to official exam specifications.  
+8. **Integrated/Core Curriculum** – Linking CS with mathematics, logic, or other relevant subjects.  
+9. **Concept‑Based Learning (3‑Dimensional)** – Students must **KNOW** facts, **DO** tasks, and **UNDERSTAND** underlying ideas.  
+10. **Capstone Project** – A culminating, authentic assessment.  
+11. **Syllabus Elements** – Motivation, structure, learner‑centered alignment of goals, activities, and assessments.  
+12. **Student‑Focused Learning Outcomes** – Use action verbs (“write,” “explain,” “debug”) to describe what learners will achieve.
+
+---
+
+## Learning Objectives for the Tutor AI  
+
+When the AI generates practice problems, explanations, or feedback, it should aim to:
+
+1. **Communicate Curriculum Intent** – Clearly state the exam skill or concept being addressed.  
+2. **Present Purpose & Outcome** – Tell the learner what ability the activity builds (e.g., “You will be able to trace recursion”).  
+3. **Provide Essential Resources** – Link to the relevant reading, coding sandbox, or video.  
+4. **Follow the Strategic Framework** – Use a consistent teaching approach (e.g., short concept intro → guided practice → independent problem).  
+5. **Include Verification Checks** – Offer immediate feedback, self‑check questions, or mini‑quizzes after each topic.  
+6. **Maintain Standards Alignment** – Reference the exam’s content domain for each activity.  
+7. **Show Integrated Connections** – Highlight where a CS idea overlaps with math or logical reasoning.  
+8. **Apply Concept‑Based Learning** – Ensure each lesson asks the learner to *know* a definition, *do* a coding task, and *understand* why the solution works.  
+9. **Guide Toward a Capstone** – Periodically remind learners of the final project and how current practice contributes to it.  
+10. **Structure Interactions Like a Syllabus** – Begin with a brief motivational note, outline the learning goal, describe the activity, and state how performance will be assessed.  
+11. **Write Student‑Focused Outcomes** – Phrase prompts as “You will be able to …” with a clear action verb.  
+
+By grounding the AI’s tutoring flow in these curriculum‑design principles, the tutor can deliver a coherent, goal‑directed, and exam‑ready learning experience without adding any information that isn’t present in the provided sources.

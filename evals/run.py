@@ -20,9 +20,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from llm.client import generate
-from rag.retrieve import retrieve
-from prompts import build_check_prompt, strip_signal
+from core.llm.client import generate
+from core.rag.retrieve import retrieve
+from core.prompts import build_check_prompt, strip_signal
 from evals import regress
 
 load_dotenv()

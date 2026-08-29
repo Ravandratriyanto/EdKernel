@@ -21,8 +21,10 @@ DB_PATH = Path(__file__).parent / ".logs" / "users.db"
 
 _N, _R, _P, _DKLEN, _SALT_BYTES = 2 ** 14, 8, 1, 32, 16
 
-SESSION_TTL_SECONDS = 30 * 24 * 60 * 60      
+SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 MIN_PASSWORD_LENGTH = 8
+
+VALID_ROLES = ("admin", "teacher", "student")
 
 
 def _connect():
@@ -44,7 +46,8 @@ def init() -> None:
                     id            INTEGER PRIMARY KEY AUTOINCREMENT,
                     username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
                     password_hash TEXT NOT NULL,
-                    created_at    INTEGER NOT NULL
+                    created_at    INTEGER NOT NULL,
+                    role          TEXT NOT NULL DEFAULT 'student'
                 )
             """)
             conn.execute("""
@@ -60,6 +63,26 @@ def init() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_sessions_expires "
                 "ON sessions (expires_at)"
             )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    owner_id   INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                    key_hash   TEXT NOT NULL UNIQUE,
+                    label      TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                )
+            """)
+            # Migration: add role column to existing databases
+            try:
+                conn.execute(
+                    "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'student'"
+                )
+                # Promote the first account to admin on migration
+                conn.execute(
+                    "UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)"
+                )
+            except sqlite3.OperationalError:
+                pass  # column already exists
     finally:
         conn.close()
 
@@ -99,21 +122,30 @@ class UserError(Exception):
     """Something the student did wrong: name taken, password too short."""
 
 
-def create_user(username: str, password: str) -> int:
-    """Register an account. Returns the new user id."""
+def create_user(username: str, password: str, role: str = "student") -> int:
+    """Register an account. Returns the new user id.
+
+    If this is the very first account in the database, it becomes admin
+    regardless of the role argument — every deployment needs at least one.
+    """
     username = (username or "").strip()
     if not username:
         raise UserError("Pick a username.")
     if len(password or "") < MIN_PASSWORD_LENGTH:
         raise UserError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if role not in VALID_ROLES:
+        raise UserError(f"Invalid role '{role}'.")
 
     conn = _connect()
     try:
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        if count == 0:
+            role = "admin"
         with conn:
             cur = conn.execute(
-                "INSERT INTO users (username, password_hash, created_at) "
-                "VALUES (?, ?, ?)",
-                (username, _hash_password(password), int(time.time())),
+                "INSERT INTO users (username, password_hash, created_at, role) "
+                "VALUES (?, ?, ?, ?)",
+                (username, _hash_password(password), int(time.time()), role),
             )
         return cur.lastrowid
     except sqlite3.IntegrityError:
@@ -166,7 +198,7 @@ def user_for_token(token: str) -> dict | None:
     conn = _connect()
     try:
         row = conn.execute(
-            "SELECT u.id AS id, u.username AS username, s.expires_at AS expires_at "
+            "SELECT u.id, u.username, u.role, s.expires_at "
             "FROM sessions s JOIN users u ON u.id = s.user_id "
             "WHERE s.token_hash = ?",
             (_hash_token(token),),
@@ -176,7 +208,7 @@ def user_for_token(token: str) -> dict | None:
 
     if row is None or row["expires_at"] <= int(time.time()):
         return None
-    return {"id": row["id"], "username": row["username"]}
+    return {"id": row["id"], "username": row["username"], "role": row["role"]}
 
 
 def delete_session(token: str) -> None:
@@ -204,3 +236,94 @@ def purge_expired() -> int:
         return cur.rowcount
     finally:
         conn.close()
+
+
+def set_role(user_id: int, role: str) -> None:
+    """Change a user's role. Raises UserError on bad role or unknown id."""
+    if role not in VALID_ROLES:
+        raise UserError(f"Invalid role '{role}'.")
+    conn = _connect()
+    try:
+        with conn:
+            cur = conn.execute(
+                "UPDATE users SET role = ? WHERE id = ?", (role, user_id)
+            )
+        if cur.rowcount == 0:
+            raise UserError("User not found.")
+    finally:
+        conn.close()
+
+
+def list_users() -> list[dict]:
+    """All accounts, newest first."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, username, role, created_at FROM users ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [{"id": r["id"], "username": r["username"],
+             "role": r["role"], "created_at": r["created_at"]} for r in rows]
+
+
+def create_api_key(owner_id: int, label: str) -> str:
+    """Mint a new API key. Returns the plaintext token — the only time it exists."""
+    token = secrets.token_urlsafe(32)
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO api_keys (owner_id, key_hash, label, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (owner_id, _hash_token(token), label.strip(), int(time.time())),
+            )
+    finally:
+        conn.close()
+    return token
+
+
+def list_api_keys(owner_id: int) -> list[dict]:
+    """All API keys for an owner — label and date only, never the hash."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, label, created_at FROM api_keys WHERE owner_id = ? ORDER BY id",
+            (owner_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [{"id": r["id"], "label": r["label"], "created_at": r["created_at"]}
+            for r in rows]
+
+
+def revoke_api_key(key_id: int, owner_id: int) -> None:
+    """Delete one API key. owner_id prevents admins revoking each other's keys accidentally."""
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "DELETE FROM api_keys WHERE id = ? AND owner_id = ?",
+                (key_id, owner_id),
+            )
+    finally:
+        conn.close()
+
+
+def user_for_api_key(token: str) -> dict | None:
+    """The user behind a Bearer token, or None if unknown."""
+    if not token:
+        return None
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT u.id, u.username, u.role "
+            "FROM api_keys k JOIN users u ON u.id = k.owner_id "
+            "WHERE k.key_hash = ?",
+            (_hash_token(token),),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return {"id": row["id"], "username": row["username"], "role": row["role"]}

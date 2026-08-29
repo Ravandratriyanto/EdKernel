@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdKernel Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --danger: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --green: #22c55e;
+      --yellow: #eab308;
+    }
+
+    body {
+      font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    header h1 { font-size: 15px; color: var(--accent); letter-spacing: 0.05em; }
+    header .spacer { flex: 1; }
+
+    #user-label { color: var(--muted); font-size: 12px; }
+
+    .btn {
+      padding: 5px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      background: var(--surface);
+      color: var(--text);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn:hover { background: var(--border); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn.danger { border-color: var(--danger); color: var(--danger); }
+    .btn.danger:hover { background: var(--danger); color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #gate {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 48px);
+    }
+    #gate-box {
+      text-align: center;
+      padding: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-width: 360px;
+    }
+    #gate-box p { color: var(--muted); margin-bottom: 16px; }
+    #gate-box a { color: var(--accent); text-decoration: none; }
+
+    #app {
+      display: none;
+      height: calc(100vh - 48px);
+    }
+
+    .layout {
+      display: flex;
+      height: 100%;
+    }
+
+    aside {
+      width: 220px;
+      min-width: 180px;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+    }
+
+    aside h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      padding: 14px 16px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #curr-list {
+      list-style: none;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    #curr-list li {
+      padding: 9px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      transition: background 0.1s, color 0.1s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #curr-list li:hover { background: var(--border); color: var(--text); }
+    #curr-list li.active { background: rgba(99,102,241,0.15); color: var(--accent); }
+
+    .sidebar-footer {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .sidebar-footer .btn { width: 100%; text-align: center; }
+
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+
+    #editor-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--muted);
+    }
+
+    #editor-body { display: none; }
+
+    .editor-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .editor-header h2 { font-size: 16px; }
+    .curr-id-badge {
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--border);
+      padding: 2px 7px;
+      border-radius: 3px;
+    }
+
+    section {
+      margin-bottom: 28px;
+    }
+
+    section h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field-group {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px 12px;
+      align-items: center;
+      max-width: 680px;
+    }
+
+    .field-group label {
+      color: var(--muted);
+      text-align: right;
+      font-size: 12px;
+    }
+
+    .field-group input {
+      padding: 6px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      width: 100%;
+    }
+    .field-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .topics-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    #topics-table {
+      width: 100%;
+      border-collapse: collapse;
+      max-width: 800px;
+      margin-bottom: 10px;
+    }
+
+    #topics-table th {
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #topics-table td {
+      padding: 4px 6px;
+      vertical-align: top;
+    }
+
+    #topics-table td input, #topics-table td textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 7px;
+      resize: vertical;
+    }
+    #topics-table td input:focus, #topics-table td textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    #topics-table td textarea { min-height: 52px; }
+
+    #topics-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .action-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    #status-msg {
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    #status-msg.ok { color: var(--green); }
+    #status-msg.err { color: var(--danger); }
+    #status-msg.info { color: var(--yellow); }
+
+    /* New curriculum modal */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-overlay.open { display: flex; }
+    #modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      width: 380px;
+    }
+    #modal-box h3 { margin-bottom: 16px; font-size: 14px; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .modal-field input {
+      width: 100%;
+      padding: 7px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .modal-field input:focus { outline: none; border-color: var(--accent); }
+    .modal-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>EdKernel Admin</h1>
+  <div class="spacer"></div>
+  <span id="user-label"></span>
+  <a href="/" class="btn">Back to app</a>
+</header>
+
+<div id="gate">
+  <div id="gate-box">
+    <p id="gate-msg" style="margin-bottom:16px"></p>
+
+    <div id="login-form">
+      <div class="modal-field">
+        <label>Username</label>
+        <input id="gate-username" autocomplete="username" spellcheck="false">
+      </div>
+      <div class="modal-field" style="margin-bottom:16px">
+        <label>Password</label>
+        <input id="gate-password" type="password" autocomplete="current-password">
+      </div>
+      <button class="btn primary" id="gate-login-btn" style="width:100%">Log in</button>
+      <p id="login-err" style="color:var(--danger);margin-top:10px;font-size:12px"></p>
+    </div>
+
+    <p id="gate-no-access" style="display:none;color:var(--muted)">
+      Admin access is restricted to account #1.<br>
+      <a href="/" style="color:var(--accent)">Back to app</a>
+    </p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="layout">
+    <aside>
+      <h2>Curricula</h2>
+      <ul id="curr-list"></ul>
+      <div class="sidebar-footer">
+        <button class="btn" id="new-curr-btn" style="margin-bottom:6px">+ New curriculum</button>
+        <button class="btn" id="users-nav-btn" style="width:100%;margin-bottom:6px">Manage users</button>
+        <button class="btn" id="keys-nav-btn" style="width:100%">API keys</button>
+      </div>
+    </aside>
+
+    <main>
+      <div id="editor-placeholder">Select a curriculum to edit</div>
+
+      <div id="editor-body">
+        <div class="editor-header">
+          <h2 id="editor-title"></h2>
+          <span class="curr-id-badge" id="editor-id-badge"></span>
+        </div>
+
+        <section>
+          <h3>Manifest</h3>
+          <div class="field-group">
+            <label>Display name</label>
+            <input id="f-name" placeholder="SAT / A-level">
+
+            <label>Prompt flavour</label>
+            <input id="f-flavour" placeholder="SAT/A-level exam preparation">
+
+            <label>ChromaDB collection</label>
+            <input id="f-collection" placeholder="sat_alevel">
+
+            <label>Level</label>
+            <input id="f-level" placeholder="secondary">
+
+            <label>Subjects</label>
+            <input id="f-subjects" placeholder="maths, biology, economics">
+
+            <label>Reference dir</label>
+            <input id="f-ref-dir" placeholder="data/reference">
+
+            <label>Papers dir</label>
+            <input id="f-papers-dir" placeholder="data/papers">
+          </div>
+        </section>
+
+        <section>
+          <h3>Topics</h3>
+          <div class="topics-toolbar">
+            <button class="btn" id="add-topic-btn">+ Add topic</button>
+          </div>
+          <table id="topics-table">
+            <thead>
+              <tr>
+                <th style="width:200px">Topic name</th>
+                <th>Subtopics <span style="font-weight:normal;text-transform:none">(one per line)</span></th>
+                <th>Objectives <span style="font-weight:normal;text-transform:none">(one per line)</span></th>
+                <th style="width:50px"></th>
+              </tr>
+            </thead>
+            <tbody id="topics-body"></tbody>
+          </table>
+        </section>
+
+        <div class="action-bar">
+          <button class="btn primary" id="save-btn">Save changes</button>
+          <button class="btn" id="ingest-btn">Re-ingest RAG</button>
+          <button class="btn" id="import-paper-btn">Import past paper</button>
+          <span id="status-msg"></span>
+        </div>
+
+        <!-- Past paper import row (hidden until button clicked) -->
+        <div id="import-paper-row" style="display:none;padding:10px 20px;background:var(--surface);border-top:1px solid var(--border);display:none;align-items:center;gap:8px;flex-wrap:wrap">
+          <input id="paper-url-input" type="text"
+            placeholder="PapaCambridge PDF URL"
+            style="flex:1;min-width:260px;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:inherit;font-size:12px">
+          <button class="btn primary" id="paper-fetch-btn">Extract questions</button>
+          <button class="btn" id="paper-cancel-btn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- API keys panel -->
+      <div id="keys-body" style="display:none">
+        <div class="editor-header">
+          <h2>API Keys</h2>
+        </div>
+        <section>
+          <h3>Active keys</h3>
+          <div id="keys-list" style="max-width:600px;margin-bottom:16px">Loading…</div>
+        </section>
+        <section>
+          <h3>Create key</h3>
+          <div style="display:flex;gap:8px;max-width:500px;align-items:center">
+            <input id="new-key-label" type="text" placeholder="e.g. My integration"
+              style="flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:inherit;font-size:13px">
+            <button class="btn primary" id="create-key-btn">Create</button>
+          </div>
+          <div id="new-key-result" style="display:none;margin-top:14px;max-width:600px">
+            <p style="color:var(--yellow);margin-bottom:8px;font-size:12px">Copy this now — it will not be shown again.</p>
+            <input id="new-key-value" type="text" readonly
+              style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:inherit;font-size:13px">
+          </div>
+        </section>
+      </div>
+
+      <!-- Users panel -->
+      <div id="users-body" style="display:none">
+        <div class="editor-header">
+          <h2>Users</h2>
+        </div>
+        <section>
+          <h3>Accounts</h3>
+          <table id="users-table" style="width:100%;max-width:600px;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);width:40px">#</th>
+                <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border)">Username</th>
+                <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);width:160px">Role</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- New curriculum modal -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <h3>New curriculum</h3>
+    <div class="modal-field">
+      <label>ID (slug)</label>
+      <input id="new-id" placeholder="gcse-science">
+      <p class="modal-hint">Lowercase letters, numbers and hyphens only. Used as the directory name.</p>
+    </div>
+    <div class="modal-field">
+      <label>Display name</label>
+      <input id="new-name" placeholder="GCSE Science">
+    </div>
+    <div class="modal-field">
+      <label>Prompt flavour</label>
+      <input id="new-flavour" placeholder="GCSE Science exam preparation">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="modal-cancel-btn">Cancel</button>
+      <button class="btn primary" id="modal-create-btn">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentId = null;
+
+  // --- Auth gate ---
+  async function init() {
+    const res = await fetch("/api/me");
+    const data = await res.json();
+    const user = data.user;
+    if (!user) {
+      document.getElementById("gate-msg").textContent = "Log in to access the admin panel.";
+      document.getElementById("login-form").style.display = "";
+      document.getElementById("gate-no-access").style.display = "none";
+      return;
+    }
+    if (user.role !== "admin") {
+      document.getElementById("gate-msg").textContent = "";
+      document.getElementById("login-form").style.display = "none";
+      document.getElementById("gate-no-access").style.display = "";
+      return;
+    }
+    document.getElementById("user-label").textContent = user.username;
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    loadList();
+  }
+
+  // --- Curriculum list ---
+  async function loadList() {
+    const res = await fetch("/api/admin/curricula");
+    const list = await res.json();
+    const ul = document.getElementById("curr-list");
+    ul.innerHTML = "";
+    list.forEach(c => {
+      const li = document.createElement("li");
+      li.textContent = c.name;
+      li.dataset.id = c.id;
+      li.title = c.id;
+      li.addEventListener("click", () => selectCurriculum(c.id));
+      ul.appendChild(li);
+    });
+  }
+
+  // --- Select curriculum ---
+  async function selectCurriculum(id) {
+    currentId = id;
+    document.querySelectorAll("#curr-list li").forEach(li => {
+      li.classList.toggle("active", li.dataset.id === id);
+    });
+    setStatus("", "");
+
+    const res = await fetch(`/api/admin/curricula/${id}`);
+    if (!res.ok) { setStatus("Failed to load curriculum.", "err"); return; }
+    const { manifest, topics } = await res.json();
+
+    document.getElementById("editor-placeholder").style.display = "none";
+    document.getElementById("editor-body").style.display = "block";
+    document.getElementById("users-body").style.display = "none";
+    document.getElementById("keys-body").style.display = "none";
+    document.getElementById("editor-title").textContent = manifest.name || id;
+    document.getElementById("editor-id-badge").textContent = id;
+
+    document.getElementById("f-name").value = manifest.name || "";
+    document.getElementById("f-flavour").value = manifest.prompt_flavour || "";
+    document.getElementById("f-collection").value = manifest.collection || "";
+    document.getElementById("f-level").value = manifest.level || "";
+    document.getElementById("f-subjects").value = Array.isArray(manifest.subjects)
+      ? manifest.subjects.join(", ") : (manifest.subjects || "");
+    document.getElementById("f-ref-dir").value = manifest.reference_dir || "";
+    document.getElementById("f-papers-dir").value = manifest.papers_dir || "";
+
+    renderTopics(topics || []);
+  }
+
+  // --- Topics table ---
+  function renderTopics(topics) {
+    const tbody = document.getElementById("topics-body");
+    tbody.innerHTML = "";
+    topics.forEach((t, i) => addTopicRow(t));
+  }
+
+  function addTopicRow(t = {}) {
+    const tbody = document.getElementById("topics-body");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" class="t-name" value="${esc(t.name || "")}"></td>
+      <td><textarea class="t-subs">${esc((t.subtopics || []).join("\n"))}</textarea></td>
+      <td><textarea class="t-objs">${esc((t.objectives || []).join("\n"))}</textarea></td>
+      <td><button class="btn danger del-row-btn">×</button></td>
+    `;
+    tr.querySelector(".del-row-btn").addEventListener("click", () => tr.remove());
+    tbody.appendChild(tr);
+  }
+
+  function collectTopics() {
+    return [...document.querySelectorAll("#topics-body tr")].map(tr => ({
+      name: tr.querySelector(".t-name").value.trim(),
+      subtopics: tr.querySelector(".t-subs").value.split("\n").map(s => s.trim()).filter(Boolean),
+      objectives: tr.querySelector(".t-objs").value.split("\n").map(s => s.trim()).filter(Boolean),
+    })).filter(t => t.name);
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // --- Save ---
+  document.getElementById("save-btn").addEventListener("click", async () => {
+    if (!currentId) return;
+    setStatus("Saving...", "info");
+
+    const subjectsRaw = document.getElementById("f-subjects").value;
+    const subjects = subjectsRaw.split(",").map(s => s.trim()).filter(Boolean);
+
+    const body = {
+      name: document.getElementById("f-name").value.trim(),
+      prompt_flavour: document.getElementById("f-flavour").value.trim(),
+      collection: document.getElementById("f-collection").value.trim(),
+      level: document.getElementById("f-level").value.trim(),
+      subjects,
+      reference_dir: document.getElementById("f-ref-dir").value.trim(),
+      papers_dir: document.getElementById("f-papers-dir").value.trim(),
+      topics: collectTopics(),
+    };
+
+    const res = await fetch(`/api/admin/curricula/${currentId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      setStatus("Saved.", "ok");
+      document.getElementById("editor-title").textContent = body.name || currentId;
+      // Refresh sidebar to pick up name change
+      loadList().then(() => {
+        document.querySelectorAll("#curr-list li").forEach(li => {
+          li.classList.toggle("active", li.dataset.id === currentId);
+        });
+      });
+    } else {
+      const err = await res.json().catch(() => ({}));
+      setStatus("Save failed: " + (err.error || res.status), "err");
+    }
+  });
+
+  // --- Re-ingest ---
+  document.getElementById("ingest-btn").addEventListener("click", async () => {
+    if (!currentId) return;
+    setStatus("Ingestion started — check server logs.", "info");
+    const res = await fetch(`/api/admin/curricula/${currentId}/ingest`, { method: "POST" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setStatus("Ingest error: " + (err.error || res.status), "err");
+    }
+  });
+
+  // --- Import past paper ---
+  document.getElementById("import-paper-btn").addEventListener("click", () => {
+    if (!currentId) return;
+    const row = document.getElementById("import-paper-row");
+    row.style.display = row.style.display === "none" ? "flex" : "none";
+    if (row.style.display === "flex") document.getElementById("paper-url-input").focus();
+  });
+
+  document.getElementById("paper-cancel-btn").addEventListener("click", () => {
+    document.getElementById("import-paper-row").style.display = "none";
+    document.getElementById("paper-url-input").value = "";
+  });
+
+  document.getElementById("paper-fetch-btn").addEventListener("click", async () => {
+    const url = document.getElementById("paper-url-input").value.trim();
+    if (!url) return;
+    setStatus("Fetching and extracting questions — this may take 20–40 seconds...", "info");
+    document.getElementById("paper-fetch-btn").disabled = true;
+    const prefs = JSON.parse(localStorage.getItem("ollm_prefs") || "{}");
+    const res = await fetch(`/api/admin/curricula/${currentId}/import-paper-questions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, api_key: prefs.api_key || "", model: prefs.model || "" }),
+    });
+    document.getElementById("paper-fetch-btn").disabled = false;
+    if (res.ok) {
+      const d = await res.json();
+      setStatus(`Imported ${d.imported} questions from paper.`, "ok");
+      document.getElementById("import-paper-row").style.display = "none";
+      document.getElementById("paper-url-input").value = "";
+    } else {
+      const err = await res.json().catch(() => ({}));
+      setStatus("Import failed: " + (err.error || res.status), "err");
+    }
+  });
+
+  // --- Add topic row ---
+  document.getElementById("add-topic-btn").addEventListener("click", () => addTopicRow());
+
+  // --- Status helper ---
+  function setStatus(msg, type) {
+    const el = document.getElementById("status-msg");
+    el.textContent = msg;
+    el.className = type;
+    if (msg && type === "ok") setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3000);
+  }
+
+  // --- New curriculum modal ---
+  document.getElementById("new-curr-btn").addEventListener("click", () => {
+    document.getElementById("new-id").value = "";
+    document.getElementById("new-name").value = "";
+    document.getElementById("new-flavour").value = "";
+    document.getElementById("modal-overlay").classList.add("open");
+    document.getElementById("new-id").focus();
+  });
+
+  document.getElementById("modal-cancel-btn").addEventListener("click", () => {
+    document.getElementById("modal-overlay").classList.remove("open");
+  });
+
+  document.getElementById("new-id").addEventListener("input", e => {
+    const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    if (v !== e.target.value) e.target.value = v;
+    if (!document.getElementById("new-flavour").dataset.edited) {
+      const name = document.getElementById("new-name").value.trim();
+      if (name) document.getElementById("new-flavour").value = name + " exam preparation";
+    }
+  });
+
+  document.getElementById("new-name").addEventListener("input", e => {
+    if (!document.getElementById("new-flavour").dataset.edited) {
+      document.getElementById("new-flavour").value = e.target.value.trim()
+        ? e.target.value.trim() + " exam preparation" : "";
+    }
+    // auto-fill slug from name
+    const slug = document.getElementById("new-id");
+    if (!slug.dataset.edited) {
+      slug.value = e.target.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+  });
+
+  document.getElementById("new-id").addEventListener("keydown", e => {
+    if (e.key !== "Backspace") document.getElementById("new-id").dataset.edited = "1";
+  });
+  document.getElementById("new-flavour").addEventListener("keydown", e => {
+    if (e.key !== "Backspace") document.getElementById("new-flavour").dataset.edited = "1";
+  });
+
+  document.getElementById("modal-create-btn").addEventListener("click", async () => {
+    const id = document.getElementById("new-id").value.trim();
+    const name = document.getElementById("new-name").value.trim();
+    const flavour = document.getElementById("new-flavour").value.trim();
+    if (!id || !name) { alert("ID and name are required."); return; }
+
+    const res = await fetch("/api/admin/curricula", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name, prompt_flavour: flavour }),
+    });
+
+    if (res.ok) {
+      document.getElementById("modal-overlay").classList.remove("open");
+      await loadList();
+      selectCurriculum(id);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed: " + (err.error || res.status));
+    }
+  });
+
+  // Close modal on overlay click
+  document.getElementById("modal-overlay").addEventListener("click", e => {
+    if (e.target === document.getElementById("modal-overlay"))
+      document.getElementById("modal-overlay").classList.remove("open");
+  });
+
+  // --- Users panel ---
+  document.getElementById("users-nav-btn").addEventListener("click", () => {
+    currentId = null;
+    document.querySelectorAll("#curr-list li").forEach(li => li.classList.remove("active"));
+    document.getElementById("editor-placeholder").style.display = "none";
+    document.getElementById("editor-body").style.display = "none";
+    document.getElementById("keys-body").style.display = "none";
+    document.getElementById("users-body").style.display = "block";
+    loadUsers();
+  });
+
+  async function loadUsers() {
+    const res = await fetch("/api/admin/users");
+    if (!res.ok) return;
+    const list = await res.json();
+    const tbody = document.getElementById("users-tbody");
+    tbody.innerHTML = "";
+    list.forEach(u => {
+      const tr = document.createElement("tr");
+      const roleSelect = `
+        <select data-uid="${u.id}" class="role-select" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:inherit;font-size:12px;padding:3px 6px;width:100%">
+          <option value="admin"  ${u.role === "admin"   ? "selected" : ""}>admin</option>
+          <option value="teacher"${u.role === "teacher" ? "selected" : ""}>teacher</option>
+          <option value="student"${u.role === "student" ? "selected" : ""}>student</option>
+        </select>`;
+      tr.innerHTML = `
+        <td style="padding:6px 10px;color:var(--muted);border-bottom:1px solid var(--border)">${u.id}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border)">${esc(u.username)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border)">${roleSelect}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.querySelectorAll(".role-select").forEach(sel => {
+      sel.addEventListener("change", async e => {
+        const uid = parseInt(e.target.dataset.uid);
+        const role = e.target.value;
+        const res = await fetch(`/api/admin/users/${uid}/role`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role }),
+        });
+        if (!res.ok) {
+          alert("Failed to update role.");
+          loadUsers();
+        }
+      });
+    });
+  }
+
+  // --- API keys panel ---
+  document.getElementById("keys-nav-btn").addEventListener("click", () => {
+    currentId = null;
+    document.querySelectorAll("#curr-list li").forEach(li => li.classList.remove("active"));
+    document.getElementById("editor-placeholder").style.display = "none";
+    document.getElementById("editor-body").style.display = "none";
+    document.getElementById("users-body").style.display = "none";
+    document.getElementById("keys-body").style.display = "block";
+    loadKeys();
+  });
+
+  async function loadKeys() {
+    const res = await fetch("/api/admin/api-keys");
+    if (!res.ok) { document.getElementById("keys-list").textContent = "Failed to load."; return; }
+    const list = await res.json();
+    const el = document.getElementById("keys-list");
+    if (!list.length) { el.innerHTML = '<span style="color:var(--muted)">No keys yet.</span>'; return; }
+    el.innerHTML = list.map(k => `
+      <div style="display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="flex:1">${esc(k.label)}</span>
+        <span style="color:var(--muted);font-size:11px">${new Date(k.created_at * 1000).toLocaleDateString()}</span>
+        <button class="btn danger" onclick="revokeKey(${k.id})">Revoke</button>
+      </div>
+    `).join("");
+  }
+
+  async function revokeKey(id) {
+    await fetch(`/api/admin/api-keys/${id}`, { method: "DELETE" });
+    loadKeys();
+  }
+
+  document.getElementById("create-key-btn").addEventListener("click", async () => {
+    const label = document.getElementById("new-key-label").value.trim();
+    if (!label) return;
+    const res = await fetch("/api/admin/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    });
+    if (!res.ok) { alert("Failed to create key."); return; }
+    const data = await res.json();
+    const inp = document.getElementById("new-key-value");
+    inp.value = data.token;
+    document.getElementById("new-key-result").style.display = "block";
+    inp.select();
+    document.getElementById("new-key-label").value = "";
+    loadKeys();
+  });
+
+  // --- Gate login ---
+  async function doLogin() {
+    const username = document.getElementById("gate-username").value.trim();
+    const password = document.getElementById("gate-password").value;
+    const errEl = document.getElementById("login-err");
+    const btn = document.getElementById("gate-login-btn");
+
+    errEl.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Logging in...";
+
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    btn.disabled = false;
+    btn.textContent = "Log in";
+
+    if (res.ok) {
+      init();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      errEl.textContent = err.error || "Login failed.";
+    }
+  }
+
+  document.getElementById("gate-login-btn").addEventListener("click", doLogin);
+  document.getElementById("gate-password").addEventListener("keydown", e => {
+    if (e.key === "Enter") doLogin();
+  });
+
+  init();
+</script>
+</body>
+</html>

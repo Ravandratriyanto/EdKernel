@@ -1,0 +1,19 @@
+# The venv is built for this laptop's Python and architecture. Never ship it.
+.venv/
+__pycache__/
+*.pyc
+
+.git/
+.gitignore
+
+# Rebuilt inside the container or mounted at run time.
+data/chroma/
+data/papers/
+.logs/
+training/out/
+training/data/
+
+# Local only.
+Pictures/
+*.docx
+.env

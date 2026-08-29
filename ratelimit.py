@@ -19,6 +19,46 @@ import threading
 import time
 
 
+class SlidingWindowLimiter:
+    """Limits total calls within a rolling time window.
+
+    Unlike RateLimiter, this counts every request — not just failures.
+    Use this for expensive endpoints (LLM, vision) where you want a hard
+    ceiling regardless of whether the call succeeded.
+    """
+
+    def __init__(self, max_calls: int, window_seconds: int):
+        self.max_calls = max_calls
+        self.window_seconds = window_seconds
+        self._hits: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def _fresh(self, key: str, now: float) -> list:
+        hits = [t for t in self._hits.get(key, []) if now - t < self.window_seconds]
+        self._hits[key] = hits
+        return hits
+
+    def check_and_record(self, *keys: str) -> int:
+        """Record a hit across all keys. Returns seconds to wait, or 0 if allowed.
+
+        All keys are checked before any are recorded — a request that would
+        breach any bucket is rejected without counting against any of them.
+        """
+        now = time.time()
+        with self._lock:
+            worst = 0
+            for key in keys:
+                hits = self._fresh(key, now)
+                if len(hits) >= self.max_calls:
+                    wait = int(self.window_seconds - (now - hits[0])) + 1
+                    worst = max(worst, wait)
+            if worst:
+                return worst
+            for key in keys:
+                self._hits[key].append(now)
+        return 0
+
+
 class RateLimiter:
     """Blocks a key once it collects `max_failures` inside `window_seconds`.
 

@@ -1,0 +1,92 @@
+# Merdeka Curriculum – Reference Notes for Tutors  
+
+---
+
+## 1. Overview  
+
+- **Launch & Legal Status** – Introduced in 2022 and officially adopted as Indonesia’s National Curriculum by **MoECRT Regulation No. 12/2024**.  
+- **Core Purpose** – Raise the **quality of learning** by developing **student competence** (knowledge, skills, abilities) **and character**.  
+- **Why It Was Created** – To **recover learning losses** caused by the COVID‑19 pandemic and to tackle the longer‑term learning crisis in the country.  
+
+---
+
+## 2. Main Topics  
+
+| Topic | What It Covers (as described in the sources) |
+|-------|----------------------------------------------|
+| **Curriculum Structure** | Three pillars: **Curriculum Structure, Learning Outcomes, Learning Principles & Assessment** (PDF “Characteristics and Potential”). |
+| **Learning Outcomes** | Focus on competence, character, critical‑thinking, and the **Pancasila Student Profile (P5)**. |
+| **Learning Principles** | Student‑centered, project‑based, autonomous planning, collaborative learning, inclusive education. |
+| **Differentiated Learning / TaRL** | “Teaching at the Right Level” (TaRL) – differentiated instruction based on each learner’s ability. Recognised as a strength of implementation. |
+| **Baseline & Formative Assessment** | Baseline tests measure initial competencies; **formative assessment** is used as a reflective tool to adjust learning pathways. |
+| **Project‑Based Learning (P5)** | **Strengthening of Pancasila Student Profile (P5)** – a mandatory project that integrates civic values with subject content. |
+| **Professional Development & Collaboration** | Ongoing teacher training, continuous professional development, and collaborative curriculum design are highlighted as implementation strengths. |
+| **Implementation Support** | Needs include: structured training for low‑readiness schools, balancing autonomy with centralized guidance, and improving fidelity of the TaRL approach. |
+
+---
+
+## 3. Key Concepts  
+
+| Concept | Explanation (from source material) |
+|---------|--------------------------------------|
+| **Student‑Centered Learning** | The curriculum puts learners at the centre, allowing them to choose and manage their own learning strategies (PDF “Independent …”). |
+| **Project‑Based Activities** | Learning is organised around real‑world projects, especially the **P5** project that builds the Pancasila student profile. |
+| **Critical Thinking** | One of the explicit goals of the curriculum – students develop analytical and problem‑solving abilities. |
+| **Autonomous Planning** | Students are encouraged to **plan and create learning strategies** that fit their needs and environment. |
+| **Differentiated Learning / TaRL** | Instruction is tailored to the learner’s current level; “Teaching at the Right Level” is a core method. |
+| **Baseline Assessment** | Initial measurement of competencies that informs differentiated pathways. |
+| **Formative Assessment** | Ongoing checks that feed back into instruction; used for reflection rather than high‑stakes grading. |
+| **Pancasila Student Profile (P5)** | A project‑based component aiming to embed the national ideology (Pancasila) into students’ character and civic identity. |
+| **Continuous Professional Development (CPD)** | Teachers receive regular training and collaborate on curriculum design, identified as a strength of the rollout. |
+| **Inclusive Education** | The curriculum is designed to be usable for all learners, including those with diverse needs. |
+
+---
+
+## 4. Learning Objectives for Tutors  
+
+When guiding learners through the Merdeka Curriculum, tutors should aim for the following outcomes (derived from the curriculum’s stated aims and components):
+
+1. **Demonstrate Understanding of the Curriculum Framework**  
+   - Identify the three structural pillars (curriculum structure, learning outcomes, principles & assessment).  
+   - Explain how the 2022 launch and 2024 regulation define the national curriculum.
+
+2. **Facilitate Student‑Centred, Project‑Based Learning**  
+   - Help learners design and execute a **P5 project** that reflects the Pancasila values.  
+   - Encourage autonomous planning of learning tasks aligned with personal goals.
+
+3. **Develop Critical‑Thinking and Problem‑Solving Skills**  
+   - Use inquiry‑based activities and real‑world problems to practice analysis, evaluation, and synthesis.
+
+4. **Apply Differentiated Instruction (TaRL) Effectively**  
+   - Assess baseline competencies and group learners by level.  
+   - Select teaching strategies that match each group’s readiness.
+
+5. **Implement Formative Assessment for Feedback**  
+   - Design low‑stakes checks (quizzes, reflections, peer reviews).  
+   - Teach learners how to use assessment results to adjust their learning paths.
+
+6. **Support Character Development and the Pancasila Profile**  
+   - Integrate civic‑moral discussions and reflections into subject lessons.  
+   - Align project outcomes with the five elements of the P5 profile.
+
+7. **Promote Inclusive Practices**  
+   - Adapt materials and activities so that learners of varying abilities can participate fully.
+
+8. **Model Continuous Professional Development**  
+   - Share best‑practice resources, collaborate with fellow tutors, and stay updated on curriculum refinements.
+
+---
+
+### Quick Reference Checklist for a Lesson  
+
+- [ ] **Curriculum Alignment** – Is the lesson mapped to a specific learning outcome and principle?  
+- [ ] **Student Autonomy** – Do learners have a choice in task or strategy?  
+- [ ] **Project Component** – Is there a link to the P5 project or another real‑world task?  
+- [ ] **Differentiation** – Are activities grouped or scaffolded based on baseline data?  
+- [ ] **Formative Check** – Is there a quick feedback loop (e.g., exit ticket, peer critique)?  
+- [ ] **Character Focus** – Does the activity reinforce Pancasila values?  
+- [ ] **Inclusivity** – Are accommodations in place for diverse learners?  
+
+---  
+
+*These notes are drawn exclusively from the provided evidence on the Merdeka Curriculum.*

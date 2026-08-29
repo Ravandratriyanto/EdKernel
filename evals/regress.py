@@ -11,10 +11,10 @@ import glob
 import re
 
 import pdftext
-from prompts import tutor_reply, strip_signal
+from core.prompts import tutor_reply, strip_signal
 from ratelimit import RateLimiter
-from vision.image_handler import drop_reasoning
-from video.video_handler import _dedupe
+from core.vision.image_handler import drop_reasoning
+from core.video.video_handler import _dedupe
 
 CHECKS = []
 
@@ -190,7 +190,7 @@ def _ollama_usage_reads_counts():
     renaming its response fields — only a live run does that. What it catches
     is this end of the wiring being edited to read the wrong thing.
     """
-    from llm.client import _ollama_usage
+    from core.llm.client import _ollama_usage
 
     class Reply:
         prompt_eval_count = 41

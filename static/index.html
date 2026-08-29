@@ -166,6 +166,20 @@
     .verdict.verdict-correct { color: #16a34a; }
     .verdict.verdict-wrong   { color: #dc2626; }
 
+    .step-list { list-style: none; padding: 0; margin: 6px 0; }
+    .step-list li {
+      padding: 6px 10px; margin: 3px 0; border-radius: 6px;
+      background: #f9fafb; border: 1px solid #e5e7eb;
+      font-family: monospace; font-size: 0.88rem;
+    }
+    .step-list li.step-error { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
+    .step-error-label { margin-left: 8px; font-weight: 600; font-family: sans-serif; font-size: 0.78rem; }
+    .step-explanation {
+      margin-top: 8px; padding: 8px 10px; border-radius: 0 6px 6px 0;
+      background: #fef2f2; border-left: 3px solid #dc2626;
+      color: #7f1d1d; font-size: 0.85rem;
+    }
+
     .bubble p { margin-bottom: 0.5em; }
     .bubble p:last-child { margin-bottom: 0; }
     .bubble strong { font-weight: 600; }
@@ -387,6 +401,333 @@
 
     .hidden { display: none !important; }
 
+    /* ---- classes landing page ---- */
+    #classes-view {
+      flex: 1; overflow-y: auto;
+      padding: 40px 32px;
+      background: #f0f2f5;
+    }
+
+    #classes-view h2 {
+      font-size: 1.1rem; font-weight: 600; color: #374151;
+      margin-bottom: 24px;
+    }
+
+    #class-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .class-card {
+      background: white; border-radius: 14px;
+      padding: 24px 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      cursor: pointer; transition: box-shadow 0.15s, transform 0.1s;
+      border: 2px solid transparent;
+    }
+    .class-card:hover {
+      box-shadow: 0 4px 16px rgba(79,70,229,0.15);
+      border-color: #4f46e5;
+      transform: translateY(-2px);
+    }
+
+    .class-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: #ede9fe; display: flex; align-items: center;
+      justify-content: center; font-size: 1.4rem; margin-bottom: 14px;
+    }
+
+    .class-name {
+      font-weight: 600; font-size: 0.95rem; color: #1a1a2e; margin-bottom: 4px;
+    }
+
+    .class-meta {
+      font-size: 0.75rem; color: #6b7280;
+    }
+
+    #classes-empty {
+      font-size: 0.9rem; color: #9ca3af; padding: 20px 0;
+    }
+
+    /* back button in header (visible only in chat view) */
+    #btn-back {
+      border: none; background: rgba(255,255,255,0.1); color: white;
+      border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem;
+      display: flex; align-items: center; gap: 5px;
+    }
+    #btn-back:hover { background: rgba(255,255,255,0.2); }
+
+    #header-class-name {
+      font-size: 0.82rem; color: rgba(255,255,255,0.6);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    /* ---- class canvas ---- */
+    #canvas-view {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+      background: #f0f2f5;
+    }
+
+    #canvas-banner {
+      background: #1a1a2e; color: white;
+      padding: 28px 32px 24px;
+      flex-shrink: 0;
+    }
+
+    #canvas-banner h2 {
+      font-size: 1.5rem; font-weight: 700; margin-bottom: 4px;
+    }
+
+    #canvas-banner .banner-sub {
+      font-size: 0.82rem; color: rgba(255,255,255,0.55);
+    }
+
+    #canvas-banner .banner-actions {
+      margin-top: 16px; display: flex; gap: 10px; align-items: center;
+    }
+
+    #btn-open-tutor {
+      background: #4f46e5; color: white; border: none;
+      border-radius: 8px; padding: 9px 20px;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      transition: background 0.15s;
+    }
+    #btn-open-tutor:hover { background: #4338ca; }
+
+    #canvas-tabs {
+      display: flex; gap: 0;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+      padding: 0 32px;
+    }
+
+    .canvas-tab {
+      border: none; background: none;
+      padding: 12px 20px; cursor: pointer;
+      font-size: 0.88rem; font-weight: 500; color: #6b7280;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+    }
+    .canvas-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+    .canvas-tab:hover:not(.active) { color: #374151; }
+
+    #canvas-body {
+      flex: 1; overflow-y: auto; padding: 28px 32px; min-height: 0;
+    }
+
+    /* classwork tab */
+    .topic-section {
+      background: white; border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      margin-bottom: 16px; overflow: hidden;
+    }
+
+    .topic-header {
+      padding: 14px 18px;
+      background: #f8f9fb;
+      border-bottom: 1px solid #e5e7eb;
+      font-weight: 600; font-size: 0.9rem; color: #1a1a2e;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .topic-header .topic-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: #ede9fe; display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; flex-shrink: 0;
+    }
+
+    .topic-body { padding: 14px 18px; }
+
+    .subtopics-list {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+    }
+
+    .subtopic-pill {
+      background: #f3f4f6; border-radius: 20px;
+      padding: 3px 10px; font-size: 0.75rem; color: #374151;
+    }
+
+    .objectives-list {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .objectives-list li {
+      font-size: 0.8rem; color: #6b7280; padding: 3px 0;
+      display: flex; gap: 6px; align-items: flex-start;
+    }
+    .objectives-list li::before {
+      content: "→"; color: #4f46e5; flex-shrink: 0;
+    }
+
+    /* materials section */
+    .materials-section {
+      background: white; border-radius: 12px;
+      border: 1px solid #e5e7eb; margin-bottom: 16px;
+    }
+
+    .materials-header {
+      padding: 14px 18px;
+      font-weight: 600; font-size: 0.9rem; color: #1a1a2e;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .material-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 18px; border-bottom: 1px solid #f3f4f6;
+      text-decoration: none; color: #374151;
+      transition: background 0.12s;
+    }
+    .material-item:last-child { border-bottom: none; }
+    .material-item:hover { background: #f9fafb; }
+    .material-item .mat-icon { font-size: 1.1rem; }
+    .material-item .mat-name { font-size: 0.85rem; flex: 1; }
+    .material-item .mat-dl { font-size: 0.72rem; color: #4f46e5; }
+
+    #canvas-empty { font-size: 0.85rem; color: #9ca3af; padding: 20px 0; }
+
+    /* questions inside canvas (same cards as overlay, no overlay needed) */
+    #canvas-questions-list {
+      display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;
+    }
+
+    #canvas-q-form {
+      background: white; border-radius: 12px;
+      border: 1px solid #e5e7eb; padding: 16px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    #canvas-q-form h3 { font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; color: #374151; }
+    #canvas-q-form textarea {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 9px 12px; font-size: 0.88rem; font-family: inherit;
+      resize: none; height: 68px; outline: none;
+    }
+    #canvas-q-form textarea:focus { border-color: #4f46e5; }
+    #canvas-q-form input[type="text"] {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 7px 12px; font-size: 0.85rem; font-family: inherit; outline: none;
+    }
+    #canvas-q-form input[type="text"]:focus { border-color: #4f46e5; }
+
+    #canvas-q-img-preview { display: none; border-radius: 8px; overflow: hidden; position: relative; }
+    #canvas-q-img-preview img { width: 100%; max-height: 110px; object-fit: contain; background: #f3f4f6; display: block; }
+    #canvas-q-img-remove {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(0,0,0,0.5); color: white; border: none;
+      border-radius: 50%; width: 22px; height: 22px;
+      cursor: pointer; font-size: 0.75rem; line-height: 22px; text-align: center;
+    }
+    .canvas-q-row { display: flex; gap: 8px; }
+    #btn-canvas-q-img {
+      background: none; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 6px 12px; cursor: pointer; font-size: 0.82rem; color: #6b7280;
+    }
+    #btn-canvas-q-img:hover { border-color: #4f46e5; color: #4f46e5; }
+    #btn-canvas-q-submit {
+      background: #4f46e5; color: white; border: none;
+      border-radius: 8px; padding: 7px 16px;
+      cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    }
+    #btn-canvas-q-submit:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    /* ---- questions overlay ---- */
+    #questions-overlay {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(15,23,42,0.6);
+      display: flex; align-items: flex-end; justify-content: flex-end;
+    }
+
+    #questions-panel {
+      width: 420px; height: 100%;
+      background: white;
+      display: flex; flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+    }
+
+    #questions-header {
+      background: #1a1a2e; color: white;
+      padding: 14px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #questions-header h2 { font-size: 0.95rem; font-weight: 600; }
+    #btn-close-questions {
+      background: none; border: none; color: rgba(255,255,255,0.7);
+      font-size: 1.2rem; cursor: pointer; line-height: 1; padding: 2px 4px;
+    }
+    #btn-close-questions:hover { color: white; }
+
+    #questions-list {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+
+    .q-card {
+      border: 1px solid #e5e7eb; border-radius: 10px;
+      padding: 12px 14px; background: #fafafa;
+    }
+    .q-card-text { font-size: 0.88rem; color: #1a1a2e; line-height: 1.5; }
+    .q-card-img  { margin-top: 8px; border-radius: 8px; overflow: hidden; }
+    .q-card-img img { width: 100%; display: block; max-height: 200px; object-fit: contain; background:#f3f4f6; }
+    .q-card-meta { font-size: 0.7rem; color: #9ca3af; margin-top: 6px; }
+    .q-card-answer {
+      margin-top: 6px; font-size: 0.78rem; color: #374151;
+      background: #f0fdf4; border-left: 3px solid #22c55e;
+      padding: 4px 8px; border-radius: 0 4px 4px 0;
+    }
+    .q-empty { font-size: 0.82rem; color: #9ca3af; text-align: center; padding: 24px 0; }
+
+    #questions-form {
+      border-top: 1px solid #e5e7eb; padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+    }
+    #questions-form textarea {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 9px 12px; font-size: 0.88rem; font-family: inherit;
+      resize: none; height: 72px; outline: none;
+      transition: border-color 0.15s;
+    }
+    #questions-form textarea:focus { border-color: #4f46e5; }
+    #questions-form input[type="text"] {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 7px 12px; font-size: 0.85rem; font-family: inherit;
+      outline: none; transition: border-color 0.15s;
+    }
+    #questions-form input[type="text"]:focus { border-color: #4f46e5; }
+
+    #q-img-preview {
+      border-radius: 8px; overflow: hidden; display: none;
+      position: relative;
+    }
+    #q-img-preview img { width: 100%; max-height: 120px; object-fit: contain; background: #f3f4f6; display: block; }
+    #q-img-remove {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(0,0,0,0.5); color: white; border: none;
+      border-radius: 50%; width: 22px; height: 22px;
+      cursor: pointer; font-size: 0.75rem; line-height: 22px; text-align: center;
+    }
+
+    #q-form-row {
+      display: flex; gap: 8px; align-items: center;
+    }
+    #btn-q-img {
+      background: none; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 6px 10px; cursor: pointer; font-size: 0.82rem; color: #6b7280;
+      white-space: nowrap; transition: border-color 0.15s;
+    }
+    #btn-q-img:hover { border-color: #4f46e5; color: #4f46e5; }
+    #btn-q-submit {
+      background: #4f46e5; color: white; border: none;
+      border-radius: 8px; padding: 7px 16px;
+      cursor: pointer; font-size: 0.85rem; font-weight: 600;
+      transition: background 0.15s; white-space: nowrap;
+    }
+    #btn-q-submit:hover { background: #4338ca; }
+    #btn-q-submit:disabled { background: #9ca3af; cursor: not-allowed; }
+
     /* login gate — sits over everything until /api/me returns a user */
     #auth-gate {
       position: fixed; inset: 0; z-index: 100;
@@ -445,16 +786,84 @@
 
 <header>
   <h1>OLLM Tutor</h1>
-  <div class="mode-toggle">
+  <button id="btn-back" class="hidden" onclick="backToCanvas()">&#8592; Class</button>
+  <span id="header-class-name" class="hidden"></span>
+  <div id="mode-toggle-wrap" class="mode-toggle hidden">
     <button id="btn-learn" class="active" onclick="setMode('learn')">Learn</button>
     <button id="btn-check" onclick="setMode('check')">Check</button>
+    <button id="btn-steps" onclick="setMode('steps')">Steps</button>
   </div>
+  <button id="btn-questions" class="hidden" onclick="openQuestions()"
+          style="border:none;background:rgba(255,255,255,0.1);color:white;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem">
+    Questions
+  </button>
   <span id="whoami"></span>
   <button id="btn-logout" onclick="logout()" title="Log out">Log out</button>
-  <button id="btn-sidebar" onclick="toggleSidebar()" title="Show or hide past lessons">☰</button>
+  <button id="btn-sidebar" class="hidden" onclick="toggleSidebar()" title="Show or hide past lessons">☰</button>
 </header>
 
-<div id="body-row">
+<!-- classes landing page -->
+<div id="classes-view" class="hidden">
+  <h2>Your Classes</h2>
+  <div id="class-grid"></div>
+  <p id="classes-empty" class="hidden">No classes available yet. Ask your teacher to set one up.</p>
+</div>
+
+<!-- class canvas -->
+<div id="canvas-view" class="hidden">
+  <div id="canvas-banner">
+    <h2 id="canvas-title"></h2>
+    <div class="banner-sub" id="canvas-sub"></div>
+    <div class="banner-actions">
+      <button id="btn-open-tutor" onclick="enterTutor()">Open AI Tutor</button>
+      <button id="btn-practice" onclick="enterPractice()"
+              style="background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.25);border-radius:8px;padding:9px 18px;font-size:0.88rem;font-weight:500;cursor:pointer">
+        Practice questions
+      </button>
+    </div>
+  </div>
+
+  <div id="canvas-tabs">
+    <button class="canvas-tab active" id="tab-btn-classwork" onclick="showCanvasTab('classwork')">Classwork</button>
+    <button class="canvas-tab"        id="tab-btn-questions"  onclick="showCanvasTab('questions')">Questions</button>
+  </div>
+
+  <div id="canvas-body">
+    <!-- classwork tab -->
+    <div id="canvas-classwork">
+      <div id="canvas-topics"></div>
+      <div id="canvas-materials" class="materials-section" style="display:none">
+        <div class="materials-header">&#128196; Materials</div>
+        <div id="canvas-materials-list"></div>
+      </div>
+      <p id="canvas-classwork-empty" class="hidden" style="color:#9ca3af;font-size:0.85rem;padding:20px 0">
+        No topics or materials added yet.
+      </p>
+    </div>
+
+    <!-- questions tab -->
+    <div id="canvas-questions" class="hidden">
+      <div id="canvas-questions-list"></div>
+      <div id="canvas-q-form">
+        <h3>Add a question</h3>
+        <textarea id="canvas-q-text" placeholder="Write a question for your classmates..."></textarea>
+        <input type="text" id="canvas-q-answer" placeholder="Answer (optional)" />
+        <div id="canvas-q-img-preview">
+          <img id="canvas-q-img-thumb" src="" alt="">
+          <button id="canvas-q-img-remove" onclick="removeCanvasQImage()">&#215;</button>
+        </div>
+        <div class="canvas-q-row">
+          <button id="btn-canvas-q-img" onclick="pickCanvasQImage()">&#128248; Image</button>
+          <button id="btn-canvas-q-submit" onclick="submitCanvasQuestion()">Add question</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="canvas-q-file" accept=".png,.jpg,.jpeg,.webp,.gif" class="hidden" onchange="handleCanvasQImage()">
+
+<!-- chat view (hidden until a class is selected) -->
+<div id="body-row" class="hidden">
 
 <aside id="sidebar">
   <div id="sidebar-head">
@@ -471,18 +880,18 @@
     <button id="btn-groq"   onclick="setProvider('groq')">Groq</button>
   </div>
   <label>Model</label>
-  <input id="input-model" value="gemma4" />
+  <input id="input-model" value="gemma4" oninput="savePrefs()" />
   <span id="host-group">
     <label>Host</label>
-    <input id="input-host" value="http://localhost:11434" />
+    <input id="input-host" value="http://localhost:11434" oninput="savePrefs()" />
   </span>
   <span id="key-group" class="hidden">
     <label>API Key</label>
-    <input id="input-api-key" type="password" placeholder="gsk_..." />
+    <input id="input-api-key" type="password" placeholder="gsk_..." oninput="savePrefs()" />
   </span>
   <span>
     <label>Tavily Key</label>
-    <input id="input-tavily-key" type="password" placeholder="tvly-..." style="width:220px;font-family:monospace;letter-spacing:0.03em" />
+    <input id="input-tavily-key" type="password" placeholder="tvly-..." oninput="savePrefs()" style="width:220px;font-family:monospace;letter-spacing:0.03em" />
   </span>
 </div>
 
@@ -523,6 +932,17 @@
   </div>
 </div>
 
+<div id="steps-panel" class="hidden">
+  <div id="steps-attach-strip" class="attach-strip hidden"></div>
+  <div class="input-row">
+    <button class="icon-btn" title="Attach a photo of handwritten working" onclick="openFilePicker('steps')">📎</button>
+    <span style="flex:1; color:#6b7280; font-size:0.85rem; padding:0 8px">
+      Attach a photo of handwritten working — each step will be checked
+    </span>
+    <button class="send-btn" onclick="submitWorking()">Check steps</button>
+  </div>
+</div>
+
 </div><!-- /main-col -->
 </div><!-- /body-row -->
 
@@ -538,10 +958,39 @@
   let sessionId = crypto.randomUUID();
   let currentTopic = '';
   let currentSessionOpen = null;
+  let currentCurriculumId = '';
 
   let paperMode = false;
   let paperQuestions = [];
   let paperIndex = 0;
+
+  /* ---- persistent settings (localStorage) ---- */
+  const PREFS_KEY = 'ollm_prefs';
+
+  function savePrefs() {
+    const prefs = {
+      provider,
+      model:      document.getElementById('input-model').value.trim(),
+      host:       document.getElementById('input-host').value.trim(),
+      api_key:    document.getElementById('input-api-key').value.trim(),
+      tavily_key: document.getElementById('input-tavily-key').value.trim(),
+    };
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  }
+
+  function loadPrefs() {
+    let prefs;
+    try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); }
+    catch { prefs = {}; }
+
+    if (prefs.model)      document.getElementById('input-model').value      = prefs.model;
+    if (prefs.host)       document.getElementById('input-host').value       = prefs.host;
+    if (prefs.api_key)    document.getElementById('input-api-key').value    = prefs.api_key;
+    if (prefs.tavily_key) document.getElementById('input-tavily-key').value = prefs.tavily_key;
+    if (prefs.provider && prefs.provider !== 'ollama') setProvider(prefs.provider);
+  }
+
+  loadPrefs();
 
   function setProvider(p) {
     provider = p;
@@ -557,6 +1006,7 @@
        verdicts. */
     document.getElementById('input-model').value =
       p === 'groq' ? 'openai/gpt-oss-120b' : 'gemma4';
+    savePrefs();
   }
 
   /* ---- mode ---- */
@@ -564,8 +1014,10 @@
     mode = m;
     document.getElementById('btn-learn').classList.toggle('active', m === 'learn');
     document.getElementById('btn-check').classList.toggle('active', m === 'check');
+    document.getElementById('btn-steps').classList.toggle('active', m === 'steps');
     document.getElementById('learn-panel').classList.toggle('hidden', m !== 'learn');
     document.getElementById('check-panel').classList.toggle('hidden', m !== 'check');
+    document.getElementById('steps-panel').classList.toggle('hidden', m !== 'steps');
     clearChat();
     messages = [];
     wrongStreak = 0;
@@ -592,8 +1044,10 @@
   function tavilyKey()  { return document.getElementById('input-tavily-key').value.trim(); }
 
   function basePayload() {
-    return { provider, model: model(), host: host(), api_key: apiKey(),
-             session_id: sessionId };
+    const p = { provider, model: model(), host: host(), api_key: apiKey(),
+                session_id: sessionId };
+    if (currentCurriculumId) p.curriculum_id = currentCurriculumId;
+    return p;
   }
 
   /* ---- attachment ---- */
@@ -628,6 +1082,7 @@
 
   function activeAttachTarget() {
     if (mode === 'check') return 'check';
+    if (mode === 'steps') return 'steps';
     return document.getElementById('answer-row').classList.contains('hidden') ? 'learn' : 'answer';
   }
 
@@ -645,8 +1100,9 @@
   });
 
   function renderAttachStrip(target) {
-    const stripId = target === 'check' ? 'check-attach-strip'
+    const stripId = target === 'check'  ? 'check-attach-strip'
                   : target === 'answer' ? 'answer-attach-strip'
+                  : target === 'steps'  ? 'steps-attach-strip'
                   : 'learn-attach-strip';
     const strip = document.getElementById(stripId);
     strip.innerHTML = '';
@@ -673,7 +1129,7 @@
 
   function clearAttachment() {
     attachment = null;
-    ['learn-attach-strip','answer-attach-strip','check-attach-strip'].forEach(id => {
+    ['learn-attach-strip','answer-attach-strip','check-attach-strip','steps-attach-strip'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
     });
@@ -915,9 +1371,10 @@
       messages           = data.messages;
 
       data.turns.forEach(t => {
-        if (t.event !== 'start') appendBubble('student', t.input);
-        appendBubble('tutor', t.output);
-      });
+  if (t.event !== 'start') appendBubble('student', t.input);
+  appendBubble('tutor', t.output, null, null,
+      t.event === 'check' ? t.correct : undefined);
+  });
 
       document.getElementById('topic-row').classList.add('hidden');
       document.getElementById('answer-row').classList.toggle('hidden', !data.resumable);
@@ -944,8 +1401,9 @@
   function newLesson() {
     if (busy) return;
     currentSessionOpen = null;
-    setMode('learn');               // already clears chat, messages and sessionId
+    setMode('learn');
     loadSessions();
+    // stay in the same class — curriculum_id is unchanged
   }
 
   function toggleSidebar() {
@@ -1080,6 +1538,66 @@
       const data = await res.json();
       removeThinking();
       appendBubble('tutor', data.response, null, null, data.correct);
+    } catch (e) {
+      removeThinking();
+      appendBubble('tutor', `Error: ${e.message}`);
+    }
+    busy = false;
+  }
+
+  async function submitWorking() {
+    if (!attachment || attachment.type !== 'image' || busy) {
+      if (!attachment) appendBubble('tutor', 'Attach a photo of handwritten working first.');
+      else if (attachment.type !== 'image') appendBubble('tutor', 'Steps mode needs an image, not a PDF.');
+      return;
+    }
+    busy = true;
+    const attach = attachment;
+    clearAttachment();
+    clearChat();
+    appendBubble('student', 'Checking handwritten working…', attach);
+    appendThinking();
+
+    try {
+      const res  = await fetch('/api/check_working', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b64: attach.b64, ...basePayload(),
+                               vision_model: attach.vision_model || '' }),
+      });
+      const data = await res.json();
+      removeThinking();
+
+      if (data.error) { appendBubble('tutor', `Error: ${data.error}`); busy = false; return; }
+
+      const { steps, error_index, explanation } = data;
+      if (!steps || steps.length === 0) {
+        appendBubble('tutor', 'No lines of working found in the image.');
+        busy = false; return;
+      }
+
+      const items = steps.map((s, i) => {
+        const isErr = i === error_index;
+        return `<li class="${isErr ? 'step-error' : ''}">`
+             + `<span style="color:#6b7280;font-size:0.8rem;margin-right:8px">Line ${i + 1}</span>`
+             + `${s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`
+             + (isErr ? `<span class="step-error-label">← error here</span>` : '')
+             + `</li>`;
+      }).join('');
+
+      let html = `<ul class="step-list">${items}</ul>`;
+      if (error_index === null) {
+        html += `<p style="color:#16a34a;font-weight:600;margin-top:8px">✓ No errors found</p>`;
+      } else if (explanation) {
+        html += `<div class="step-explanation">${explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message tutor';
+      bubble.innerHTML = `<div class="bubble">${html}</div>`;
+      document.getElementById('chat-area').appendChild(bubble);
+      document.getElementById('chat-area').scrollTop = 9e9;
+
     } catch (e) {
       removeThinking();
       appendBubble('tutor', `Error: ${e.message}`);
@@ -1523,15 +2041,285 @@
   function enterApp(user) {
     document.getElementById('whoami').textContent = user.username;
     document.getElementById('auth-gate').classList.add('hidden');
-    loadSessions();       // the sidebar is per-user, so it can only load now
+    showClassesView();
+  }
+
+  function _hideAllViews() {
+    document.getElementById('classes-view').classList.add('hidden');
+    document.getElementById('canvas-view').classList.add('hidden');
+    document.getElementById('body-row').classList.add('hidden');
+  }
+
+  function showClassesView() {
+    _hideAllViews();
+    document.getElementById('classes-view').classList.remove('hidden');
+    document.getElementById('btn-back').classList.add('hidden');
+    document.getElementById('header-class-name').classList.add('hidden');
+    document.getElementById('mode-toggle-wrap').classList.add('hidden');
+    document.getElementById('btn-sidebar').classList.add('hidden');
+    document.getElementById('btn-questions').classList.add('hidden');
+    closeQuestions();
+    loadClasses();
+  }
+
+  function showChatView() {
+    _hideAllViews();
+    document.getElementById('body-row').classList.remove('hidden');
+    document.getElementById('btn-back').classList.remove('hidden');
+    document.getElementById('header-class-name').classList.remove('hidden');
+    document.getElementById('mode-toggle-wrap').classList.remove('hidden');
+    document.getElementById('btn-sidebar').classList.remove('hidden');
+    document.getElementById('btn-questions').classList.remove('hidden');
+    loadSessions();
+  }
+
+  async function loadClasses() {
+    const grid = document.getElementById('class-grid');
+    const empty = document.getElementById('classes-empty');
+    grid.innerHTML = '<p style="color:#9ca3af;font-size:0.85rem">Loading classes...</p>';
+    empty.classList.add('hidden');
+    try {
+      const res  = await fetch('/api/curricula');
+      const list = await res.json();
+      grid.innerHTML = '';
+      if (!list.length) { empty.classList.remove('hidden'); return; }
+      list.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'class-card';
+        const subjects = Array.isArray(c.subjects) && c.subjects.length
+          ? c.subjects.join(', ')
+          : (c.level || '');
+        card.innerHTML = `
+          <div class="class-icon">&#128218;</div>
+          <div class="class-name">${c.name}</div>
+          <div class="class-meta">${subjects}</div>
+        `;
+        card.onclick = () => openClass(c);
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      grid.innerHTML = `<p style="color:#ef4444;font-size:0.85rem">Could not load classes: ${e.message}</p>`;
+    }
+  }
+
+  let _canvasManifest = null;
+
+  function openClass(curriculum) {
+    currentCurriculumId = curriculum.id;
+    showCanvasView(curriculum);
+  }
+
+  function showCanvasView(curriculum) {
+    document.getElementById('classes-view').classList.add('hidden');
+    document.getElementById('body-row').classList.add('hidden');
+    document.getElementById('canvas-view').classList.remove('hidden');
+    document.getElementById('btn-back').classList.add('hidden');
+    document.getElementById('header-class-name').classList.add('hidden');
+    document.getElementById('mode-toggle-wrap').classList.add('hidden');
+    document.getElementById('btn-sidebar').classList.add('hidden');
+    document.getElementById('btn-questions').classList.add('hidden');
+
+    // banner
+    document.getElementById('canvas-title').textContent = curriculum.name || curriculum.id;
+    const subjects = Array.isArray(curriculum.subjects) && curriculum.subjects.length
+      ? curriculum.subjects.join(' · ')
+      : (curriculum.level || '');
+    document.getElementById('canvas-sub').textContent = subjects;
+
+    showCanvasTab('classwork');
+    loadCanvasClasswork(curriculum.id);
+  }
+
+  async function loadCanvasClasswork(cid) {
+    const topicsEl    = document.getElementById('canvas-topics');
+    const materialsEl = document.getElementById('canvas-materials');
+    const matListEl   = document.getElementById('canvas-materials-list');
+    const emptyEl     = document.getElementById('canvas-classwork-empty');
+
+    topicsEl.innerHTML    = '<p style="color:#9ca3af;font-size:0.85rem">Loading...</p>';
+    materialsEl.style.display = 'none';
+    emptyEl.classList.add('hidden');
+
+    const [infoRes, matRes] = await Promise.all([
+      fetch(`/api/curricula/${cid}/info`),
+      fetch(`/api/curricula/${cid}/materials`),
+    ]);
+
+    const info  = infoRes.ok  ? await infoRes.json()  : { topics: [] };
+    const mats  = matRes.ok   ? await matRes.json()   : [];
+    _canvasManifest = info.manifest || null;
+
+    // topics
+    topicsEl.innerHTML = '';
+    (info.topics || []).forEach(t => {
+      const sec = document.createElement('div');
+      sec.className = 'topic-section';
+      const subs = (t.subtopics || []).map(s =>
+        `<span class="subtopic-pill">${s}</span>`).join('');
+      const objs = (t.objectives || []).map(o =>
+        `<li>${o}</li>`).join('');
+      sec.innerHTML = `
+        <div class="topic-header">
+          <div class="topic-icon">&#128218;</div>
+          ${t.name || 'Topic'}
+        </div>
+        <div class="topic-body">
+          ${subs ? `<div class="subtopics-list">${subs}</div>` : ''}
+          ${objs ? `<ul class="objectives-list">${objs}</ul>` : ''}
+        </div>`;
+      topicsEl.appendChild(sec);
+    });
+
+    // materials
+    if (mats.length) {
+      matListEl.innerHTML = mats.map(f => {
+        const ext = f.name.split('.').pop().toLowerCase();
+        const icon = ext === 'pdf' ? '📄' : ext === 'pptx' ? '📊' : '📝';
+        return `<a class="material-item" href="${f.url}" target="_blank" rel="noopener">
+          <span class="mat-icon">${icon}</span>
+          <span class="mat-name">${f.name}</span>
+          <span class="mat-dl">Open ↗</span>
+        </a>`;
+      }).join('');
+      materialsEl.style.display = '';
+    }
+
+    if (!info.topics?.length && !mats.length) emptyEl.classList.remove('hidden');
+  }
+
+  function showCanvasTab(tab) {
+    const classwork = document.getElementById('canvas-classwork');
+    const questions = document.getElementById('canvas-questions');
+    document.getElementById('tab-btn-classwork').classList.toggle('active', tab === 'classwork');
+    document.getElementById('tab-btn-questions').classList.toggle('active', tab === 'questions');
+    classwork.classList.toggle('hidden', tab !== 'classwork');
+    questions.classList.toggle('hidden', tab !== 'questions');
+    if (tab === 'questions') loadCanvasQuestions();
+  }
+
+  async function loadCanvasQuestions() {
+    const list = document.getElementById('canvas-questions-list');
+    list.innerHTML = '<p style="color:#9ca3af;font-size:0.82rem">Loading...</p>';
+    try {
+      const res  = await fetch(`/api/curricula/${currentCurriculumId}/questions`);
+      const data = await res.json();
+      list.innerHTML = '';
+      if (!data.length) {
+        list.innerHTML = '<p class="q-empty">No questions yet. Add the first one below.</p>';
+        return;
+      }
+      data.slice().reverse().forEach(q => {
+        const card = document.createElement('div');
+        card.className = 'q-card';
+        const qText = q.text || q.question || '';
+        let html = `<div class="q-card-text">${marked.parse(qText)}</div>`;
+        if (q.image) html += `<div class="q-card-img"><img src="${q.image}" alt=""></div>`;
+        if (q.answer) html += `<div class="q-card-answer">A: ${q.answer}</div>`;
+        const who = q.author || (q.created_by ? `user #${q.created_by}` : 'unknown');
+        html += `<div class="q-card-meta">by ${who}</div>`;
+        card.innerHTML = html;
+        list.appendChild(card);
+      });
+    } catch (e) {
+      list.innerHTML = `<p class="q-empty" style="color:#ef4444">Error: ${e.message}</p>`;
+    }
+  }
+
+  let canvasQImageB64 = '';
+
+  function pickCanvasQImage() {
+    document.getElementById('canvas-q-file').value = '';
+    document.getElementById('canvas-q-file').click();
+  }
+
+  function handleCanvasQImage() {
+    const file = document.getElementById('canvas-q-file').files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      canvasQImageB64 = e.target.result;
+      document.getElementById('canvas-q-img-thumb').src = canvasQImageB64;
+      document.getElementById('canvas-q-img-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeCanvasQImage() {
+    canvasQImageB64 = '';
+    document.getElementById('canvas-q-img-thumb').src = '';
+    document.getElementById('canvas-q-img-preview').style.display = 'none';
+  }
+
+  async function submitCanvasQuestion() {
+    const text = document.getElementById('canvas-q-text').value.trim();
+    if (!text) { document.getElementById('canvas-q-text').focus(); return; }
+    const btn = document.getElementById('btn-canvas-q-submit');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/curricula/${currentCurriculumId}/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          answer: document.getElementById('canvas-q-answer').value.trim(),
+          image: canvasQImageB64,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); alert(e.error || 'Failed'); return; }
+      document.getElementById('canvas-q-text').value   = '';
+      document.getElementById('canvas-q-answer').value = '';
+      removeCanvasQImage();
+      loadCanvasQuestions();
+    } catch (e) { alert(e.message); }
+    finally { btn.disabled = false; }
+  }
+
+  function enterTutor() {
+    setMode('learn');
+    document.getElementById('header-class-name').textContent =
+      document.getElementById('canvas-title').textContent;
+    showChatView();
+  }
+
+  function enterPractice() {
+    const className = document.getElementById('canvas-title').textContent;
+    setMode('learn');
+    document.getElementById('header-class-name').textContent = className;
+    showChatView();
+    document.getElementById('input-topic').value =
+      `Quiz me on ${className} using the question bank`;
+    startLearn();
+  }
+
+  function backToCanvas() {
+    if (busy) return;
+    currentSessionOpen = null;
+    _hideAllViews();
+    document.getElementById('canvas-view').classList.remove('hidden');
+    document.getElementById('btn-back').classList.add('hidden');
+    document.getElementById('header-class-name').classList.add('hidden');
+    document.getElementById('mode-toggle-wrap').classList.add('hidden');
+    document.getElementById('btn-sidebar').classList.add('hidden');
+    document.getElementById('btn-questions').classList.add('hidden');
+  }
+
+  function backToClasses() {
+    if (busy) return;
+    currentCurriculumId = '';
+    currentSessionOpen  = null;
+    document.getElementById('canvas-view').classList.add('hidden');
+    showClassesView();
   }
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST' });
     messages = [];
     clearChat();
+    currentCurriculumId = '';
+    currentSessionOpen  = null;
     document.getElementById('session-list').innerHTML = '';
     document.getElementById('whoami').textContent = '';
+    _hideAllViews();
     showAuthGate();
   }
 
@@ -1542,10 +2330,130 @@
     return res;
   };
 
+  /* ---- questions overlay ---- */
+  let qImageB64 = '';
+
+  function openQuestions() {
+    document.getElementById('questions-overlay').classList.remove('hidden');
+    document.getElementById('q-text').value = '';
+    document.getElementById('q-answer').value = '';
+    removeQImage();
+    loadQuestions();
+  }
+
+  function closeQuestions() {
+    document.getElementById('questions-overlay').classList.add('hidden');
+  }
+
+  async function loadQuestions() {
+    const list = document.getElementById('questions-list');
+    list.innerHTML = '<div class="q-empty">Loading...</div>';
+    try {
+      const res  = await fetch(`/api/curricula/${currentCurriculumId}/questions`);
+      const data = await res.json();
+      list.innerHTML = '';
+      if (!data.length) {
+        list.innerHTML = '<div class="q-empty">No questions yet. Add the first one below.</div>';
+        return;
+      }
+      data.slice().reverse().forEach(q => {
+        const card = document.createElement('div');
+        card.className = 'q-card';
+        const qText = q.text || q.question || '';
+        let html = `<div class="q-card-text">${marked.parse(qText)}</div>`;
+        if (q.image) html += `<div class="q-card-img"><img src="${q.image}" alt=""></div>`;
+        if (q.answer) html += `<div class="q-card-answer">A: ${q.answer}</div>`;
+        const who = q.author || (q.created_by ? `user #${q.created_by}` : 'unknown');
+        html += `<div class="q-card-meta">by ${who}</div>`;
+        card.innerHTML = html;
+        list.appendChild(card);
+      });
+    } catch (e) {
+      list.innerHTML = `<div class="q-empty" style="color:#ef4444">Could not load questions: ${e.message}</div>`;
+    }
+  }
+
+  async function submitQuestion() {
+    const text = document.getElementById('q-text').value.trim();
+    if (!text) { document.getElementById('q-text').focus(); return; }
+    const btn = document.getElementById('btn-q-submit');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/curricula/${currentCurriculumId}/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          answer: document.getElementById('q-answer').value.trim(),
+          image: qImageB64,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); alert(e.error || 'Failed'); return; }
+      document.getElementById('q-text').value = '';
+      document.getElementById('q-answer').value = '';
+      removeQImage();
+      loadQuestions();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function pickQImage() {
+    document.getElementById('q-file-input').value = '';
+    document.getElementById('q-file-input').click();
+  }
+
+  function handleQImage() {
+    const file = document.getElementById('q-file-input').files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      qImageB64 = e.target.result;          // already a data URL
+      document.getElementById('q-img-thumb').src = qImageB64;
+      document.getElementById('q-img-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeQImage() {
+    qImageB64 = '';
+    document.getElementById('q-img-thumb').src = '';
+    document.getElementById('q-img-preview').style.display = 'none';
+    document.getElementById('q-file-input').value = '';
+  }
+
   fetch('/api/me')
     .then(r => r.json())
     .then(d => { if (d.user) enterApp(d.user); })
     .catch(() => {});
 </script>
+
+<!-- Questions overlay -->
+<div id="questions-overlay" class="hidden" onclick="if(event.target===this)closeQuestions()">
+  <div id="questions-panel">
+    <div id="questions-header">
+      <h2>Question bank</h2>
+      <button id="btn-close-questions" onclick="closeQuestions()">&#215;</button>
+    </div>
+
+    <div id="questions-list"></div>
+
+    <div id="questions-form">
+      <textarea id="q-text" placeholder="Write a question for your classmates..."></textarea>
+      <input type="text" id="q-answer" placeholder="Answer (optional)" />
+      <div id="q-img-preview">
+        <img id="q-img-thumb" src="" alt="">
+        <button id="q-img-remove" onclick="removeQImage()">&#215;</button>
+      </div>
+      <div id="q-form-row">
+        <button id="btn-q-img" onclick="pickQImage()">&#128248; Image</button>
+        <button id="btn-q-submit" onclick="submitQuestion()">Add question</button>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="q-file-input" accept=".png,.jpg,.jpeg,.webp,.gif" class="hidden" onchange="handleQImage()">
 </body>
 </html>

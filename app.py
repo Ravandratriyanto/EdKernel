@@ -1,5 +1,7 @@
 import io
 import os
+import secrets
+import tempfile
 import re
 import ast
 import json
@@ -17,16 +19,19 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.utils import secure_filename
 from pypdf import PdfReader
-from llm.client import generate, chat
-from rag.retrieve import retrieve
-from vision.image_handler import transcribe
+from core.llm.client import generate, chat
+from core.rag.retrieve import retrieve
+from core.vision.image_handler import transcribe
+from core.vision.step_checker import check_working
 from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 import pdftext
 import users
-from ratelimit import RateLimiter
+import settings as _settings
+from api_v1 import v1
+from ratelimit import RateLimiter, SlidingWindowLimiter
 
-from prompts import (
+from core.prompts import (
     build_check_prompt, tutor_reply as _tutor_reply,
     TUTOR_SYSTEM_PROMPT, hint_note,
 )
@@ -37,6 +42,7 @@ app = Flask(__name__, static_folder="static")
 
 
 users.init()
+app.register_blueprint(v1)
 
 
 
@@ -55,6 +61,22 @@ COOKIE_SECURE = os.environ.get("OLLM_HTTPS", "").strip().lower() in {"1", "true"
 
 _login_limiter = RateLimiter(max_failures=8, window_seconds=15 * 60)
 
+# 20 LLM calls per user per minute — generous for a real lesson, blocks bots.
+_llm_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
+
+
+def _check_llm_rate() -> object:
+    """Return a 429 response if the current user is over the LLM call limit, else None."""
+    if not _settings.load()["rate_limiting"]:
+        return None
+    key = f"user:{g.user['id']}"
+    wait = _llm_limiter.check_and_record(key)
+    if wait:
+        resp = jsonify({"error": "Too many requests. Slow down and try again shortly."})
+        resp.headers["Retry-After"] = str(wait)
+        return resp, 429
+    return None
+
 
 def _login_keys(username: str) -> tuple:
     """The two buckets a login attempt counts against.
@@ -70,12 +92,20 @@ def _login_keys(username: str) -> tuple:
 
 
 _OPEN_ENDPOINTS = {"index", "static", "api_register", "api_login",
-                   "api_logout", "api_me"}
+                   "api_logout", "api_me", "admin_panel", "teacher_panel",
+                   "dev_panel", "api_dev_get_settings", "api_dev_put_settings"}
 
+
+_DEV_USER = {"id": 1, "username": "dev", "role": "admin"}
 
 @app.before_request
 def _load_user():
     """Turn the session cookie into g.user, and refuse anonymous callers."""
+    cfg = _settings.load()
+    dev_env = os.environ.get("DEV_BYPASS_AUTH", "").lower() in {"1", "true", "yes"}
+    if dev_env or not cfg["auth_required"]:
+        g.user = _DEV_USER
+        return None
     g.user = users.user_for_token(request.cookies.get(SESSION_COOKIE, ""))
     if request.endpoint in _OPEN_ENDPOINTS:
         return None
@@ -154,12 +184,31 @@ def api_logout():
 @app.route("/api/me")
 def api_me():
     """Who am I? The page asks this on load to decide login screen or app."""
-    return jsonify({"user": g.user})
+    return jsonify({"user": g.user})  # now includes role
 
 
 def _key(data: dict, field: str, env_var: str) -> str:
     """A key typed into the UI wins; otherwise fall back to the one in .env."""
     return (data.get(field) or "").strip() or os.environ.get(env_var, "").strip()
+
+
+def _curriculum_params(data: dict) -> tuple[str, str]:
+    """Return (system_prompt, collection_name) for the curriculum in the request.
+
+    Falls back to the default SAT/A-level prompt and 'reference' collection when
+    no curriculum_id is supplied or the manifest can't be loaded.
+    """
+    cid = (data.get("curriculum_id") or "").strip()
+    if cid:
+        try:
+            manifest = _cur.load(cid)
+            from core.prompts import build_tutor_prompt
+            prompt = build_tutor_prompt(flavour=manifest["prompt_flavour"])
+            collection = manifest.get("collection", "reference")
+            return prompt, collection
+        except Exception:
+            pass
+    return TUTOR_SYSTEM_PROMPT, "reference"
 
 GRAPH_SYSTEM_PROMPT = (
     "You are a Python matplotlib code generator. Output ONLY valid Python code with no explanation and no markdown fences. "
@@ -370,6 +419,8 @@ def api_upload():
 
 @app.route("/api/graph", methods=["POST"])
 def api_graph():
+    err = _check_llm_rate()
+    if err: return err
     data        = request.json
     description = data.get("description", "")
     provider    = data.get("provider", "ollama")
@@ -416,6 +467,8 @@ def api_graph():
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
+    err = _check_llm_rate()
+    if err: return err
     data       = request.json
     topic      = data.get("topic", "")
     provider   = data.get("provider", "ollama")
@@ -425,7 +478,33 @@ def api_start():
     attachment   = data.get("attachment")
     vision_model = data.get("vision_model", "")
 
-    context_chunks = retrieve(topic)
+    system_prompt, collection = _curriculum_params(data)
+
+    cid = (data.get("curriculum_id") or "").strip()
+    if cid:
+        q_path = Path("curricula") / cid / "questions.json"
+        if q_path.exists():
+            try:
+                qs = json.loads(q_path.read_text(encoding="utf-8"))
+                if qs:
+                    q_lines = []
+                    for q in qs[:20]:
+                        line = "- " + (q.get("text") or q.get("question") or "").strip()
+                        if q.get("answer"):
+                            line += f" [answer: {q['answer'].strip()}]"
+                        if line.strip() != "-":
+                            q_lines.append(line)
+                    if q_lines:
+                        system_prompt += (
+                            "\n\nQuestion bank for this curriculum (use these when "
+                            "quizzing the student — present them one at a time, never "
+                            "reveal the answer until the student has attempted it):\n"
+                            + "\n".join(q_lines)
+                        )
+            except Exception:
+                pass
+
+    context_chunks = retrieve(topic, collection_name=collection)
     context        = "\n\n".join(context_chunks) if context_chunks else ""
     context_prefix = f"Reference material:\n{context}\n\n" if context else ""
 
@@ -433,7 +512,7 @@ def api_start():
     if attachment:
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
-    messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}, user_msg]
+    messages = [{"role": "system", "content": system_prompt}, user_msg]
     started  = time.monotonic()
     raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
     response, _ = _tutor_reply(raw)
@@ -453,6 +532,8 @@ def api_start():
 
 @app.route("/api/reply", methods=["POST"])
 def api_reply():
+    err = _check_llm_rate()
+    if err: return err
     data         = request.json
     messages     = data.get("messages", [])
     user_input   = data.get("input", "")
@@ -465,6 +546,7 @@ def api_reply():
     wrong_streak = int(data.get("wrong_streak", 0))
     tavily_key   = _key(data, "tavily_key", "TAVILY_KEY")
     topic        = data.get("topic", "")
+    _, collection = _curriculum_params(data)
 
     if _mentions_papers(user_input):
         started = time.monotonic()
@@ -584,6 +666,8 @@ def api_session(session_id: str):
 
 @app.route("/api/check", methods=["POST"])
 def api_check():
+    err = _check_llm_rate()
+    if err: return err
     data       = request.json
     question   = data.get("question", "")
     answer     = data.get("answer", "")
@@ -594,13 +678,14 @@ def api_check():
     attachment   = data.get("attachment")
     vision_model = data.get("vision_model", "")
 
-    context_chunks = retrieve(question)
+    system_prompt, collection = _curriculum_params(data)
+    context_chunks = retrieve(question, collection_name=collection)
     context        = "\n\n".join(context_chunks) if context_chunks else ""
     context_prefix = f"Reference material:\n{context}\n\n" if context else ""
 
     if attachment and attachment.get("type") == "image" and provider == "ollama":
         messages = [
-            {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": build_check_prompt(
@@ -647,6 +732,49 @@ def api_check():
              latency_ms=round((time.monotonic() - started) * 1000))
     return jsonify({"response": response, "correct": correct})
 
+
+
+@app.route("/api/check_working", methods=["POST"])
+def api_check_working():
+    """Transcribe handwritten working line by line and locate the first wrong step."""
+    err = _check_llm_rate()
+    if err: return err
+    data         = request.json or {}
+    b64          = data.get("b64", "")
+    provider     = data.get("provider", "ollama")
+    model        = data.get("model", "gemma4")
+    host         = data.get("host", "http://localhost:11434")
+    api_key      = _key(data, "api_key", "API_KEY")
+    vision_model = data.get("vision_model", "")
+
+    if not b64:
+        return jsonify({"error": "no image provided"}), 400
+
+    img_bytes = base64.b64decode(b64)
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+        f.write(img_bytes)
+        tmp_path = f.name
+
+    try:
+        started = time.monotonic()
+        result  = check_working(tmp_path, provider=provider, model=model,
+                                host=host, api_key=api_key,
+                                vision_model=vision_model)
+        latency = round((time.monotonic() - started) * 1000)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    log_turn("check_working",
+             session_id=data.get("session_id", ""),
+             user_id=g.user["id"],
+             provider=provider, model=model,
+             steps=len(result["steps"]),
+             error_index=result["error_index"],
+             latency_ms=latency)
+
+    return jsonify(result)
 
 
 def _apply_attachment(msg: dict, attachment: dict, provider: str, model: str = "",
@@ -864,6 +992,8 @@ def _verify_questions(questions: list[dict], **llm) -> tuple[list[dict], int]:
 
 @app.route("/api/papers", methods=["POST"])
 def api_papers():
+    err = _check_llm_rate()
+    if err: return err
     data        = request.json
     topic       = data.get("topic", "")
     tavily_key  = _key(data, "tavily_key", "TAVILY_KEY")
@@ -1201,5 +1331,649 @@ def _looks_like_topic(text: str) -> bool:
         return False
     words = re.findall(r"[a-z0-9']+", t.lower())
     return bool(words) and any(w not in _FILLER_WORDS for w in words)
+import curricula as _cur
+
+
+@app.route("/api/curricula")
+def api_student_curricula():
+    """List curricula available to students (requires login only)."""
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    cfg = _settings.load()
+    result = []
+    for cid in _cur.list_curricula():
+        if cid == "demo" and not cfg["stub_testing"]:
+            continue
+        try:
+            m = _cur.load(cid)
+            result.append({
+                "id":      cid,
+                "name":    m.get("name", cid),
+                "level":   m.get("level", ""),
+                "subjects": m.get("subjects", []),
+            })
+        except Exception:
+            result.append({"id": cid, "name": cid, "level": "", "subjects": []})
+    return jsonify(result)
+
+@app.route("/api/curricula/<cid>/questions")
+def api_student_questions(cid):
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    path = Path("curricula") / cid / "questions.json"
+    if not path.exists():
+        return jsonify([])
+    return jsonify(json.loads(path.read_text(encoding="utf-8")))
+@app.route("/api/curricula/<cid>/questions", methods=["POST"])
+def api_student_questions_add(cid):
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "text required"}), 400
+    path = Path("curricula") / cid / "questions.json"
+    questions = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    q = {
+        "id":     secrets.token_hex(8),
+        "text":   text,
+        "answer": (data.get("answer") or "").strip(),
+        "marks":  1,
+        "image":  (data.get("image") or ""),
+        "author": g.user["username"],
+    }
+    questions.append(q)
+    path.write_text(json.dumps(questions, indent=2, ensure_ascii=False), encoding="utf-8")
+    return jsonify(q), 201
+@app.route("/api/curricula/<cid>/info")
+def api_student_curriculum_info(cid):
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "Not found"}), 404
+    topics_path = Path("curricula") / cid / "topics.json"
+    topics = json.loads(topics_path.read_text(encoding="utf-8")) if topics_path.exists() else []
+    return jsonify({"manifest": manifest, "topics": topics})
+
+
+@app.route("/api/curricula/<cid>/materials")
+def api_student_materials(cid):
+    """List uploaded files for any logged-in student."""
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    ref_dir = Path("curricula") / cid / "reference"
+    if not ref_dir.exists():
+        return jsonify([])
+    files = [
+        {"name": f.name, "url": f"/api/curricula/{cid}/materials/{f.name}"}
+        for f in sorted(ref_dir.iterdir()) if f.is_file()
+    ]
+    return jsonify(files)
+
+
+@app.route("/api/curricula/<cid>/materials/<filename>")
+def api_student_material_file(cid, filename):
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    ref_dir = Path("curricula") / cid / "reference"
+    return send_from_directory(ref_dir.resolve(), secure_filename(filename))
+@app.route("/api/admin/curricula/<cid>/auto-research", methods=["POST"])
+def api_admin_auto_research(cid):
+    err = _admin_only()
+    if err:
+        return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "Curriculum not found"}), 404
+    tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
+    if not tavily_key:
+        return jsonify({"error": "TAVILY_API_KEY not set in .env"}), 400
+    api_key = os.environ.get("API_KEY", "").strip()
+    name     = manifest.get("name", cid)
+    flavour  = manifest.get("prompt_flavour", name)
+    subjects = manifest.get("subjects", [])
+    queries  = [
+        f"{name} curriculum overview objectives",
+        f"{name} topics syllabus structure",
+    ]
+    for subj in subjects[:3]:
+        queries.append(f"{name} {subj} key concepts")
+
+    snippets = []
+    for q in queries:
+        try:
+            res = requests.post(
+                "https://api.tavily.com/search",
+                json={"api_key": tavily_key, "query": q,
+                      "search_depth": "basic", "max_results": 4},
+                timeout=15,
+            )
+            if res.ok:
+                for r in res.json().get("results", []):
+                    content = (r.get("content") or "").strip()
+                    if content:
+                        snippets.append(f"[{r.get('title','')}]\n{content}")
+        except Exception:
+            pass
+
+    if not snippets:
+        return jsonify({"error": "No search results returned"}), 502
+
+    combined = "\n\n---\n\n".join(snippets)
+    synthesis_prompt = (
+        f"You are writing reference notes for a tutor AI that teaches {flavour}. "
+        f"Using only the search results below, write clear structured notes covering: "
+        f"overview, main topics, key concepts, and learning objectives. "
+        f"Use plain English. Use markdown headings. Do not invent facts not in the sources.\n\n"
+        f"Search results:\n{combined[:12000]}"
+    )
+    try:
+        notes = generate(
+            synthesis_prompt,
+            model="openai/gpt-oss-120b",
+            provider="groq",
+            api_key=api_key,
+        )
+    except Exception as e:
+        return jsonify({"error": f"LLM synthesis failed: {e}"}), 502
+
+    ref_dir = Path("curricula") / cid / "reference"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    (ref_dir / "auto-research.txt").write_text(notes, encoding="utf-8")
+
+    import subprocess
+    subprocess.Popen(
+        ["python", "-m", "rag.ingest", "--curriculum", cid],
+        cwd=Path(__file__).parent,
+    )
+    return jsonify({"ok": True, "notes_length": len(notes),
+                    "queries": queries, "snippets_found": len(snippets)})
+# ── Teacher panel ─────────────────────────────────────────────────────────────
+
+_TEACHER_ALLOWED_EXT = {".pdf", ".txt", ".pptx"}
+_TEACHER_MAX_BYTES   = 32 * 1024 * 1024   # 32 MB
+
+
+def _teacher_or_admin():
+    return _require_role("teacher", "admin")
+
+
+def _resolve_ref_dir(manifest: dict) -> Path:
+    """Absolute path to the curriculum's reference directory."""
+    ref = _cur.reference_dir(manifest)
+    p = Path(ref) if Path(ref).is_absolute() else Path(__file__).parent / ref
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _extract_pptx(data: bytes) -> str:
+    """Pull all text out of a PowerPoint file."""
+    from pptx import Presentation
+    prs = Presentation(io.BytesIO(data))
+    parts = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, "text") and shape.text.strip():
+                parts.append(shape.text.strip())
+    return "\n\n".join(parts)
+
+
+def _questions_path(cid: str) -> Path:
+    return _cur.CURRICULA_DIR / cid / "questions.json"
+
+
+def _load_questions(cid: str) -> list:
+    p = _questions_path(cid)
+    return json.loads(p.read_text()) if p.exists() else []
+
+
+def _save_questions(cid: str, questions: list) -> None:
+    _questions_path(cid).write_text(json.dumps(questions, indent=2, ensure_ascii=False))
+
+
+@app.route("/teacher")
+def teacher_panel():
+    return send_from_directory("static", "teacher.html")
+
+
+@app.route("/api/teacher/curricula")
+def api_teacher_curricula():
+    err = _teacher_or_admin()
+    if err: return err
+    result = []
+    for cid in _cur.list_curricula():
+        try:
+            m = _cur.load(cid)
+            result.append({"id": cid, "name": m.get("name", cid)})
+        except Exception:
+            result.append({"id": cid, "name": cid})
+    return jsonify(result)
+
+
+@app.route("/api/teacher/curricula/<cid>")
+def api_teacher_get(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+
+    topics_path = _cur.CURRICULA_DIR / cid / "topics.json"
+    topics = json.loads(topics_path.read_text()) if topics_path.exists() else []
+
+    ref_dir = _resolve_ref_dir(manifest)
+    files = sorted(
+        {"name": f.name, "size": f.stat().st_size, "ext": f.suffix.lower()}
+        for f in ref_dir.iterdir() if f.is_file()
+    )
+
+    questions = _load_questions(cid)
+
+    return jsonify({
+        "manifest": {"id": manifest["id"], "name": manifest["name"]},
+        "topics": topics,
+        "files": files,
+        "question_count": len(questions),
+    })
+
+
+@app.route("/api/teacher/curricula/<cid>/topics", methods=["PUT"])
+def api_teacher_save_topics(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    try:
+        _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    topics = request.json if isinstance(request.json, list) else []
+    topics_path = _cur.CURRICULA_DIR / cid / "topics.json"
+    topics_path.write_text(json.dumps(topics, indent=2, ensure_ascii=False))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/teacher/curricula/<cid>/upload", methods=["POST"])
+def api_teacher_upload(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "no file"}), 400
+
+    filename = secure_filename(file.filename or "upload")
+    ext = Path(filename).suffix.lower()
+    if ext not in _TEACHER_ALLOWED_EXT:
+        return jsonify({"error": f"Allowed types: {', '.join(_TEACHER_ALLOWED_EXT)}"}), 400
+
+    data = file.read()
+    if len(data) > _TEACHER_MAX_BYTES:
+        return jsonify({"error": "File too large (max 32 MB)"}), 413
+
+    ref_dir = _resolve_ref_dir(manifest)
+
+    if ext == ".pptx":
+        text = _extract_pptx(data)
+        if not text.strip():
+            return jsonify({"error": "No readable text found in PowerPoint"}), 400
+        save_name = Path(filename).stem + ".txt"
+        (ref_dir / save_name).write_text(text, encoding="utf-8")
+    else:
+        (ref_dir / filename).write_bytes(data)
+        save_name = filename
+
+    return jsonify({"ok": True, "saved_as": save_name})
+
+
+@app.route("/api/teacher/curricula/<cid>/files")
+def api_teacher_files(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    ref_dir = _resolve_ref_dir(manifest)
+    files = sorted(
+        {"name": f.name, "size": f.stat().st_size}
+        for f in ref_dir.iterdir() if f.is_file()
+    )
+    return jsonify(files)
+
+
+@app.route("/api/teacher/curricula/<cid>/files/<filename>", methods=["DELETE"])
+def api_teacher_delete_file(cid, filename):
+    err = _teacher_or_admin()
+    if err: return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    safe = secure_filename(filename)
+    target = _resolve_ref_dir(manifest) / safe
+    if not target.exists():
+        return jsonify({"error": "file not found"}), 404
+    target.unlink()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/teacher/curricula/<cid>/questions")
+def api_teacher_questions(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    if not (_cur.CURRICULA_DIR / cid / "manifest.json").exists():
+        return jsonify({"error": "not found"}), 404
+    return jsonify(_load_questions(cid))
+
+
+@app.route("/api/teacher/curricula/<cid>/questions", methods=["POST"])
+def api_teacher_add_question(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    if not (_cur.CURRICULA_DIR / cid / "manifest.json").exists():
+        return jsonify({"error": "not found"}), 404
+    data = request.json or {}
+    q_text = (data.get("question") or "").strip()
+    answer = (data.get("answer") or "").strip()
+    if not q_text or not answer:
+        return jsonify({"error": "question and answer required"}), 400
+    questions = _load_questions(cid)
+    new_q = {
+        "id": secrets.token_hex(8),
+        "topic": (data.get("topic") or "").strip(),
+        "question": q_text,
+        "answer": answer,
+        "type": data.get("type", "short_answer"),
+        "created_by": g.user["id"],
+        "created_at": int(time.time()),
+    }
+    questions.append(new_q)
+    _save_questions(cid, questions)
+    return jsonify(new_q), 201
+
+
+@app.route("/api/teacher/curricula/<cid>/questions/<qid>", methods=["DELETE"])
+def api_teacher_delete_question(cid, qid):
+    err = _teacher_or_admin()
+    if err: return err
+    questions = _load_questions(cid)
+    questions = [q for q in questions if q.get("id") != qid]
+    _save_questions(cid, questions)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/teacher/curricula/<cid>/ingest", methods=["POST"])
+def api_teacher_ingest(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    import threading
+    from core.rag.ingest import build
+
+    def _run():
+        try:
+            build(text_folder=_cur.reference_dir(manifest),
+                  pdf_folder=_cur.papers_dir(manifest),
+                  collection_name=manifest["collection"])
+        except Exception as exc:
+            app.logger.error("Teacher ingest failed for %s: %s", cid, exc)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"ok": True, "message": "Ingestion started"})
+
+
+# ── Admin panel ───────────────────────────────────────────────────────────────
+
+
+def _require_role(*roles):
+    """Return a 401/403 response if the current user lacks one of the given roles."""
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    if g.user.get("role") not in roles:
+        return jsonify({"error": "Insufficient permissions"}), 403
+    return None
+
+
+def _admin_only():
+    return _require_role("admin")
+
+
+@app.route("/admin")
+def admin_panel():
+    return send_from_directory("static", "admin.html")
+
+
+@app.route("/api/admin/curricula")
+def api_admin_list():
+    err = _admin_only()
+    if err:
+        return err
+    result = []
+    for cid in _cur.list_curricula():
+        try:
+            m = _cur.load(cid)
+            result.append({"id": cid, "name": m.get("name", cid)})
+        except Exception:
+            result.append({"id": cid, "name": cid})
+    return jsonify(result)
+
+
+@app.route("/api/admin/curricula/<cid>", methods=["GET"])
+def api_admin_get(cid):
+    err = _admin_only()
+    if err:
+        return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    topics_path = _cur.CURRICULA_DIR / cid / "topics.json"
+    topics = json.loads(topics_path.read_text()) if topics_path.exists() else []
+    return jsonify({"manifest": manifest, "topics": topics})
+
+
+@app.route("/api/admin/curricula/<cid>", methods=["PUT"])
+def api_admin_save(cid):
+    err = _admin_only()
+    if err:
+        return err
+    data = request.json or {}
+    manifest_path = _cur.CURRICULA_DIR / cid / "manifest.json"
+    if not manifest_path.exists():
+        return jsonify({"error": "not found"}), 404
+    manifest = json.loads(manifest_path.read_text())
+    for field in ("name", "prompt_flavour", "collection",
+                  "reference_dir", "papers_dir", "level", "subjects"):
+        if field in data:
+            manifest[field] = data[field]
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+    if "topics" in data:
+        topics_path = _cur.CURRICULA_DIR / cid / "topics.json"
+        topics_path.write_text(json.dumps(data["topics"], indent=2, ensure_ascii=False))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/curricula", methods=["POST"])
+def api_admin_create():
+    err = _admin_only()
+    if err:
+        return err
+    data = request.json or {}
+    cid = re.sub(r"[^a-z0-9-]", "-", (data.get("id") or "").lower().strip())
+    if not cid:
+        return jsonify({"error": "id required"}), 400
+    new_dir = _cur.CURRICULA_DIR / cid
+    if new_dir.exists():
+        return jsonify({"error": "already exists"}), 409
+    (new_dir / "reference").mkdir(parents=True)
+    (new_dir / "papers").mkdir(parents=True)
+    manifest = {
+        "id": cid,
+        "name": data.get("name", cid),
+        "prompt_flavour": data.get("prompt_flavour",
+                                   f"{data.get('name', cid)} exam preparation"),
+        "collection": cid.replace("-", "_"),
+        "reference_dir": f"curricula/{cid}/reference",
+        "papers_dir": f"curricula/{cid}/papers",
+    }
+    (new_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (new_dir / "topics.json").write_text("[]")
+    return jsonify(manifest), 201
+
+
+@app.route("/api/admin/curricula/<cid>/ingest", methods=["POST"])
+def api_admin_ingest(cid):
+    err = _admin_only()
+    if err:
+        return err
+    try:
+        manifest = _cur.load(cid)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    import threading
+    from core.rag.ingest import build
+
+    def _run():
+        try:
+            build(text_folder=_cur.reference_dir(manifest),
+                  pdf_folder=_cur.papers_dir(manifest),
+                  collection_name=manifest["collection"])
+        except Exception as exc:
+            app.logger.error("Ingest failed for %s: %s", cid, exc)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"ok": True, "message": "Ingestion started — check server logs"})
+
+
+@app.route("/api/admin/curricula/<cid>/import-paper-questions", methods=["POST"])
+def api_admin_import_paper_questions(cid):
+    err = _admin_only()
+    if err:
+        return err
+    import io
+    from pypdf import PdfReader
+    data    = request.get_json(force=True) or {}
+    url     = (data.get("url") or "").strip()
+    api_key = _key(data, "api_key", "API_KEY")
+    model   = (data.get("model") or "gemma4").strip()
+    if not url:
+        return jsonify({"error": "url required"}), 400
+    if not _allowed_paper_host(url):
+        return jsonify({"error": "Domain not in allowlist"}), 403
+    pdf_bytes = _fetch_pdf(url)
+    if not pdf_bytes:
+        return jsonify({"error": "Could not fetch PDF"}), 502
+
+    reader    = PdfReader(io.BytesIO(pdf_bytes))
+    pages     = [page.extract_text() or "" for page in reader.pages]
+    full_text = "\n\n".join(pages)
+    if len(full_text.strip()) < 100:
+        return jsonify({"error": "Could not extract text from PDF — may be scanned or maths-heavy"}), 422
+
+    extract_prompt = (
+        "Output valid JSON only — no prose, no markdown fences.\n\n"
+        "You are given raw text from an exam past paper. "
+        "Extract every question. Copy each question verbatim. "
+        "If a question has numerical values or named variables "
+        "(dates, quantities, percentages), change them to different "
+        "plausible values so the question is fresh but structurally identical. "
+        "Ignore cover pages, rubrics, instructions, and mark allocations. "
+        'Return a JSON array. Each element: {"question": "...", "answer": null}. '
+        "If a mark scheme is present in the text, populate answer.\n\n"
+        f"PAPER TEXT:\n{full_text[:14000]}"
+    )
+
+    raw = generate(extract_prompt, model=model, api_key=api_key, provider="groq")
+    m   = re.search(r"\[.*\]", raw, re.DOTALL)
+    if not m:
+        return jsonify({"error": "LLM did not return a JSON array"}), 500
+
+    new_qs   = json.loads(m.group())
+    existing = json.loads(_questions_path(cid).read_text(encoding="utf-8")) \
+               if _questions_path(cid).exists() else []
+    existing.extend(new_qs)
+    _save_questions(cid, existing)
+    return jsonify({"ok": True, "imported": len(new_qs)})
+
+
+
+@app.route("/api/admin/users")
+def api_admin_users():
+    err = _admin_only()
+    if err:
+        return err
+    return jsonify(users.list_users())
+
+
+@app.route("/api/admin/users/<int:uid>/role", methods=["PUT"])
+def api_admin_set_role(uid: int):
+    err = _admin_only()
+    if err:
+        return err
+    role = (request.json or {}).get("role", "")
+    if not role:
+        return jsonify({"error": "role required"}), 400
+    try:
+        users.set_role(uid, role)
+    except users.UserError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/api-keys")
+def api_admin_list_keys():
+    err = _admin_only()
+    if err:
+        return err
+    return jsonify(users.list_api_keys(g.user["id"]))
+
+
+@app.route("/api/admin/api-keys", methods=["POST"])
+def api_admin_create_key():
+    err = _admin_only()
+    if err:
+        return err
+    label = ((request.json or {}).get("label") or "").strip()
+    if not label:
+        return jsonify({"error": "label required"}), 400
+    token = users.create_api_key(g.user["id"], label)
+    return jsonify({"token": token})
+
+
+@app.route("/api/admin/api-keys/<int:key_id>", methods=["DELETE"])
+def api_admin_revoke_key(key_id: int):
+    err = _admin_only()
+    if err:
+        return err
+    users.revoke_api_key(key_id, g.user["id"])
+    return jsonify({"ok": True})
+
+
+@app.route("/dev")
+def dev_panel():
+    return send_from_directory("static", "dev.html")
+
+
+@app.route("/api/dev/settings")
+def api_dev_get_settings():
+    return jsonify(_settings.load())
+
+
+@app.route("/api/dev/settings", methods=["PUT"])
+def api_dev_put_settings():
+    saved = _settings.save(request.get_json(force=True) or {})
+    return jsonify(saved)
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000, use_reloader=False)

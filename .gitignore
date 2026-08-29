@@ -3,6 +3,8 @@ __pycache__/
 *.pyo
 data/chroma/
 .env
+settings.json
+static/dev.html
 .venv/
 .logs/
 training/out/

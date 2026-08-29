@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdKernel Teacher</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --danger: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --green: #22c55e;
+      --yellow: #eab308;
+    }
+
+    body { font-family: ui-monospace,"Cascadia Code","Fira Code",monospace; background:var(--bg); color:var(--text); font-size:13px; min-height:100vh; }
+
+    header { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--surface); }
+    header h1 { font-size:15px; color:var(--accent); letter-spacing:.05em; }
+    header .spacer { flex:1; }
+    #user-label { color:var(--muted); font-size:12px; }
+
+    .btn { padding:5px 12px; border-radius:4px; border:1px solid var(--border); cursor:pointer; font-family:inherit; font-size:12px; background:var(--surface); color:var(--text); transition:background .15s,border-color .15s; }
+    .btn:hover { background:var(--border); }
+    .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn.primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+    .btn.danger { border-color:var(--danger); color:var(--danger); }
+    .btn.danger:hover { background:var(--danger); color:#fff; }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    #gate { display:flex; align-items:center; justify-content:center; min-height:calc(100vh - 48px); }
+    #gate-box { text-align:center; padding:40px; background:var(--surface); border:1px solid var(--border); border-radius:8px; max-width:360px; }
+    #gate-box p { color:var(--muted); margin-bottom:16px; }
+
+    #app { display:none; height:calc(100vh - 48px); }
+    .layout { display:flex; height:100%; }
+
+    aside { width:220px; min-width:180px; border-right:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; }
+    aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); padding:14px 16px 8px; border-bottom:1px solid var(--border); }
+
+    #curr-list { list-style:none; flex:1; overflow-y:auto; }
+    #curr-list li { padding:9px 16px; cursor:pointer; border-bottom:1px solid var(--border); color:var(--muted); transition:background .1s,color .1s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #curr-list li:hover { background:var(--border); color:var(--text); }
+    #curr-list li.active { background:rgba(99,102,241,.15); color:var(--accent); }
+
+    main { flex:1; overflow-y:auto; padding:24px 28px; }
+    #editor-placeholder { display:flex; align-items:center; justify-content:center; height:100%; color:var(--muted); }
+    #editor-body { display:none; }
+
+    .editor-header { display:flex; align-items:baseline; gap:12px; margin-bottom:20px; }
+    .editor-header h2 { font-size:16px; }
+    .curr-id-badge { font-size:11px; color:var(--muted); background:var(--border); padding:2px 7px; border-radius:3px; }
+
+    /* Tabs */
+    .tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:20px; }
+    .tab-btn { padding:7px 16px; border:none; background:none; color:var(--muted); cursor:pointer; font-family:inherit; font-size:12px; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .15s,border-color .15s; }
+    .tab-btn:hover { color:var(--text); }
+    .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* Shared section */
+    section h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+
+    /* Topics */
+    #topics-table { width:100%; border-collapse:collapse; max-width:800px; margin-bottom:10px; }
+    #topics-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:6px 10px; border-bottom:1px solid var(--border); }
+    #topics-table td { padding:4px 6px; vertical-align:top; }
+    #topics-table td input, #topics-table td textarea { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:3px; color:var(--text); font-family:inherit; font-size:12px; padding:4px 7px; resize:vertical; }
+    #topics-table td input:focus, #topics-table td textarea:focus { outline:none; border-color:var(--accent); }
+    #topics-table td textarea { min-height:52px; }
+
+    /* Materials */
+    .upload-zone { border:2px dashed var(--border); border-radius:6px; padding:24px; text-align:center; color:var(--muted); cursor:pointer; transition:border-color .2s,background .2s; max-width:480px; margin-bottom:16px; }
+    .upload-zone:hover, .upload-zone.drag { border-color:var(--accent); background:rgba(99,102,241,.05); }
+    .upload-zone input[type=file] { display:none; }
+    .upload-zone p { margin-top:6px; font-size:11px; }
+
+    #files-list { max-width:600px; }
+    .file-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); }
+    .file-row .fname { flex:1; font-size:12px; }
+    .file-row .fsize { color:var(--muted); font-size:11px; width:70px; text-align:right; }
+
+    /* Questions */
+    .q-form { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; max-width:640px; margin-bottom:20px; }
+    .q-form h4 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:12px; }
+    .q-field { margin-bottom:10px; }
+    .q-field label { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; letter-spacing:.05em; }
+    .q-field input, .q-field textarea, .q-field select { width:100%; padding:6px 9px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:inherit; font-size:12px; }
+    .q-field input:focus, .q-field textarea:focus, .q-field select:focus { outline:none; border-color:var(--accent); }
+    .q-field textarea { min-height:64px; resize:vertical; }
+
+    #questions-list { max-width:680px; }
+    .q-card { background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:12px 14px; margin-bottom:8px; }
+    .q-card-header { display:flex; align-items:flex-start; gap:10px; }
+    .q-card-body { flex:1; }
+    .q-topic-tag { font-size:10px; color:var(--accent); background:rgba(99,102,241,.12); padding:1px 6px; border-radius:10px; margin-bottom:5px; display:inline-block; }
+    .q-text { font-size:13px; margin-bottom:4px; }
+    .q-answer { font-size:11px; color:var(--muted); }
+
+    /* Action bar */
+    .action-bar { display:flex; align-items:center; gap:10px; padding-top:12px; border-top:1px solid var(--border); margin-top:4px; }
+    #status-msg { font-size:12px; margin-left:4px; }
+    #status-msg.ok { color:var(--green); }
+    #status-msg.err { color:var(--danger); }
+    #status-msg.info { color:var(--yellow); }
+
+    .modal-field { margin-bottom:12px; }
+    .modal-field label { display:block; color:var(--muted); font-size:11px; margin-bottom:4px; text-transform:uppercase; letter-spacing:.06em; }
+    .modal-field input { width:100%; padding:7px 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:inherit; font-size:13px; }
+    .modal-field input:focus { outline:none; border-color:var(--accent); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>EdKernel Teacher</h1>
+  <div class="spacer"></div>
+  <span id="user-label"></span>
+  <a href="/" class="btn">Back to app</a>
+</header>
+
+<div id="gate">
+  <div id="gate-box">
+    <p id="gate-msg" style="margin-bottom:16px"></p>
+    <div id="login-form">
+      <div class="modal-field">
+        <label>Username</label>
+        <input id="gate-username" autocomplete="username" spellcheck="false">
+      </div>
+      <div class="modal-field" style="margin-bottom:16px">
+        <label>Password</label>
+        <input id="gate-password" type="password" autocomplete="current-password">
+      </div>
+      <button class="btn primary" id="gate-login-btn" style="width:100%">Log in</button>
+      <p id="login-err" style="color:var(--danger);margin-top:10px;font-size:12px"></p>
+    </div>
+    <p id="gate-no-access" style="display:none;color:var(--muted)">
+      This panel is for teachers and admins only.<br>
+      <a href="/" style="color:var(--accent)">Back to app</a>
+    </p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="layout">
+    <aside>
+      <h2>Curricula</h2>
+      <ul id="curr-list"></ul>
+    </aside>
+
+    <main>
+      <div id="editor-placeholder">Select a curriculum</div>
+
+      <div id="editor-body">
+        <div class="editor-header">
+          <h2 id="editor-title"></h2>
+          <span class="curr-id-badge" id="editor-id-badge"></span>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="topics">Topics</button>
+          <button class="tab-btn" data-tab="materials">Materials</button>
+          <button class="tab-btn" data-tab="questions">Questions</button>
+        </div>
+
+        <!-- Topics tab -->
+        <div class="tab-panel active" id="tab-topics">
+          <section>
+            <h3>Topic tree</h3>
+            <div style="margin-bottom:10px">
+              <button class="btn" id="add-topic-btn">+ Add topic</button>
+            </div>
+            <table id="topics-table">
+              <thead>
+                <tr>
+                  <th style="width:200px">Topic name</th>
+                  <th>Subtopics <span style="font-weight:normal;text-transform:none">(one per line)</span></th>
+                  <th>Objectives <span style="font-weight:normal;text-transform:none">(one per line)</span></th>
+                  <th style="width:50px"></th>
+                </tr>
+              </thead>
+              <tbody id="topics-body"></tbody>
+            </table>
+          </section>
+          <div class="action-bar">
+            <button class="btn primary" id="save-topics-btn">Save topics</button>
+            <span id="status-msg"></span>
+          </div>
+        </div>
+
+        <!-- Materials tab -->
+        <div class="tab-panel" id="tab-materials">
+          <section>
+            <h3>Reference material</h3>
+            <div class="upload-zone" id="upload-zone">
+              <input type="file" id="file-input" accept=".pdf,.txt,.pptx">
+              <div>Click or drag a file here</div>
+              <p>PDF, TXT, PPTX — max 32 MB. PowerPoint slides will be extracted to text.</p>
+            </div>
+            <div id="upload-progress" style="color:var(--yellow);font-size:12px;margin-bottom:12px;display:none">Uploading...</div>
+            <div id="files-list"></div>
+          </section>
+          <div class="action-bar" style="margin-top:16px">
+            <button class="btn primary" id="ingest-btn">Re-ingest RAG</button>
+            <span id="ingest-msg" style="font-size:12px;color:var(--yellow)"></span>
+          </div>
+        </div>
+
+        <!-- Questions tab -->
+        <div class="tab-panel" id="tab-questions">
+          <div class="q-form">
+            <h4>Add question</h4>
+            <div class="q-field">
+              <label>Topic</label>
+              <input id="q-topic" placeholder="e.g. for loops">
+            </div>
+            <div class="q-field">
+              <label>Question</label>
+              <textarea id="q-text" placeholder="Write your question here..."></textarea>
+            </div>
+            <div class="q-field">
+              <label>Answer</label>
+              <textarea id="q-answer" placeholder="Model answer or key points..."></textarea>
+            </div>
+            <div class="q-field">
+              <label>Type</label>
+              <select id="q-type">
+                <option value="short_answer">Short answer</option>
+                <option value="long_answer">Long answer</option>
+                <option value="multiple_choice">Multiple choice</option>
+              </select>
+            </div>
+            <button class="btn primary" id="add-q-btn">Add question</button>
+            <span id="q-msg" style="font-size:12px;margin-left:8px"></span>
+          </div>
+
+          <div id="questions-list"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  let currentId = null;
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  async function init() {
+    const res = await fetch("/api/me");
+    const { user } = await res.json();
+    if (!user) {
+      document.getElementById("gate-msg").textContent = "Log in to access the teacher panel.";
+      document.getElementById("login-form").style.display = "";
+      document.getElementById("gate-no-access").style.display = "none";
+      return;
+    }
+    if (user.role !== "teacher" && user.role !== "admin") {
+      document.getElementById("gate-msg").textContent = "";
+      document.getElementById("login-form").style.display = "none";
+      document.getElementById("gate-no-access").style.display = "";
+      return;
+    }
+    document.getElementById("user-label").textContent = `${user.username} (${user.role})`;
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    loadList();
+  }
+
+  async function doLogin() {
+    const username = document.getElementById("gate-username").value.trim();
+    const password = document.getElementById("gate-password").value;
+    const errEl = document.getElementById("login-err");
+    const btn = document.getElementById("gate-login-btn");
+    errEl.textContent = "";
+    btn.disabled = true; btn.textContent = "Logging in...";
+    const res = await fetch("/api/login", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ username, password }),
+    });
+    btn.disabled = false; btn.textContent = "Log in";
+    if (res.ok) { init(); }
+    else { const e = await res.json().catch(()=>({})); errEl.textContent = e.error || "Login failed."; }
+  }
+  document.getElementById("gate-login-btn").addEventListener("click", doLogin);
+  document.getElementById("gate-password").addEventListener("keydown", e => { if(e.key==="Enter") doLogin(); });
+
+  // ── Curriculum list ──────────────────────────────────────────────────────────
+  async function loadList() {
+    const res = await fetch("/api/teacher/curricula");
+    const list = await res.json();
+    const ul = document.getElementById("curr-list");
+    ul.innerHTML = "";
+    list.forEach(c => {
+      const li = document.createElement("li");
+      li.textContent = c.name; li.dataset.id = c.id; li.title = c.id;
+      li.addEventListener("click", () => selectCurriculum(c.id));
+      ul.appendChild(li);
+    });
+  }
+
+  // ── Select curriculum ────────────────────────────────────────────────────────
+  async function selectCurriculum(id) {
+    currentId = id;
+    document.querySelectorAll("#curr-list li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
+    const res = await fetch(`/api/teacher/curricula/${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById("editor-placeholder").style.display = "none";
+    document.getElementById("editor-body").style.display = "block";
+    document.getElementById("editor-title").textContent = data.manifest.name;
+    document.getElementById("editor-id-badge").textContent = id;
+    renderTopics(data.topics || []);
+    loadFiles();
+    loadQuestions();
+  }
+
+  // ── Tabs ─────────────────────────────────────────────────────────────────────
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ── Topics ───────────────────────────────────────────────────────────────────
+  function renderTopics(topics) {
+    const tbody = document.getElementById("topics-body");
+    tbody.innerHTML = "";
+    topics.forEach(t => addTopicRow(t));
+  }
+
+  function addTopicRow(t = {}) {
+    const tbody = document.getElementById("topics-body");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" class="t-name" value="${esc(t.name||"")}"></td>
+      <td><textarea class="t-subs">${esc((t.subtopics||[]).join("\n"))}</textarea></td>
+      <td><textarea class="t-objs">${esc((t.objectives||[]).join("\n"))}</textarea></td>
+      <td><button class="btn danger del-row-btn">×</button></td>
+    `;
+    tr.querySelector(".del-row-btn").addEventListener("click", () => tr.remove());
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById("add-topic-btn").addEventListener("click", () => addTopicRow());
+
+  function collectTopics() {
+    return [...document.querySelectorAll("#topics-body tr")].map(tr => ({
+      name: tr.querySelector(".t-name").value.trim(),
+      subtopics: tr.querySelector(".t-subs").value.split("\n").map(s=>s.trim()).filter(Boolean),
+      objectives: tr.querySelector(".t-objs").value.split("\n").map(s=>s.trim()).filter(Boolean),
+    })).filter(t => t.name);
+  }
+
+  document.getElementById("save-topics-btn").addEventListener("click", async () => {
+    if (!currentId) return;
+    setStatus("Saving...", "info");
+    const res = await fetch(`/api/teacher/curricula/${currentId}/topics`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(collectTopics()),
+    });
+    setStatus(res.ok ? "Saved." : "Save failed.", res.ok ? "ok" : "err");
+  });
+
+  // ── Materials ─────────────────────────────────────────────────────────────────
+  const uploadZone = document.getElementById("upload-zone");
+  const fileInput  = document.getElementById("file-input");
+
+  uploadZone.addEventListener("click", () => fileInput.click());
+  uploadZone.addEventListener("dragover", e => { e.preventDefault(); uploadZone.classList.add("drag"); });
+  uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("drag"));
+  uploadZone.addEventListener("drop", e => {
+    e.preventDefault(); uploadZone.classList.remove("drag");
+    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); });
+
+  async function uploadFile(file) {
+    if (!currentId) return;
+    const prog = document.getElementById("upload-progress");
+    prog.style.display = ""; prog.textContent = `Uploading ${file.name}...`;
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`/api/teacher/curricula/${currentId}/upload`, { method: "POST", body: form });
+    prog.style.display = "none";
+    fileInput.value = "";
+    if (res.ok) {
+      const d = await res.json();
+      prog.style.display = ""; prog.style.color = "var(--green)";
+      prog.textContent = `Uploaded → ${d.saved_as}`;
+      setTimeout(() => { prog.style.display = "none"; prog.style.color = "var(--yellow)"; }, 3000);
+      loadFiles();
+    } else {
+      const e = await res.json().catch(()=>({}));
+      alert("Upload failed: " + (e.error || res.status));
+    }
+  }
+
+  async function loadFiles() {
+    if (!currentId) return;
+    const res = await fetch(`/api/teacher/curricula/${currentId}/files`);
+    if (!res.ok) return;
+    const files = await res.json();
+    const container = document.getElementById("files-list");
+    if (!files.length) { container.innerHTML = '<p style="color:var(--muted);font-size:12px">No files yet.</p>'; return; }
+    container.innerHTML = files.map(f => `
+      <div class="file-row">
+        <span class="fname">${esc(f.name)}</span>
+        <span class="fsize">${fmtSize(f.size)}</span>
+        <button class="btn danger" onclick="deleteFile('${esc(f.name)}')">Delete</button>
+      </div>
+    `).join("");
+  }
+
+  async function deleteFile(name) {
+    if (!currentId || !confirm(`Delete ${name}?`)) return;
+    await fetch(`/api/teacher/curricula/${currentId}/files/${encodeURIComponent(name)}`, { method: "DELETE" });
+    loadFiles();
+  }
+
+  document.getElementById("ingest-btn").addEventListener("click", async () => {
+    if (!currentId) return;
+    const msg = document.getElementById("ingest-msg");
+    msg.textContent = "Ingestion started — check server logs.";
+    await fetch(`/api/teacher/curricula/${currentId}/ingest`, { method: "POST" });
+  });
+
+  // ── Questions ─────────────────────────────────────────────────────────────────
+  async function loadQuestions() {
+    if (!currentId) return;
+    const res = await fetch(`/api/teacher/curricula/${currentId}/questions`);
+    if (!res.ok) return;
+    const questions = await res.json();
+    const container = document.getElementById("questions-list");
+    if (!questions.length) {
+      container.innerHTML = '<p style="color:var(--muted);font-size:12px">No questions yet.</p>';
+      return;
+    }
+    container.innerHTML = questions.map(q => `
+      <div class="q-card">
+        <div class="q-card-header">
+          <div class="q-card-body">
+            ${q.topic ? `<span class="q-topic-tag">${esc(q.topic)}</span>` : ""}
+            <div class="q-text">${esc(q.question)}</div>
+            <div class="q-answer">Answer: ${esc(q.answer)}</div>
+          </div>
+          <button class="btn danger" onclick="deleteQuestion('${q.id}')">×</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  document.getElementById("add-q-btn").addEventListener("click", async () => {
+    if (!currentId) return;
+    const topic  = document.getElementById("q-topic").value.trim();
+    const q_text = document.getElementById("q-text").value.trim();
+    const answer = document.getElementById("q-answer").value.trim();
+    const type   = document.getElementById("q-type").value;
+    const msg    = document.getElementById("q-msg");
+    if (!q_text || !answer) { msg.style.color = "var(--danger)"; msg.textContent = "Question and answer required."; return; }
+    const res = await fetch(`/api/teacher/curricula/${currentId}/questions`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ topic, question: q_text, answer, type }),
+    });
+    if (res.ok) {
+      document.getElementById("q-topic").value = "";
+      document.getElementById("q-text").value  = "";
+      document.getElementById("q-answer").value = "";
+      msg.style.color = "var(--green)"; msg.textContent = "Added.";
+      setTimeout(() => msg.textContent = "", 2000);
+      loadQuestions();
+    } else {
+      const e = await res.json().catch(()=>({}));
+      msg.style.color = "var(--danger)"; msg.textContent = e.error || "Failed.";
+    }
+  });
+
+  async function deleteQuestion(qid) {
+    if (!currentId) return;
+    await fetch(`/api/teacher/curricula/${currentId}/questions/${qid}`, { method: "DELETE" });
+    loadQuestions();
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById("status-msg");
+    el.textContent = msg; el.className = type;
+    if (type === "ok") setTimeout(() => { if(el.textContent===msg) el.textContent=""; }, 3000);
+  }
+
+  init();
+</script>
+</body>
+</html>

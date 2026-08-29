@@ -1,0 +1,10 @@
+{
+  "id": "merdeka-indonesia-curriculum",
+  "name": "Merdeka",
+  "prompt_flavour": "Merdeka Curriculum",
+  "collection": "merdeka_indonesia_curriculum",
+  "reference_dir": "curricula/merdeka-indonesia-curriculum/reference",
+  "papers_dir": "curricula/merdeka-indonesia-curriculum/papers",
+  "level": "",
+  "subjects": []
+}

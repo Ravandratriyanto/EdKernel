@@ -108,6 +108,32 @@ CLI_TUTOR_SYSTEM_PROMPT = (
 )
 
 
+def build_tutor_prompt(flavour: str = "SAT/A-level exam preparation",
+                       cli: bool = False) -> str:
+    """Build a system prompt for any curriculum, identified by its prompt_flavour.
+
+    The existing TUTOR_SYSTEM_PROMPT and CLI_TUTOR_SYSTEM_PROMPT constants stay
+    in place for backward compatibility with evals and anything that imports them
+    directly. New code that is curriculum-aware should call this function instead,
+    passing manifest["prompt_flavour"].
+    """
+    if cli:
+        return (
+            f"You are a patient, encouraging {flavour} tutor. "
+            f"{PLAIN_ENGLISH_RULES} "
+            "Teach one concept at a time. After each explanation, ask the student "
+            "exactly ONE question to check understanding. "
+            "When the student answers, give brief feedback and either move to the "
+            "next concept or re-explain if they struggled. "
+            f"{TOPIC_COMPLETE_RULE}"
+        )
+    return TUTOR_SYSTEM_PROMPT.replace(
+        "You are a Socratic SAT/A-level tutor.",
+        f"You are a Socratic {flavour} tutor.",
+        1,
+    )
+
+
 
 
 
@@ -115,10 +141,13 @@ CLI_TUTOR_SYSTEM_PROMPT = (
 
 HINT_LADDER = (
     "",
-    "[Tutor note: student answered this wrong once — give a slightly more "
-    "specific clue than your first hint. Do not name the concept yet.]",
-    "[Tutor note: student answered this wrong twice — give a direct clue that "
-    "names the key concept, but do not give away the answer.]",
+    "[Tutor note: student answered wrong once. Ask a verification question only: "
+    "tell them to substitute their answer back, expand their expression, or check "
+    "whether their answer satisfies the original problem. Do not name any method, "
+    "operation, or concept. One question only.]",
+    "[Tutor note: student answered wrong twice. Name the key concept or method "
+    "they are missing — but do not state the final answer (the number, word, or "
+    "expression) itself. End with one question.]",
     "[Tutor note: student answered this wrong 3+ times — directly explain the "
     "concept they are missing, then ask them to apply it.]",
 )

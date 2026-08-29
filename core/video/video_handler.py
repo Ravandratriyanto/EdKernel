@@ -8,9 +8,9 @@ different things costs an extra model call to stitch together.
 import base64
 import difflib
 
-from llm.client import generate
-from vision.image_handler import transcribe, drop_reasoning
-from video.frame_extractor import extract_frames, ExtractError
+from core.llm.client import generate
+from core.vision.image_handler import transcribe, drop_reasoning
+from core.video.frame_extractor import extract_frames, ExtractError
 
 SAME_ENOUGH = 0.85      
 

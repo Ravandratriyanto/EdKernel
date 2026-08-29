@@ -11,3 +11,5 @@ requests
 python-dotenv
 pyflakes
 opencv-python-headless==5.0.0.93
+gunicorn
+python-pptx

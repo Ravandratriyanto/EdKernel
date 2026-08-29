@@ -1,0 +1,5 @@
+[
+  {"name": "Variables", "subtopics": ["integers", "strings", "booleans"], "objectives": ["Declare a variable", "Understand data types"]},
+  {"name": "Loops", "subtopics": ["for loops", "while loops", "range"], "objectives": ["Write a for loop", "Know when to use while"]},
+  {"name": "Functions", "subtopics": ["parameters", "return values", "scope"], "objectives": ["Define a function", "Understand return vs print"]}
+]
