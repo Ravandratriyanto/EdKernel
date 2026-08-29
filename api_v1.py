@@ -28,6 +28,16 @@ def _llm_kwargs() -> dict:
     return out
 
 
+def _form_llm_kwargs(extra_keys=()) -> dict:
+    """Same, but reads from multipart form fields (for file-upload endpoints)."""
+    out = {}
+    for key in ("model", "provider", "api_key", "host") + tuple(extra_keys):
+        val = request.form.get(key)
+        if val:
+            out[key] = val
+    return out
+
+
 def _bearer_user():
     """Resolve the Bearer token to a user dict, or return None."""
     auth = request.headers.get("Authorization", "")
@@ -106,17 +116,58 @@ def questions_extract():
     if "file" not in request.files:
         return jsonify({"error": "multipart field 'file' (PDF) is required"}), 400
     pdf_bytes = request.files["file"].read()
-    # llm kwargs come from form fields, not JSON body
-    llm = {}
-    for key in ("model", "provider", "api_key", "host"):
-        val = request.form.get(key)
-        if val:
-            llm[key] = val
     try:
-        questions = core.questions.extract_from_paper(pdf_bytes, **llm)
+        questions = core.questions.extract_from_paper(pdf_bytes, **_form_llm_kwargs())
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
     return jsonify({"questions": questions, "count": len(questions)})
+
+
+# ── handwritten step checker ─────────────────────────────────────────────────
+
+@v1.post("/check-working")
+@require_auth
+def check_working():
+    """Upload an image of handwritten working; get back per-step transcription
+    and the index + explanation of the first wrong step, if any.
+
+    Multipart fields:
+      file         — image (JPEG / PNG recommended)
+      model        — LLM model name (optional)
+      provider     — ollama | groq (optional)
+      api_key      — provider key (optional)
+      host         — Ollama host (optional)
+      vision_model — override the vision model (optional)
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "multipart field 'file' (image) is required"}), 400
+
+    img_file = request.files["file"]
+    suffix = os.path.splitext(img_file.filename or ".jpg")[1] or ".jpg"
+    llm = _form_llm_kwargs(extra_keys=("vision_model",))
+
+    # check_working() needs a file path; write to a temp file
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp_path = tmp.name
+        img_file.save(tmp)
+
+    try:
+        result = core.vision.step_checker.check_working(
+            tmp_path,
+            provider=llm.get("provider", "ollama"),
+            model=llm.get("model", "gemma4"),
+            host=llm.get("host", "http://localhost:11434"),
+            api_key=llm.get("api_key", ""),
+            vision_model=llm.get("vision_model", ""),
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 422
+    finally:
+        os.unlink(tmp_path)
+
+    # boxes are tuples; convert to lists for JSON
+    result["boxes"] = [list(b) for b in result.get("boxes", [])]
+    return jsonify(result)
 
 
 # ── API key management (self-service) ─────────────────────────────────────────

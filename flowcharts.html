@@ -438,7 +438,7 @@ flowchart TD
 
     ROLE --> DEV_R["Dev panel (no auth)\nGET /dev\nGET /api/dev/settings\nPUT /api/dev/settings"]
 
-    V1_R["api_v1.py Blueprint /v1/\nBearer token auth (separate from cookie)\nGET  /v1/ping\nPOST /v1/check\nPOST /v1/tutor/start\nPOST /v1/tutor/reply\nPOST /v1/questions/extract\nGET  /v1/keys\nPOST /v1/keys\nDELETE /v1/keys/kid"]
+    V1_R["api_v1.py Blueprint /v1/\nBearer token auth (separate from cookie)\nGET  /v1/ping\nPOST /v1/check\nPOST /v1/tutor/start\nPOST /v1/tutor/reply\nPOST /v1/questions/extract\nPOST /v1/check-working\nGET  /v1/keys\nPOST /v1/keys\nDELETE /v1/keys/kid"]
 
     style TUTOR_R   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style STUDENT_R fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
@@ -473,16 +473,19 @@ flowchart TD
 
     AUTH --> QEXT["POST /v1/questions/extract\nmultipart: file (PDF)\n→ core.questions.extract_from_paper()\n→ {questions, count}"]
 
+    AUTH --> CW["POST /v1/check-working\nmultipart: file (image)\nfields: model, provider, vision_model\n→ core.vision.step_checker.check_working()\n→ {steps, boxes, error_index, explanation}"]
+
     AUTH --> KGET["GET /v1/keys\n→ list keys (label + date)"]
     AUTH --> KPOST["POST /v1/keys\n{label}\n→ {token} — shown once"]
     AUTH --> KDEL["DELETE /v1/keys/id\nrevoke key"]
 
     KPOST --> MINT["users.create_api_key()\ntoken_urlsafe(32)\nstore SHA-256 only"]
 
-    style AUTH  fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
-    style MINT  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style AUTH   fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
+    style MINT   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style TSTART fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style TREPLY fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style CW     fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
     </div>
   </div>
 </div>
