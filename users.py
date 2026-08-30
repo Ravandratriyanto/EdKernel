@@ -72,6 +72,17 @@ def init() -> None:
                     created_at INTEGER NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS progress (
+                    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                    curriculum TEXT NOT NULL,
+                    topic_id   TEXT NOT NULL,
+                    attempts   INTEGER NOT NULL DEFAULT 0,
+                    correct    INTEGER NOT NULL DEFAULT 0,
+                    last_seen  INTEGER NOT NULL,
+                    PRIMARY KEY (user_id, curriculum, topic_id)
+                )
+            """)
             # Migration: add role column to existing databases
             try:
                 conn.execute(
@@ -327,3 +338,53 @@ def user_for_api_key(token: str) -> dict | None:
     if row is None:
         return None
     return {"id": row["id"], "username": row["username"], "role": row["role"]}
+
+
+def record_progress(user_id: int, curriculum: str, topic_id: str, correct: bool) -> None:
+    """Upsert one answered question into the progress table."""
+    now = int(time.time())
+    inc = 1 if correct else 0
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute("""
+                INSERT INTO progress (user_id, curriculum, topic_id, attempts, correct, last_seen)
+                VALUES (?, ?, ?, 1, ?, ?)
+                ON CONFLICT(user_id, curriculum, topic_id) DO UPDATE SET
+                    attempts  = attempts + 1,
+                    correct   = correct  + ?,
+                    last_seen = ?
+            """, (user_id, curriculum, topic_id, inc, now, inc, now))
+    finally:
+        conn.close()
+
+
+def get_progress(user_id: int, curriculum: str) -> list[dict]:
+    """All topic rows for one student in one curriculum."""
+    conn = _connect()
+    try:
+        rows = conn.execute("""
+            SELECT topic_id, attempts, correct, last_seen
+            FROM progress
+            WHERE user_id = ? AND curriculum = ?
+            ORDER BY last_seen DESC
+        """, (user_id, curriculum)).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_all_progress(curriculum: str) -> list[dict]:
+    """All students' progress for a curriculum — for the teacher view."""
+    conn = _connect()
+    try:
+        rows = conn.execute("""
+            SELECT u.username, p.topic_id, p.attempts, p.correct, p.last_seen
+            FROM progress p
+            JOIN users u ON u.id = p.user_id
+            WHERE p.curriculum = ?
+            ORDER BY u.username, p.last_seen DESC
+        """, (curriculum,)).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]

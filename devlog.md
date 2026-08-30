@@ -2501,6 +2501,118 @@ if all steps are valid.
 
 ---
 
+## Session 17 — 2026-08-30
+
+### Maths PDF vision path — completed
+
+Previous session left `core/questions.py` and `core/rag/ingest.py` with vision
+stubs that were structurally correct but had two bugs: `questions.py` was
+unchanged from the user's coding attempt, and `ingest.py` had a nested
+`_page_texts` definition causing an `IndentationError`.
+
+Both fixed this session:
+
+- `core/questions.py` — `_pages_via_vision(pdf_bytes, **llm)` helper using
+  `fitz` (pymupdf); `extract_from_paper()` gains `vision=False` param with
+  auto-fallback when pypdf returns <100 chars
+- `core/rag/ingest.py` — `_page_texts(pdf_path, vision_kwargs=None)` now
+  accepts per-page vision fallback; threaded through `_collect_pdfs()` and
+  `build()`; `--vision` CLI flag added with `--provider`, `--model`, `--host`
+- `pymupdf` added to `requirements.txt` (was missing, caused `fitz: command not
+  found` on first run)
+
+First ingest with vision: 4426 chunks. AQA Maths Paper 1 still scored 0 chunks
+— pypdf extracts enough garbage (page numbers, headers) that pages don't appear
+blank, so the fallback didn't trigger.
+
+Fix: changed fallback condition from `not text.strip()` to
+`not text.strip() or _junk_ratio(text) > _MAX_JUNK`. Re-ingest pending —
+re-run needed to confirm AQA paper gets picked up.
+
+### Auto-reingest on upload
+
+Both admin and teacher panels previously had a manual "Re-ingest RAG" button
+with fire-and-forget behaviour (no status, no polling).
+
+Changed:
+- `app.py` — `_start_ingest(cid, manifest)` helper shared by both routes;
+  skips if already running; stores `{state, chunks}` in `_INGEST_STATUS` dict
+- Both ingest routes now accept `GET` for status and `POST` to start
+- `api_teacher_upload` auto-triggers `_start_ingest` after every successful
+  file save — no manual button needed
+- Both panels poll `GET .../ingest` every 2.5s while running and show chunk
+  count when done
+
+### Progress tracking
+
+New `progress` table in `users.py`:
+```
+(user_id, curriculum, topic_id, attempts, correct, last_seen)
+PRIMARY KEY (user_id, curriculum, topic_id)
+```
+
+Three new functions: `record_progress()` (upsert), `get_progress()` (student
+view), `get_all_progress()` (teacher view).
+
+`api_reply` in `app.py` now calls `record_progress` after every turn where the
+model signals `[CORRECT]` or `[WRONG]` and a `curriculum_id` is present.
+
+New routes:
+- `GET /api/progress/<cid>` — current student's mastery per topic
+- `GET /api/teacher/curricula/<cid>/progress` — all students for teacher view
+
+`index.html` topic list now fetches progress alongside topics and materials.
+Each topic header gets a coloured dot: green (≥80% correct), yellow (started),
+grey (untouched). A "Continue" banner appears above the list pointing to the
+weakest topic, with a link that pre-fills the topic input and opens the tutor.
+
+Note: stray raw SQL appeared at the bottom of `users.py` again (second time
+this project). Removed. The `progress` table is added inside `init()` where it
+belongs.
+
+### Competition research
+
+Researched the OpenCV AI Competition 2026 (powered by AWS) in full.
+Read `EdKernel_Grant_Proposal.docx` — the proposal was submitted and targets
+**both** the COOL Award and Agentic Vision Award ($1,000 each).
+
+Key facts saved to memory:
+- Final submissions due: **26 Oct 2026**
+- Judging: Technical execution/OpenCV depth 30%, Innovation 20%, Impact 20%,
+  UX 10%, Documentation 10%, AWS 10%
+- Hard requirements: OpenCV 5 (already met) + meaningful AWS component (not met)
+- COOL Award requires Graviton deployment + per-stage latency benchmarks vs
+  stock OpenCV 5 baseline
+- Agentic Vision Award: vision results must influence subsequent plan/action —
+  our step checker qualifies (segment → transcribe → find wrong step → tutor
+  adjusts hint ladder)
+
+### Known issues
+- **AWS deployment not started** — hard requirement; nothing runs on AWS yet
+- **COOL benchmark not started** — promised in proposal; needs Graviton instance
+- **Live bounding box display not built** — promised explicitly to judges; API
+  returns boxes but UI does not render them
+- **Hint ladder rung 2** — 2/5; eval not re-run this session after prompt
+  strengthening
+- **Re-ingest with junk-ratio fix** — not re-run yet; AQA Maths Paper 1 may
+  still be 0 chunks
+- **Rename OLLM → EdKernel** — folder and GitHub repo still not renamed
+- **Teacher progress UI** — route exists, UI not wired
+- **8 files uncommitted** — 299 changes sitting in working tree
+
+### Next (in order)
+1. Commit everything
+2. Rename to EdKernel (folder + GitHub repo)
+3. Re-run hint ladder eval: `python -m evals.learn --provider groq --model "qwen/qwen3.6-27b" --jobs 1`
+4. Re-run ingest with vision: `python -m core.rag.ingest --curriculum sat-alevel --vision --provider groq`
+5. Make DB paths configurable via env vars (Docker prep — `DATA_DIR`, `DB_DIR`)
+6. Live bounding box display in step checker UI
+7. Teacher progress UI
+8. Dockerfile → ECR → ECS Fargate → S3 → RDS
+9. Graviton instance + COOL benchmark
+
+---
+
 ## Session 16b — 2026-08-27 (architecture)
 
 ### EdKernel modular vision

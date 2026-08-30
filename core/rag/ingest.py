@@ -1,10 +1,3 @@
-"""Build the reference collection from .txt notes and past-paper PDFs.
-
-Run directly to rebuild from scratch:
-
-    python -m rag.ingest
-"""
-
 import glob
 import json
 import logging
@@ -42,14 +35,9 @@ def _junk_ratio(s: str) -> float:
     return bad / len(s)
 
 
-def _page_texts(pdf_path: str):
-    """Yield (page number, text) and survive errors raised part-way through.
-
-    `reader.pages` is lazy, so an encrypted or corrupt page raises when it is
-    reached, not when the file is opened. A plain `for page in reader.pages`
-    therefore throws out of the middle of the loop. Indexing one page at a time
-    inside its own try lets us keep whatever was readable before the failure.
-    """
+def _page_texts(pdf_path: str, vision_kwargs: dict | None = None):
+    """Yield (page number, text). Falls back to vision transcription for blank
+    pages when vision_kwargs are provided (scanned or equation-heavy PDFs)."""
     try:
         reader = PdfReader(pdf_path)
         n = len(reader.pages)
@@ -60,8 +48,28 @@ def _page_texts(pdf_path: str):
         try:
             pages.append(pdftext.clean(pdftext.page_text(reader.pages[i])))
         except Exception:
-            break           
-    yield from enumerate(pdftext.strip_repeats(pages))
+            break
+
+    pages = pdftext.strip_repeats(pages)
+
+    if vision_kwargs:
+        import base64
+        import fitz
+        from core.vision.image_handler import transcribe
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception:
+            doc = None
+        for i, text in enumerate(pages):
+            if (not text.strip() or _junk_ratio(text) > _MAX_JUNK) and doc is not None:
+                try:
+                    pix = doc[i].get_pixmap(dpi=150)
+                    b64 = base64.b64encode(pix.tobytes("jpeg")).decode()
+                    pages[i] = transcribe(b64, name=f"p{i}.jpg", **vision_kwargs).strip()
+                except Exception:
+                    pass
+
+    yield from enumerate(pages)
 
 
 def _chunk(text: str, size: int = 900, overlap: int = 150) -> list[str]:
@@ -84,7 +92,7 @@ def _chunk(text: str, size: int = 900, overlap: int = 150) -> list[str]:
     return [p for p in parts if len(p) > _MIN_CHUNK]
 
 
-def _collect_pdfs(folder: str) -> tuple[list, list, list]:
+def _collect_pdfs(folder: str, vision_kwargs: dict | None = None) -> tuple[list, list, list]:
     docs, ids, metas = [], [], []
     for pdf in sorted(glob.glob(f"{folder}/*.pdf")):
         sidecar = Path(pdf.replace(".pdf", ".json"))
@@ -96,7 +104,7 @@ def _collect_pdfs(folder: str) -> tuple[list, list, list]:
                 pass
         stem = Path(pdf).stem
         kept = 0
-        for pageno, text in _page_texts(pdf):
+        for pageno, text in _page_texts(pdf, vision_kwargs=vision_kwargs):
             text = text.strip()
             if len(text) < _MIN_PAGE or _junk_ratio(text) > _MAX_JUNK:
                 continue
@@ -125,7 +133,8 @@ def _collect_texts(folder: str) -> tuple[list, list, list]:
 def build(text_folder: str = "data/reference",
           pdf_folder: str = "data/papers",
           db_path: str = DB_PATH,
-          collection_name: str = COLLECTION) -> int:
+          collection_name: str = COLLECTION,
+          vision_kwargs: dict | None = None) -> int:
     """Rebuild the collection from scratch. Returns the document count."""
     client = chromadb.PersistentClient(path=db_path)
     ef = embedding_functions.DefaultEmbeddingFunction()
@@ -137,13 +146,13 @@ def build(text_folder: str = "data/reference",
     collection = client.create_collection(
         name=collection_name,
         embedding_function=ef,
-        metadata={"hnsw:space": "cosine"},   
+        metadata={"hnsw:space": "cosine"},
     )
 
     print("reference notes:")
     docs, ids, metas = _collect_texts(text_folder)
     print("past papers:")
-    d2, i2, m2 = _collect_pdfs(pdf_folder)
+    d2, i2, m2 = _collect_pdfs(pdf_folder, vision_kwargs=vision_kwargs)
     docs += d2
     ids += i2
     metas += m2
@@ -164,21 +173,45 @@ def build(text_folder: str = "data/reference",
 
 if __name__ == "__main__":
     import argparse
+    import os
     import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from dotenv import load_dotenv
+    load_dotenv()
 
     p = argparse.ArgumentParser(description="Build a ChromaDB collection from reference material")
     p.add_argument("--curriculum", metavar="ID",
                    help="Curriculum id (e.g. sat-alevel). Reads paths and collection "
                         "name from curricula/<id>/manifest.json. If omitted, uses the "
                         "legacy data/reference + data/papers paths.")
+    p.add_argument("--vision", action="store_true",
+                   help="Use vision transcription for blank/maths-heavy PDF pages.")
+    p.add_argument("--provider", default="ollama",
+                   help="LLM provider for vision (ollama or groq). Default: ollama.")
+    p.add_argument("--model", default=None,
+                   help="Vision model name. Default: provider default.")
+    p.add_argument("--host", default=None,
+                   help="Ollama host URL if not localhost.")
     args = p.parse_args()
+
+    vkwargs = None
+    if args.vision:
+        vkwargs = {"provider": args.provider}
+        if args.model:
+            vkwargs["model"] = args.model
+        if args.host:
+            vkwargs["host"] = args.host
+        api_key = os.getenv("API_KEY") or os.getenv("GROQ_API_KEY")
+        if api_key:
+            vkwargs["api_key"] = api_key
 
     if args.curriculum:
         import curricula as cur
         manifest = cur.load(args.curriculum)
         build(text_folder=cur.reference_dir(manifest),
               pdf_folder=cur.papers_dir(manifest),
-              collection_name=manifest["collection"])
+              collection_name=manifest["collection"],
+              vision_kwargs=vkwargs)
     else:
-        build()
+        build(vision_kwargs=vkwargs)

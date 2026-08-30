@@ -641,14 +641,30 @@
   });
 
   // --- Re-ingest ---
+  async function pollIngest() {
+    if (!currentId) return;
+    const res = await fetch(`/api/admin/curricula/${currentId}/ingest`);
+    if (!res.ok) return;
+    const d = await res.json();
+    if (d.state === "running") {
+      setStatus("Reingesting…", "info");
+      setTimeout(pollIngest, 2500);
+    } else if (d.state === "error") {
+      setStatus("Ingest failed — check server logs.", "err");
+    } else {
+      setStatus(d.chunks ? `${d.chunks} chunks indexed.` : "Ingest complete.", "ok");
+    }
+  }
+
   document.getElementById("ingest-btn").addEventListener("click", async () => {
     if (!currentId) return;
-    setStatus("Ingestion started — check server logs.", "info");
     const res = await fetch(`/api/admin/curricula/${currentId}/ingest`, { method: "POST" });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       setStatus("Ingest error: " + (err.error || res.status), "err");
+      return;
     }
+    pollIngest();
   });
 
   // --- Import past paper ---

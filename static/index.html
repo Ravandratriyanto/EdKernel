@@ -534,6 +534,22 @@
       display: flex; align-items: center; gap: 10px;
     }
 
+    .mastery-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      flex-shrink: 0; margin-left: auto;
+    }
+    .mastery-dot.done    { background: #22c55e; }
+    .mastery-dot.started { background: #eab308; }
+    .mastery-dot.unseen  { background: #d1d5db; }
+
+    #progress-banner {
+      background: #ede9fe; border-radius: 10px;
+      padding: 10px 16px; margin-bottom: 14px;
+      font-size: 0.82rem; color: #5b21b6;
+      display: none;
+    }
+    #progress-banner strong { font-weight: 700; }
+
     .topic-header .topic-icon {
       width: 28px; height: 28px; border-radius: 8px;
       background: #ede9fe; display: flex; align-items: center; justify-content: center;
@@ -831,6 +847,7 @@
   <div id="canvas-body">
     <!-- classwork tab -->
     <div id="canvas-classwork">
+      <div id="progress-banner"></div>
       <div id="canvas-topics"></div>
       <div id="canvas-materials" class="materials-section" style="display:none">
         <div class="materials-header">&#128196; Materials</div>
@@ -2140,18 +2157,53 @@
     materialsEl.style.display = 'none';
     emptyEl.classList.add('hidden');
 
-    const [infoRes, matRes] = await Promise.all([
+    const [infoRes, matRes, progRes] = await Promise.all([
       fetch(`/api/curricula/${cid}/info`),
       fetch(`/api/curricula/${cid}/materials`),
+      fetch(`/api/progress/${cid}`),
     ]);
 
     const info  = infoRes.ok  ? await infoRes.json()  : { topics: [] };
     const mats  = matRes.ok   ? await matRes.json()   : [];
+    const prog  = progRes.ok  ? await progRes.json()  : [];
     _canvasManifest = info.manifest || null;
+
+    // build mastery map: topic_id (lowercase) → {attempts, correct}
+    const masteryMap = {};
+    prog.forEach(r => { masteryMap[r.topic_id.toLowerCase()] = r; });
+
+    // recommended next: first topic with no mastery or lowest mastery
+    const banner = document.getElementById('progress-banner');
+    const topics = info.topics || [];
+    let recommended = null;
+    if (topics.length) {
+      let lowest = null, lowestScore = 2;
+      for (const t of topics) {
+        const key = (t.name || '').toLowerCase();
+        const m = masteryMap[key];
+        const score = m ? (m.attempts ? m.correct / m.attempts : 0) : -1;
+        if (score < lowestScore) { lowestScore = score; lowest = t; }
+      }
+      if (lowest) recommended = lowest.name;
+    }
+    if (recommended && Object.keys(masteryMap).length < topics.length) {
+      banner.style.display = '';
+      banner.innerHTML = `Continue: <strong>${recommended}</strong> &mdash; <a href="#" style="color:#7c3aed" onclick="event.preventDefault();document.getElementById('input-topic').value=${JSON.stringify(recommended)};enterTutor()">Start lesson</a>`;
+    } else {
+      banner.style.display = 'none';
+    }
 
     // topics
     topicsEl.innerHTML = '';
-    (info.topics || []).forEach(t => {
+    topics.forEach(t => {
+      const key = (t.name || '').toLowerCase();
+      const m = masteryMap[key];
+      let dotClass = 'unseen', dotTitle = 'Not started';
+      if (m) {
+        const pct = m.attempts ? m.correct / m.attempts : 0;
+        if (pct >= 0.8) { dotClass = 'done'; dotTitle = `${Math.round(pct*100)}% correct`; }
+        else { dotClass = 'started'; dotTitle = `${m.correct}/${m.attempts} correct`; }
+      }
       const sec = document.createElement('div');
       sec.className = 'topic-section';
       const subs = (t.subtopics || []).map(s =>
@@ -2162,6 +2214,7 @@
         <div class="topic-header">
           <div class="topic-icon">&#128218;</div>
           ${t.name || 'Topic'}
+          <span class="mastery-dot ${dotClass}" title="${dotTitle}"></span>
         </div>
         <div class="topic-body">
           ${subs ? `<div class="subtopics-list">${subs}</div>` : ''}

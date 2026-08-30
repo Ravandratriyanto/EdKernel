@@ -48,6 +48,14 @@ app.register_blueprint(v1)
 
 users.purge_expired()
 
+
+@app.errorhandler(Exception)
+def _unhandled_exception(e):
+    app.logger.exception(e)
+    if isinstance(e, ConnectionError):
+        return jsonify({"error": "Could not reach the model. Is Ollama running?"}), 503
+    return jsonify({"error": "Something went wrong on our end."}), 500
+
 SESSION_COOKIE = "ollm_session"
 
 
@@ -60,6 +68,10 @@ COOKIE_SECURE = os.environ.get("OLLM_HTTPS", "").strip().lower() in {"1", "true"
 
 
 _login_limiter = RateLimiter(max_failures=8, window_seconds=15 * 60)
+
+# Per-curriculum ingest state. Lives in process memory — resets on restart.
+# {"sat-alevel": {"state": "idle"|"running"|"error", "chunks": N}}
+_INGEST_STATUS: dict = {}
 
 # 20 LLM calls per user per minute — generous for a real lesson, blocks bots.
 _llm_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
@@ -594,6 +606,10 @@ def api_reply():
              attachment=attachment_meta(attachment),
              tokens=getattr(raw, "usage", {}),
              latency_ms=round((time.monotonic() - started) * 1000))
+
+    cid = (data.get("curriculum_id") or "").strip()
+    if correct is not None and g.user and cid and topic:
+        users.record_progress(g.user["id"], cid, topic, correct)
 
     return jsonify({
         "response": response,
@@ -1398,6 +1414,20 @@ def api_student_curriculum_info(cid):
     return jsonify({"manifest": manifest, "topics": topics})
 
 
+@app.route("/api/progress/<cid>")
+def api_get_progress(cid):
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    return jsonify(users.get_progress(g.user["id"], cid))
+
+
+@app.route("/api/teacher/curricula/<cid>/progress")
+def api_teacher_progress(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    return jsonify(users.get_all_progress(cid))
+
+
 @app.route("/api/curricula/<cid>/materials")
 def api_student_materials(cid):
     """List uploaded files for any logged-in student."""
@@ -1629,6 +1659,7 @@ def api_teacher_upload(cid):
         (ref_dir / filename).write_bytes(data)
         save_name = filename
 
+    _start_ingest(cid, manifest)
     return jsonify({"ok": True, "saved_as": save_name})
 
 
@@ -1709,27 +1740,40 @@ def api_teacher_delete_question(cid, qid):
     return jsonify({"ok": True})
 
 
-@app.route("/api/teacher/curricula/<cid>/ingest", methods=["POST"])
+def _start_ingest(cid: str, manifest: dict) -> bool:
+    """Kick off a background ingest for `cid`. Returns False if already running."""
+    import threading
+    from core.rag.ingest import build
+    if _INGEST_STATUS.get(cid, {}).get("state") == "running":
+        return False
+    _INGEST_STATUS[cid] = {"state": "running", "chunks": 0}
+
+    def _run():
+        try:
+            n = build(text_folder=_cur.reference_dir(manifest),
+                      pdf_folder=_cur.papers_dir(manifest),
+                      collection_name=manifest["collection"])
+            _INGEST_STATUS[cid] = {"state": "idle", "chunks": n}
+        except Exception as exc:
+            app.logger.error("Ingest failed for %s: %s", cid, exc)
+            _INGEST_STATUS[cid] = {"state": "error", "chunks": 0}
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
+
+
+@app.route("/api/teacher/curricula/<cid>/ingest", methods=["GET", "POST"])
 def api_teacher_ingest(cid):
     err = _teacher_or_admin()
     if err: return err
+    if request.method == "GET":
+        return jsonify(_INGEST_STATUS.get(cid, {"state": "idle", "chunks": 0}))
     try:
         manifest = _cur.load(cid)
     except FileNotFoundError:
         return jsonify({"error": "not found"}), 404
-    import threading
-    from core.rag.ingest import build
-
-    def _run():
-        try:
-            build(text_folder=_cur.reference_dir(manifest),
-                  pdf_folder=_cur.papers_dir(manifest),
-                  collection_name=manifest["collection"])
-        except Exception as exc:
-            app.logger.error("Teacher ingest failed for %s: %s", cid, exc)
-
-    threading.Thread(target=_run, daemon=True).start()
-    return jsonify({"ok": True, "message": "Ingestion started"})
+    started = _start_ingest(cid, manifest)
+    return jsonify({"ok": True, "already_running": not started})
 
 
 # ── Admin panel ───────────────────────────────────────────────────────────────
@@ -1831,28 +1875,19 @@ def api_admin_create():
     return jsonify(manifest), 201
 
 
-@app.route("/api/admin/curricula/<cid>/ingest", methods=["POST"])
+@app.route("/api/admin/curricula/<cid>/ingest", methods=["GET", "POST"])
 def api_admin_ingest(cid):
     err = _admin_only()
     if err:
         return err
+    if request.method == "GET":
+        return jsonify(_INGEST_STATUS.get(cid, {"state": "idle", "chunks": 0}))
     try:
         manifest = _cur.load(cid)
     except FileNotFoundError:
         return jsonify({"error": "not found"}), 404
-    import threading
-    from core.rag.ingest import build
-
-    def _run():
-        try:
-            build(text_folder=_cur.reference_dir(manifest),
-                  pdf_folder=_cur.papers_dir(manifest),
-                  collection_name=manifest["collection"])
-        except Exception as exc:
-            app.logger.error("Ingest failed for %s: %s", cid, exc)
-
-    threading.Thread(target=_run, daemon=True).start()
-    return jsonify({"ok": True, "message": "Ingestion started — check server logs"})
+    started = _start_ingest(cid, manifest)
+    return jsonify({"ok": True, "already_running": not started})
 
 
 @app.route("/api/admin/curricula/<cid>/import-paper-questions", methods=["POST"])

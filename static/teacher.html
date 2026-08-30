@@ -402,9 +402,29 @@
       prog.textContent = `Uploaded → ${d.saved_as}`;
       setTimeout(() => { prog.style.display = "none"; prog.style.color = "var(--yellow)"; }, 3000);
       loadFiles();
+      pollIngest();
     } else {
       const e = await res.json().catch(()=>({}));
       alert("Upload failed: " + (e.error || res.status));
+    }
+  }
+
+  async function pollIngest() {
+    if (!currentId) return;
+    const msg = document.getElementById("ingest-msg");
+    msg.style.color = "var(--yellow)";
+    const res = await fetch(`/api/teacher/curricula/${currentId}/ingest`);
+    if (!res.ok) return;
+    const d = await res.json();
+    if (d.state === "running") {
+      msg.textContent = "Reingesting…";
+      setTimeout(pollIngest, 2500);
+    } else if (d.state === "error") {
+      msg.textContent = "Ingest failed — check server logs.";
+      msg.style.color = "var(--danger)";
+    } else {
+      msg.textContent = d.chunks ? `${d.chunks} chunks indexed.` : "";
+      msg.style.color = "var(--green)";
     }
   }
 
@@ -432,9 +452,8 @@
 
   document.getElementById("ingest-btn").addEventListener("click", async () => {
     if (!currentId) return;
-    const msg = document.getElementById("ingest-msg");
-    msg.textContent = "Ingestion started — check server logs.";
     await fetch(`/api/teacher/curricula/${currentId}/ingest`, { method: "POST" });
+    pollIngest();
   });
 
   // ── Questions ─────────────────────────────────────────────────────────────────
