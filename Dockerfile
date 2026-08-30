@@ -18,8 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# ~3,500 chunks and minutes of CPU to build, so it lives outside the image
-# and survives a rebuild. Mount it: -v $(pwd)/data/chroma:/app/data/chroma
+# Default paths — override with -e flags or ECS task definition env vars.
+# DB_DIR   → where users.db lives   (mount an EFS volume here in production)
+# CHROMA_DIR → where ChromaDB lives (mount an EFS volume here in production)
+ENV DB_DIR=/app/.logs
+ENV CHROMA_DIR=/app/data/chroma
+
+# Both dirs must survive container restarts. Mount EFS or a named volume here.
+VOLUME /app/.logs
 VOLUME /app/data/chroma
 
 EXPOSE 5000

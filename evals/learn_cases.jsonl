@@ -2,4 +2,4 @@
 {"id": "h2", "topic": "quadratic factorising", "question": "Factorise x^2 + 5x + 6", "wrong": "(x+1)(x+6)", "concept": ["multiply", "add", "pair", "factors"], "answer": "(x+2)(x+3)"}
 {"id": "h3", "topic": "cell biology", "question": "Which organelle carries out photosynthesis?", "wrong": "nucleus", "concept": ["chlorophyll", "pigment", "thylakoid", "stroma"], "answer": "chloroplast"}
 {"id": "h4", "topic": "the chain rule", "question": "Differentiate (2x + 1)^3", "wrong": "3(2x+1)^2", "concept": ["chain", "inner", "outer", "composit"], "answer": "6(2x+1)^2"}
-{"id": "h5", "topic": "percentage change", "question": "A price rises from 40 to 50. What is the percentage increase?", "wrong": "20%", "concept": ["divide", "difference", "ratio"], "answer": "25%"}
+{"id": "h5", "topic": "percentage change", "question": "A price rises from 40 to 50. What is the percentage increase?", "wrong": "20%", "concept": ["divide", "dividing", "divided", "difference", "ratio"], "answer": "25%"}

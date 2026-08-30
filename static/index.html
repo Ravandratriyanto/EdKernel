@@ -1213,6 +1213,7 @@
   const DOLLAR = '\uE000';
 
   function normaliseMath(text) {
+    if (!text) return '';
     /* Odd indices are the fenced blocks, because the delimiter is captured. */
     return text.split(/(```[\s\S]*?```)/g).map((part, i) =>
       i % 2 === 1 ? part
@@ -1249,8 +1250,8 @@
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
-    const options = role === 'tutor' ? extractOptions(text) : [];
-    const displayText = options.length > 0 ? stripOptions(text) : text;
+    const options = role === 'tutor' ? extractOptions(text || '') : [];
+    const displayText = options.length > 0 ? stripOptions(text) : (text || '');
     bubble.innerHTML = marked.parse(normaliseMath(displayText));
 
     if (verdict === true || verdict === false) {
@@ -1613,6 +1614,43 @@
       bubble.className = 'message tutor';
       bubble.innerHTML = `<div class="bubble">${html}</div>`;
       document.getElementById('chat-area').appendChild(bubble);
+
+      if (data.boxes && data.boxes.length > 0) {
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:relative;display:inline-block;max-width:100%;margin-top:8px';
+
+        const img = new Image();
+        img.src = `data:image/jpeg;base64,${attach.b64}`;
+        img.style.cssText = 'max-width:100%;display:block;border-radius:8px';
+        wrapper.appendChild(img);
+
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none';
+        wrapper.appendChild(canvas);
+
+        img.onload = () => {
+          canvas.width  = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx  = canvas.getContext('2d');
+          const size = Math.max(10, canvas.width / 40);
+          data.boxes.forEach(([x, y, w, h], i) => {
+            const isErr = i === data.error_index;
+            ctx.strokeStyle = isErr ? '#ef4444' : '#22c55e';
+            ctx.lineWidth   = Math.max(2, canvas.width / 200);
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = isErr ? '#ef4444' : '#22c55e';
+            ctx.font      = `bold ${size}px sans-serif`;
+            ctx.fillText(`Line ${i + 1}`, x + 4, y > size + 4 ? y - 4 : y + size + 4);
+          });
+        };
+
+        const boxBubble = document.createElement('div');
+        boxBubble.className = 'message tutor';
+        boxBubble.innerHTML = '<div class="bubble" style="padding:8px"></div>';
+        boxBubble.querySelector('.bubble').appendChild(wrapper);
+        document.getElementById('chat-area').appendChild(boxBubble);
+      }
+
       document.getElementById('chat-area').scrollTop = 9e9;
 
     } catch (e) {
@@ -2058,7 +2096,22 @@
   function enterApp(user) {
     document.getElementById('whoami').textContent = user.username;
     document.getElementById('auth-gate').classList.add('hidden');
-    showClassesView();
+    const initCid = new URLSearchParams(location.search).get('c');
+    if (initCid) {
+      fetch('/api/curricula')
+        .then(r => r.json())
+        .then(list => {
+          const c = list.find(x => x.id === initCid);
+          if (c) {
+            currentCurriculumId = c.id;
+            history.replaceState({cid: c.id}, '', '/?c=' + encodeURIComponent(c.id));
+            showCanvasView(c);
+          } else { showClassesView(); }
+        })
+        .catch(() => showClassesView());
+    } else {
+      showClassesView();
+    }
   }
 
   function _hideAllViews() {
@@ -2120,9 +2173,11 @@
   }
 
   let _canvasManifest = null;
+  let _popstateActive = false;
 
   function openClass(curriculum) {
     currentCurriculumId = curriculum.id;
+    history.pushState({cid: curriculum.id}, '', '/?c=' + encodeURIComponent(curriculum.id));
     showCanvasView(curriculum);
   }
 
@@ -2361,6 +2416,7 @@
     currentCurriculumId = '';
     currentSessionOpen  = null;
     document.getElementById('canvas-view').classList.add('hidden');
+    if (!_popstateActive) history.replaceState(null, '', '/');
     showClassesView();
   }
 
@@ -2481,6 +2537,23 @@
     .then(r => r.json())
     .then(d => { if (d.user) enterApp(d.user); })
     .catch(() => {});
+
+  window.addEventListener('popstate', async (e) => {
+    _popstateActive = true;
+    try {
+      if (e.state?.cid) {
+        const res  = await fetch('/api/curricula');
+        const list = await res.json();
+        const c    = list.find(x => x.id === e.state.cid);
+        if (c) { currentCurriculumId = c.id; showCanvasView(c); }
+        else backToClasses();
+      } else {
+        backToClasses();
+      }
+    } finally {
+      _popstateActive = false;
+    }
+  });
 </script>
 
 <!-- Questions overlay -->

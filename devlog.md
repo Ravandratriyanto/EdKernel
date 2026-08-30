@@ -2501,6 +2501,104 @@ if all steps are valid.
 
 ---
 
+## Session 17b — 2026-08-30 (competition prep, rename, hint ladder)
+
+### Project renamed OLLM → EdKernel
+
+Folder renamed on disk (`mv OLLM EdKernel`), GitHub repo renamed via
+`gh repo rename EdKernel`, remote URL updated with
+`git remote set-url origin https://github.com/backliner239/EdKernel.git`.
+Git history is intact — the rename is a filesystem operation, not a rewrite.
+All future sessions reference `EdKernel/` as the project root.
+
+### OpenCV AI Competition 2026 — full brief
+
+Competition researched and grant proposal (`EdKernel_Grant_Proposal.docx`)
+read. Key facts:
+
+- Powered by AWS. Final submission: **26 October 2026**.
+- Judging: OpenCV 5 depth 30%, Innovation 20%, Impact 20%, UX 10%, Docs 10%,
+  AWS 10%.
+- Hard requirements: OpenCV 5 (already met — v5.0.0.93) + meaningful AWS
+  component (**not started**).
+- Proposal entered **both** special award paths: COOL ($1,000 — Graviton
+  benchmark) and Agentic Vision ($1,000 — perception→decision→action loop).
+- As of this session: zero AWS deployment, zero COOL benchmark, zero live
+  bounding box display in the UI (all promised in the proposal).
+
+Pre-AWS checklist written to memory and devlog. Ordered:
+1. Commit ✓ | 2. Rename ✓ | 3. Hint ladder eval | 4. Env var paths for Docker
+prep | 5. Live bounding boxes | 6. Teacher progress UI | 7. Docker → AWS
+
+### Groq model audit
+
+`llama-3.3-70b-versatile` deprecated and gone from the API. Live models as of
+2026-08-30:
+
+| ID | Notes |
+|---|---|
+| `openai/gpt-oss-120b` | Flagship — what check mode uses |
+| `openai/gpt-oss-20b` | Faster, lower token cost |
+| `qwen/qwen3.6-27b` | Reasoning (vision capable) — high daily token cost |
+| `qwen/qwen3.8-27b` | Newer reasoning model |
+| `groq/compound` / `groq/compound-mini` | Agentic — built-in web search + code |
+| `whisper-large-v3` / `v3-turbo` | Speech to text |
+
+`core/llm/client.py` passes model strings straight through — no changes needed.
+`GROQ_VISION_MODEL` in `core/vision/image_handler.py` remains `qwen/qwen3.6-27b`
+(still available and vision-capable).
+
+### Hint ladder eval — 2/5 (40%)
+
+First full run with `openai/gpt-oss-120b`. Previous qwen run hit the 200k daily
+token limit after one case.
+
+Sub-scores:
+- hints differ: 5/5
+- rung 1 withholds concept: 4/5
+- **rung 2 names concept: 4/5** (was 2/5 — prompt change last session worked)
+- answer held back: 4/5
+
+Three failures:
+1. **h2 quadratic factorising** — rung 1 leaked 'add' and 'pair'. Model said
+   "What *pair* of numbers *adds* to 5…" — structural hints, not concept names,
+   but the prompt only said "no method, operation, concept, or step." Added
+   an explicit ban on structural/operation vocabulary to rung 1.
+2. **h3 cell biology** — rung 2 correctly named 'chloroplast', but the eval's
+   "answer held back" check failed because for this question the concept *is*
+   the answer. Structural tension in the eval design, not a prompt bug.
+3. **h5 percentage change** — rung 2 said "Use the percent-change formula" —
+   valid concept name, but the eval checks for 'divide'/'difference'/'ratio'
+   specifically. Strengthened rung 2 to say "name the specific operation or
+   term, not just the formula name."
+
+Prompt fix applied to `core/prompts.py` `HINT_LADDER`. Re-eval pending.
+
+### Re-ingest — 4442 chunks
+
+Re-ran with `--vision --provider groq` after the junk-ratio fix. Up from 4426.
+AQA Maths Paper 1 now contributing chunks (previously 0 due to only triggering
+on blank pages, not high-junk pages).
+
+### Known issues
+- **Hint ladder** — 10/10 (100%) confirmed on repeat-2 run with openai/gpt-oss-120b
+- **AWS** — nothing deployed; hard competition requirement
+- **COOL benchmark** — not started; needs Graviton EC2 instance
+- **Live bounding boxes** — API returns boxes, UI does not render them
+- **Teacher progress UI** — route exists, not wired
+- **Env var paths** — `data/chroma` and `.logs/users.db` hardcoded; Docker prep
+  requires configurable DATA_DIR / DB_DIR
+
+### Next
+1. Re-run hint ladder: `.venv/bin/python -m evals.learn --provider groq --model "openai/gpt-oss-120b" --jobs 1`
+2. Make DB paths configurable via env vars (Docker prep)
+3. Live bounding box display in step checker UI
+4. Teacher progress UI
+5. Dockerfile → ECR → ECS Fargate → S3 → RDS
+6. Graviton + COOL benchmark
+
+---
+
 ## Session 17 — 2026-08-30
 
 ### Maths PDF vision path — completed

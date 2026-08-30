@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Number",
+    "subtopics": ["fractions", "percentages", "ratio", "powers and roots", "standard form", "surds"],
+    "objectives": ["Convert between fractions, decimals and percentages", "Calculate percentage change", "Simplify ratios", "Use index laws", "Write numbers in standard form", "Simplify surds"]
+  },
+  {
+    "name": "Algebra",
+    "subtopics": ["expanding brackets", "factorising", "solving equations", "simultaneous equations", "sequences", "inequalities"],
+    "objectives": ["Expand and factorise expressions", "Solve linear and quadratic equations", "Solve simultaneous equations", "Find the nth term of a sequence", "Solve and represent inequalities"]
+  },
+  {
+    "name": "Graphs",
+    "subtopics": ["straight line graphs", "quadratic graphs", "gradient", "y-intercept", "distance-time graphs", "velocity-time graphs"],
+    "objectives": ["Find gradient and y-intercept", "Draw and interpret y = mx + c", "Sketch quadratic curves", "Read distance-time and velocity-time graphs"]
+  },
+  {
+    "name": "Geometry",
+    "subtopics": ["angles", "triangles", "circles", "Pythagoras theorem", "trigonometry", "vectors", "transformations"],
+    "objectives": ["Apply angle rules", "Use Pythagoras theorem", "Apply SOHCAHTOA", "Calculate arc length and sector area", "Describe and perform transformations", "Add and subtract vectors"]
+  },
+  {
+    "name": "Statistics and Probability",
+    "subtopics": ["mean", "median", "mode", "range", "probability", "histograms", "cumulative frequency", "box plots"],
+    "objectives": ["Calculate averages and spread", "Construct and read histograms", "Find probabilities of combined events", "Interpret cumulative frequency graphs and box plots"]
+  }
+]

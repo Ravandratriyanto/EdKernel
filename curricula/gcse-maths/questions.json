@@ -1,0 +1,122 @@
+[
+  {
+    "text": "What is 3/8 expressed as a decimal?",
+    "answer": "0.375",
+    "topic": "Number",
+    "options": ["A) 0.25", "B) 0.375", "C) 0.38", "D) 0.3"]
+  },
+  {
+    "text": "A jacket costs £80. It is reduced by 35%. What is the sale price?",
+    "answer": "£52",
+    "topic": "Number",
+    "options": ["A) £28", "B) £45", "C) £52", "D) £55"]
+  },
+  {
+    "text": "Write 0.000047 in standard form.",
+    "answer": "4.7 × 10⁻⁵",
+    "topic": "Number",
+    "options": ["A) 4.7 × 10⁴", "B) 47 × 10⁻⁶", "C) 4.7 × 10⁻⁵", "D) 0.47 × 10⁻⁴"]
+  },
+  {
+    "text": "Simplify √50.",
+    "answer": "5√2",
+    "topic": "Number",
+    "options": ["A) 25√2", "B) 5√2", "C) 10√5", "D) 2√25"]
+  },
+  {
+    "text": "Expand and simplify (x + 3)(x − 5).",
+    "answer": "x² − 2x − 15",
+    "topic": "Algebra",
+    "options": ["A) x² + 2x − 15", "B) x² − 2x − 15", "C) x² − 8x − 15", "D) x² − 2x + 15"]
+  },
+  {
+    "text": "Factorise x² − 9.",
+    "answer": "(x + 3)(x − 3)",
+    "topic": "Algebra",
+    "options": ["A) (x − 3)²", "B) (x + 9)(x − 1)", "C) (x + 3)(x − 3)", "D) (x − 3)(x + 3) only when x > 0"]
+  },
+  {
+    "text": "Solve 3x + 7 = 22.",
+    "answer": "x = 5",
+    "topic": "Algebra",
+    "options": ["A) x = 3", "B) x = 5", "C) x = 7", "D) x = 9"]
+  },
+  {
+    "text": "Solve the simultaneous equations: 2x + y = 10 and x − y = 2.",
+    "answer": "x = 4, y = 2",
+    "topic": "Algebra",
+    "options": ["A) x = 3, y = 4", "B) x = 4, y = 2", "C) x = 5, y = 0", "D) x = 6, y = −2"]
+  },
+  {
+    "text": "The nth term of a sequence is 4n − 1. What is the 10th term?",
+    "answer": "39",
+    "topic": "Algebra",
+    "options": ["A) 40", "B) 41", "C) 39", "D) 43"]
+  },
+  {
+    "text": "A straight line has gradient 3 and passes through (0, −2). What is its equation?",
+    "answer": "y = 3x − 2",
+    "topic": "Graphs",
+    "options": ["A) y = −2x + 3", "B) y = 3x + 2", "C) y = 3x − 2", "D) y = 2x − 3"]
+  },
+  {
+    "text": "Find the gradient of the line joining (1, 4) and (5, 12).",
+    "answer": "2",
+    "topic": "Graphs",
+    "options": ["A) 0.5", "B) 4", "C) 2", "D) 8"]
+  },
+  {
+    "text": "A triangle has sides 6 cm, 8 cm and a right angle between them. Find the hypotenuse.",
+    "answer": "10 cm",
+    "topic": "Geometry",
+    "options": ["A) 7 cm", "B) 10 cm", "C) 12 cm", "D) 14 cm"]
+  },
+  {
+    "text": "In a right-angled triangle, the opposite side is 5 cm and the hypotenuse is 13 cm. Find sin(θ).",
+    "answer": "5/13",
+    "topic": "Geometry",
+    "options": ["A) 13/5", "B) 12/13", "C) 5/12", "D) 5/13"]
+  },
+  {
+    "text": "A circle has radius 7 cm. What is its circumference? (Give your answer in terms of π.)",
+    "answer": "14π cm",
+    "topic": "Geometry",
+    "options": ["A) 7π cm", "B) 49π cm", "C) 14π cm", "D) 28π cm"]
+  },
+  {
+    "text": "A sector has radius 6 cm and angle 90°. What is its area? (Give in terms of π.)",
+    "answer": "9π cm²",
+    "topic": "Geometry",
+    "options": ["A) 36π cm²", "B) 6π cm²", "C) 9π cm²", "D) 3π cm²"]
+  },
+  {
+    "text": "The mean of 5 numbers is 12. Four of the numbers are 10, 14, 9 and 15. What is the fifth number?",
+    "answer": "12",
+    "topic": "Statistics and Probability",
+    "options": ["A) 10", "B) 11", "C) 12", "D) 13"]
+  },
+  {
+    "text": "A bag contains 3 red, 5 blue and 2 green balls. A ball is chosen at random. What is the probability it is blue?",
+    "answer": "1/2",
+    "topic": "Statistics and Probability",
+    "options": ["A) 1/5", "B) 5/8", "C) 1/2", "D) 3/10"]
+  },
+  {
+    "text": "Two fair coins are tossed. What is the probability of getting exactly one head?",
+    "answer": "1/2",
+    "topic": "Statistics and Probability",
+    "options": ["A) 1/4", "B) 3/4", "C) 1/2", "D) 2/3"]
+  },
+  {
+    "text": "Solve x² − 5x + 6 = 0.",
+    "answer": "x = 2 or x = 3",
+    "topic": "Algebra",
+    "options": ["A) x = 1 or x = 6", "B) x = −2 or x = −3", "C) x = 2 or x = 3", "D) x = 3 or x = −2"]
+  },
+  {
+    "text": "A velocity-time graph shows a straight line from (0, 0) to (6, 30). What is the acceleration?",
+    "answer": "5 m/s²",
+    "topic": "Graphs",
+    "options": ["A) 30 m/s²", "B) 0.2 m/s²", "C) 5 m/s²", "D) 180 m/s²"]
+  }
+]

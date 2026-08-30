@@ -1,0 +1,11 @@
+{
+  "id": "gcse-maths",
+  "name": "GCSE Mathematics",
+  "level": "GCSE",
+  "subjects": ["algebra", "geometry", "statistics", "number", "calculus"],
+  "tutor_style": "Socratic",
+  "prompt_flavour": "GCSE Mathematics exam preparation",
+  "collection": "gcse_maths",
+  "reference_dir": "data/reference",
+  "papers_dir": "data/papers"
+}

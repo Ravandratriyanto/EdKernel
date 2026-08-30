@@ -12,6 +12,8 @@ data/papers/
 .logs/
 training/out/
 training/data/
+# Papers are large PDFs — re-ingested at deploy time, not baked into the image.
+curricula/*/papers/
 
 # Local only.
 Pictures/

@@ -1,29 +1,17 @@
-"""Accounts and login sessions — the prerequisite for a real `user_id`.
-
-Phase B logs every turn with `user_id=None`, and the chat sidebar shows every
-session on the server to anyone who opens the page. This is what makes that
-column mean something.
-
-Passwords are stored as scrypt hashes. Session tokens are stored only as a
-hash of the token, so a leaked database yields no working cookies.
-"""
-
 import hashlib
 import secrets
 import sqlite3
 import time
+import os
 from pathlib import Path
-
-
-DB_PATH = Path(__file__).parent / ".logs" / "users.db"
-
 
 
 _N, _R, _P, _DKLEN, _SALT_BYTES = 2 ** 14, 8, 1, 32, 16
 
 SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 MIN_PASSWORD_LENGTH = 8
-
+_DB_DIR = Path(os.getenv("DB_DIR", str(Path(__file__).parent / ".logs")))
+DB_PATH = _DB_DIR / "users.db"
 VALID_ROLES = ("admin", "teacher", "student")
 
 
@@ -388,3 +376,4 @@ def get_all_progress(curriculum: str) -> list[dict]:
     finally:
         conn.close()
     return [dict(r) for r in rows]
+
