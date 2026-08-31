@@ -2781,3 +2781,75 @@ know one subject.
    admin users only.
 4. Progress tracker — per-topic, per-student mastery stored in the session log
 5. Assessment mode routing — manifest field selects exact / semantic / step-by-step
+
+---
+
+## Session 18 — 2026-08-31
+
+### GCSE Mathematics curriculum
+
+New curriculum at `curricula/gcse-maths/`:
+
+- `manifest.json` — id `gcse-maths`, name "GCSE Mathematics", GCSE level, Socratic tutor style
+- `topics.json` — 5 topics: Number, Algebra, Graphs, Geometry, Statistics and Probability. Each with subtopics and learning objectives
+- `questions.json` — 20 multiple-choice questions covering all 5 topics. Each has `text`, `answer`, `topic`, and `options` (A/B/C/D). Verified by hand: standard form, surds, quadratic factorisation, simultaneous equations, Pythagoras, trigonometry, probability, velocity-time graphs
+
+### Flashcard system with spaced repetition
+
+Replaced the static browse-only Questions tab with a two-mode panel:
+
+**Browse mode** — unchanged: shows all questions as cards, with the add-question form at the bottom.
+
+**Flashcards mode** — flip-card UX:
+- Progress bar across the top showing position in the deck
+- Card flips on click (CSS 3D `rotateY` transform, 0.5s transition)
+- After flip: three rating buttons — "No idea" / "Nearly" / "Got it!"
+- End screen shows session score as a percentage plus per-rating counts
+- "Go again" reshuffles and restarts
+
+**Spaced repetition** — ratings stored in `localStorage` under key `fc_sr_<curriculumId>`. On each session the deck is sorted by priority: never-seen first, then no-idea, then nearly, then got-it. Within a bucket the order is random. No server changes needed.
+
+### Auth disabled for development
+
+`settings.json` written with `auth_required: false` and `rate_limiting: false`. The `_load_user` hook now returns `_DEV_USER` for every request without checking cookies. No `DEV_BYPASS_AUTH` env var needed.
+
+`#auth-gate` starts hidden (`class="hidden"`) in the HTML. If `/api/me` fails it becomes visible; if it succeeds (always, with auth off) the page goes straight to the class list. No login flash.
+
+### Network access
+
+`app.run` changed from default (127.0.0.1) to `host='0.0.0.0'`. App accessible on the local network at `192.168.100.30:5000`.
+
+Discovered the browser on a second laptop was served a 304 (cached old page). Fixed by adding `Cache-Control: no-store` to the `/` route response. Fresh page guaranteed on every load.
+
+### Bugs fixed
+
+**`normaliseMath` crash** — `data.response` was undefined when `/api/start` returned an error JSON. `normaliseMath(undefined)` called `.split()` on undefined, throwing in `appendBubble`. The throw was caught, but the catch itself called `appendBubble` again, producing two identical error bubbles. Fixed with:
+- `if (!text) return '';` guard at the top of `normaliseMath`
+- `(text || '')` fallbacks in the `extractOptions` and `displayText` lines of `appendBubble`
+- Explicit `data.error` check in `startLearn` before calling `appendBubble(data.response)` — server errors now show a plain message and re-enable the Start button cleanly
+
+**`/favicon.ico` 500** — no route existed, Flask threw. Added an empty 204 route.
+
+### LLM architecture discussion
+
+Current `core/llm/client.py` has two providers: `groq` and `ollama`. Adding a third (Bedrock, OpenAI, Anthropic) requires adding a new function and branch — no abstraction exists yet. Planned: add AWS Bedrock as a provider to tick the competition's AWS requirement (10% of score). Groq stays as the live inference engine; Bedrock is the AWS-check integration.
+
+Groq model catalogue continues to change without warning. Current default: `openai/gpt-oss-120b`.
+
+### Known issues
+
+- **AWS** — nothing deployed; hard competition requirement
+- **COOL benchmark** — not started
+- **Live bounding boxes** — API returns them, UI does not render them
+- **Teacher progress UI** — route exists, no HTML
+- **Manim video renderer** — decided as headline multi-agent feature; not started
+- **GCSE Maths RAG** — `curricula/gcse-maths/` has no PDFs; ChromaDB collection not ingested. Run `python -m core.rag.ingest --curriculum gcse-maths` when papers are added
+
+### Next
+
+1. AWS Bedrock provider in `core/llm/client.py` (competition AWS requirement)
+2. Docker → ECR → ECS Fargate
+3. Live bounding box display in step checker UI
+4. Teacher progress UI
+5. Manim video renderer (multi-agent, innovation score)
+6. Graviton + COOL benchmark

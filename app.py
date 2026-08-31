@@ -404,7 +404,13 @@ def _question_pages(data: bytes, budget: int = 7000) -> tuple[bool, str]:
 
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    resp = send_from_directory("static", "index.html")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
 
 
 
@@ -2011,4 +2017,4 @@ def api_dev_put_settings():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, use_reloader=False)
+    app.run(host='0.0.0.0', debug=True, port=5000, use_reloader=False)

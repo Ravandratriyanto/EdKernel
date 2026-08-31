@@ -777,11 +777,101 @@
       border-radius: 6px; padding: 7px 9px;
     }
     #whoami { font-size: 0.78rem; color: rgba(255,255,255,0.75); margin-right: 4px; }
+    
+.q-mode-bar {
+  display: flex; gap: 4px; padding: 12px 16px 0;
+}
+.q-mode-btn {
+  flex: 1; padding: 7px 0; border: 1.5px solid #e5e7eb;
+  border-radius: 8px; background: white; cursor: pointer;
+  font-size: 0.83rem; font-weight: 600; color: #6b7280;
+  transition: all 0.15s;
+}
+.q-mode-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; }
+.q-mode-btn:hover:not(.active) { border-color: #4f46e5; color: #4f46e5; }
+
+/* ---- flashcard ---- */
+.fc-progress-wrap {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px 4px;
+}
+.fc-progress-bar {
+  flex: 1; height: 5px; background: #e5e7eb;
+  border-radius: 99px; overflow: hidden;
+}
+.fc-progress-bar div {
+  height: 100%; background: #4f46e5;
+  border-radius: 99px; transition: width 0.4s;
+}
+#fc-progress-text { font-size: 0.75rem; color: #9ca3af; white-space: nowrap; }
+
+.fc-scene { perspective: 1000px; padding: 16px; height: 220px; }
+.fc-card {
+  width: 100%; height: 100%;
+  position: relative; transform-style: preserve-3d;
+  transition: transform 0.5s; cursor: pointer;
+}
+.fc-card.flipped { transform: rotateY(180deg); }
+.fc-front, .fc-back {
+  position: absolute; inset: 0; backface-visibility: hidden;
+  border-radius: 14px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 20px; text-align: center;
+}
+.fc-front {
+  background: white; border: 2px solid #e5e7eb;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  font-size: 0.95rem; font-weight: 500; color: #1a1a2e; line-height: 1.5;
+}
+.fc-back {
+  background: #f0fdf4; border: 2px solid #22c55e;
+  transform: rotateY(180deg); gap: 8px;
+}
+#fc-answer { font-size: 1rem; font-weight: 700; color: #15803d; }
+#fc-topic {
+  font-size: 0.72rem; color: #6b7280; background: #e5e7eb;
+  border-radius: 99px; padding: 2px 10px; margin-top: 4px;
+}
+.fc-hint {
+  text-align: center; font-size: 0.78rem; color: #9ca3af; margin: 0; padding: 4px 0;
+}
+.fc-rate-btns { display: flex; gap: 10px; padding: 10px 16px; }
+.fc-btn {
+  flex: 1; padding: 10px 0; border: none; border-radius: 10px;
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+}
+.fc-btn:hover { opacity: 0.85; }
+.fc-no-idea { background: #fee2e2; color: #dc2626; }
+.fc-nearly  { background: #fef9c3; color: #ca8a04; }
+.fc-got-it  { background: #dcfce7; color: #16a34a; }
+
+.fc-done {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 32px 16px; gap: 16px;
+}
+.fc-done-score { font-size: 2.5rem; font-weight: 800; color: #4f46e5; }
+.fc-done-stats {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+}
+.fc-done-stats span {
+  font-size: 0.82rem; padding: 4px 12px;
+  border-radius: 99px; font-weight: 500;
+}
+.fc-stat-got    { background: #dcfce7; color: #16a34a; }
+.fc-stat-nearly { background: #fef9c3; color: #ca8a04; }
+.fc-stat-noidea { background: #fee2e2; color: #dc2626; }
+.fc-restart {
+  background: #4f46e5; color: white; border: none;
+  border-radius: 10px; padding: 10px 28px;
+  font-size: 0.9rem; font-weight: 600; cursor: pointer;
+}
+.fc-restart:hover { background: #4338ca; }
   </style>
 </head>
 <body>
 
-<div id="auth-gate">
+<div id="auth-gate" class="hidden">
   <div id="auth-card">
     <h2 id="auth-title">Log in</h2>
     <p id="auth-sub">Your lessons are private to your account.</p>
@@ -860,18 +950,58 @@
 
     <!-- questions tab -->
     <div id="canvas-questions" class="hidden">
-      <div id="canvas-questions-list"></div>
-      <div id="canvas-q-form">
-        <h3>Add a question</h3>
-        <textarea id="canvas-q-text" placeholder="Write a question for your classmates..."></textarea>
-        <input type="text" id="canvas-q-answer" placeholder="Answer (optional)" />
-        <div id="canvas-q-img-preview">
-          <img id="canvas-q-img-thumb" src="" alt="">
-          <button id="canvas-q-img-remove" onclick="removeCanvasQImage()">&#215;</button>
+      <div class="q-mode-bar">
+        <button class="q-mode-btn active" id="q-mode-browse"   onclick="setQMode('browse')">Browse</button>
+        <button class="q-mode-btn"        id="q-mode-practice" onclick="setQMode('practice')">Flashcards</button>
+      </div>
+
+      <div id="q-browse-view">
+        <div id="canvas-questions-list"></div>
+        <div id="canvas-q-form">
+          <h3>Add a question</h3>
+          <textarea id="canvas-q-text" placeholder="Write a question for your classmates..."></textarea>
+          <input type="text" id="canvas-q-answer" placeholder="Answer (optional)" />
+          <div id="canvas-q-img-preview">
+            <img id="canvas-q-img-thumb" src="" alt="">
+            <button id="canvas-q-img-remove" onclick="removeCanvasQImage()">&#215;</button>
+          </div>
+          <div class="canvas-q-row">
+            <button id="btn-canvas-q-img" onclick="pickCanvasQImage()">&#128248; Image</button>
+            <button id="btn-canvas-q-submit" onclick="submitCanvasQuestion()">Add question</button>
+          </div>
         </div>
-        <div class="canvas-q-row">
-          <button id="btn-canvas-q-img" onclick="pickCanvasQImage()">&#128248; Image</button>
-          <button id="btn-canvas-q-submit" onclick="submitCanvasQuestion()">Add question</button>
+      </div>
+
+      <div id="q-practice-view" class="hidden">
+        <div class="fc-progress-wrap">
+          <div class="fc-progress-bar"><div id="fc-progress-fill"></div></div>
+          <span id="fc-progress-text">1 / ?</span>
+        </div>
+        <div id="fc-flashcard-area">
+          <div class="fc-scene">
+            <div class="fc-card" id="fc-card" onclick="flipCard()">
+              <div class="fc-front"><div id="fc-question"></div></div>
+              <div class="fc-back">
+                <div id="fc-answer"></div>
+                <div id="fc-topic"></div>
+              </div>
+            </div>
+          </div>
+          <p id="fc-hint" class="fc-hint">Tap card to flip</p>
+          <div id="fc-rate-btns" class="hidden fc-rate-btns">
+            <button class="fc-btn fc-no-idea" onclick="rateCard('no-idea')">No idea</button>
+            <button class="fc-btn fc-nearly"  onclick="rateCard('nearly')">Nearly</button>
+            <button class="fc-btn fc-got-it"  onclick="rateCard('got-it')">Got it!</button>
+          </div>
+        </div>
+        <div id="fc-done" class="hidden fc-done">
+          <div class="fc-done-score" id="fc-done-pct"></div>
+          <div class="fc-done-stats">
+            <span class="fc-stat-got">Got it: <b id="fc-done-got"></b></span>
+            <span class="fc-stat-nearly">Nearly: <b id="fc-done-nearly"></b></span>
+            <span class="fc-stat-noidea">No idea: <b id="fc-done-noidea"></b></span>
+          </div>
+          <button class="fc-restart" onclick="setQMode('practice')">Go again</button>
         </div>
       </div>
     </div>
@@ -1461,6 +1591,13 @@
       });
       const data = await res.json();
       removeThinking();
+      if (data.error) {
+        appendBubble('tutor', `Sorry, something went wrong: ${data.error}`);
+        document.getElementById('topic-row').classList.remove('hidden');
+        document.getElementById('btn-start').disabled = false;
+        busy = false;
+        return;
+      }
       messages = data.messages;
       appendBubble('tutor', data.response);
       loadSessions();          // the lesson now has log rows — show it in the sidebar
@@ -1614,43 +1751,6 @@
       bubble.className = 'message tutor';
       bubble.innerHTML = `<div class="bubble">${html}</div>`;
       document.getElementById('chat-area').appendChild(bubble);
-
-      if (data.boxes && data.boxes.length > 0) {
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'position:relative;display:inline-block;max-width:100%;margin-top:8px';
-
-        const img = new Image();
-        img.src = `data:image/jpeg;base64,${attach.b64}`;
-        img.style.cssText = 'max-width:100%;display:block;border-radius:8px';
-        wrapper.appendChild(img);
-
-        const canvas = document.createElement('canvas');
-        canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none';
-        wrapper.appendChild(canvas);
-
-        img.onload = () => {
-          canvas.width  = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx  = canvas.getContext('2d');
-          const size = Math.max(10, canvas.width / 40);
-          data.boxes.forEach(([x, y, w, h], i) => {
-            const isErr = i === data.error_index;
-            ctx.strokeStyle = isErr ? '#ef4444' : '#22c55e';
-            ctx.lineWidth   = Math.max(2, canvas.width / 200);
-            ctx.strokeRect(x, y, w, h);
-            ctx.fillStyle = isErr ? '#ef4444' : '#22c55e';
-            ctx.font      = `bold ${size}px sans-serif`;
-            ctx.fillText(`Line ${i + 1}`, x + 4, y > size + 4 ? y - 4 : y + size + 4);
-          });
-        };
-
-        const boxBubble = document.createElement('div');
-        boxBubble.className = 'message tutor';
-        boxBubble.innerHTML = '<div class="bubble" style="padding:8px"></div>';
-        boxBubble.querySelector('.bubble').appendChild(wrapper);
-        document.getElementById('chat-area').appendChild(boxBubble);
-      }
-
       document.getElementById('chat-area').scrollTop = 9e9;
 
     } catch (e) {
@@ -1659,6 +1759,7 @@
     }
     busy = false;
   }
+  
 
   function renderMathInPage() { /* KaTeX onload hook — nothing needed at page load */ }
 
@@ -2096,22 +2197,7 @@
   function enterApp(user) {
     document.getElementById('whoami').textContent = user.username;
     document.getElementById('auth-gate').classList.add('hidden');
-    const initCid = new URLSearchParams(location.search).get('c');
-    if (initCid) {
-      fetch('/api/curricula')
-        .then(r => r.json())
-        .then(list => {
-          const c = list.find(x => x.id === initCid);
-          if (c) {
-            currentCurriculumId = c.id;
-            history.replaceState({cid: c.id}, '', '/?c=' + encodeURIComponent(c.id));
-            showCanvasView(c);
-          } else { showClassesView(); }
-        })
-        .catch(() => showClassesView());
-    } else {
-      showClassesView();
-    }
+    showClassesView();
   }
 
   function _hideAllViews() {
@@ -2173,11 +2259,9 @@
   }
 
   let _canvasManifest = null;
-  let _popstateActive = false;
 
   function openClass(curriculum) {
     currentCurriculumId = curriculum.id;
-    history.pushState({cid: curriculum.id}, '', '/?c=' + encodeURIComponent(curriculum.id));
     showCanvasView(curriculum);
   }
 
@@ -2416,7 +2500,6 @@
     currentCurriculumId = '';
     currentSessionOpen  = null;
     document.getElementById('canvas-view').classList.add('hidden');
-    if (!_popstateActive) history.replaceState(null, '', '/');
     showClassesView();
   }
 
@@ -2535,25 +2618,105 @@
 
   fetch('/api/me')
     .then(r => r.json())
-    .then(d => { if (d.user) enterApp(d.user); })
-    .catch(() => {});
+    .then(d => {
+      if (d.user) enterApp(d.user);
+      else document.getElementById('auth-gate').classList.remove('hidden');
+    })
+    .catch(() => document.getElementById('auth-gate').classList.remove('hidden'));
 
-  window.addEventListener('popstate', async (e) => {
-    _popstateActive = true;
-    try {
-      if (e.state?.cid) {
-        const res  = await fetch('/api/curricula');
-        const list = await res.json();
-        const c    = list.find(x => x.id === e.state.cid);
-        if (c) { currentCurriculumId = c.id; showCanvasView(c); }
-        else backToClasses();
-      } else {
-        backToClasses();
-      }
-    } finally {
-      _popstateActive = false;
-    }
-  });
+  // ── Flashcards / Spaced Repetition ─────────────────────────────────────────
+
+  let fcDeck    = [];
+  let fcSession = [];
+  let fcIdx     = 0;
+  let fcFlipped = false;
+  let fcStats   = { got: 0, nearly: 0, noIdea: 0 };
+
+  function srKey()   { return `fc_sr_${currentCurriculumId}`; }
+  function loadSR()  { try { return JSON.parse(localStorage.getItem(srKey()) || '{}'); } catch { return {}; } }
+  function saveSR(d) { localStorage.setItem(srKey(), JSON.stringify(d)); }
+
+  function srScore(r) {
+    if (!r)                     return 0;  // never seen → highest priority
+    if (r.rating === 'no-idea') return 1;
+    if (r.rating === 'nearly')  return 2;
+    return 3;                              // got-it → comes last
+  }
+
+  async function startPractice() {
+    document.getElementById('fc-done').classList.add('hidden');
+    document.getElementById('fc-flashcard-area').classList.remove('hidden');
+    const res = await fetch(`/api/curricula/${currentCurriculumId}/questions`);
+    const raw = await res.json();
+    fcDeck = raw.map((q, i) => ({
+      id:     q.id   || i,
+      text:   q.text || q.question || '',
+      answer: q.answer || '',
+      topic:  q.topic  || '',
+    }));
+    const sr = loadSR();
+    fcSession = [...fcDeck].sort((a, b) => {
+      const diff = srScore(sr[a.id]) - srScore(sr[b.id]);
+      return diff !== 0 ? diff : Math.random() - 0.5;
+    });
+    fcIdx   = 0;
+    fcStats = { got: 0, nearly: 0, noIdea: 0 };
+    showFlashcard();
+  }
+
+  function showFlashcard() {
+    if (fcIdx >= fcSession.length) { showFCDone(); return; }
+    const q = fcSession[fcIdx];
+    fcFlipped = false;
+    document.getElementById('fc-card').classList.remove('flipped');
+    document.getElementById('fc-question').textContent = q.text;
+    document.getElementById('fc-answer').textContent   = q.answer;
+    document.getElementById('fc-topic').textContent    = q.topic ? `Topic: ${q.topic}` : '';
+    document.getElementById('fc-hint').classList.remove('hidden');
+    document.getElementById('fc-rate-btns').classList.add('hidden');
+    const pct = Math.round((fcIdx / fcSession.length) * 100);
+    document.getElementById('fc-progress-fill').style.width = pct + '%';
+    document.getElementById('fc-progress-text').textContent = `${fcIdx + 1} / ${fcSession.length}`;
+  }
+
+  function flipCard() {
+    if (fcFlipped) return;
+    fcFlipped = true;
+    document.getElementById('fc-card').classList.add('flipped');
+    document.getElementById('fc-hint').classList.add('hidden');
+    document.getElementById('fc-rate-btns').classList.remove('hidden');
+  }
+
+  function rateCard(rating) {
+    const q  = fcSession[fcIdx];
+    const sr = loadSR();
+    sr[q.id] = { rating, ts: Date.now() };
+    saveSR(sr);
+    if (rating === 'got-it')  fcStats.got++;
+    if (rating === 'nearly')  fcStats.nearly++;
+    if (rating === 'no-idea') fcStats.noIdea++;
+    fcIdx++;
+    setTimeout(showFlashcard, 250);
+  }
+
+  function showFCDone() {
+    document.getElementById('fc-flashcard-area').classList.add('hidden');
+    document.getElementById('fc-done').classList.remove('hidden');
+    const total = fcStats.got + fcStats.nearly + fcStats.noIdea;
+    const pct   = total > 0 ? Math.round((fcStats.got / total) * 100) : 0;
+    document.getElementById('fc-done-pct').textContent    = pct + '%';
+    document.getElementById('fc-done-got').textContent    = fcStats.got;
+    document.getElementById('fc-done-nearly').textContent = fcStats.nearly;
+    document.getElementById('fc-done-noidea').textContent = fcStats.noIdea;
+  }
+
+  function setQMode(mode) {
+    document.getElementById('q-browse-view').classList.toggle('hidden',   mode !== 'browse');
+    document.getElementById('q-practice-view').classList.toggle('hidden', mode !== 'practice');
+    document.getElementById('q-mode-browse').classList.toggle('active',   mode === 'browse');
+    document.getElementById('q-mode-practice').classList.toggle('active', mode === 'practice');
+    if (mode === 'practice') startPractice();
+  }
 </script>
 
 <!-- Questions overlay -->

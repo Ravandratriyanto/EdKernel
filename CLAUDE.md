@@ -74,7 +74,7 @@ Report what actually happened, including failures. Do not round a partial result
 
 `llama-3.3-70b-versatile` was deprecated. Current default: `openai/gpt-oss-120b` (OpenAI-compat endpoint via Groq). Check `https://console.groq.com/docs/models` if hitting model errors — the catalogue changes.
 
-## Features built (as of session 17b)
+## Features built (as of session 18)
 
 - **OpenCV 5 pipeline**: rectify → binarise → segment → transcribe → evaluate. Bounding boxes returned to front end and drawn on canvas overlay (green = correct, red = error line).
 - **Maths PDF vision path**: `fitz` converts PDF pages to JPEG at 150 DPI; vision LLM transcribes. Auto-fallback triggers when pypdf returns <100 chars OR `_junk_ratio()` > threshold.
@@ -83,13 +83,19 @@ Report what actually happened, including failures. Do not round a partial result
 - **Hint ladder**: 4-rung escalation. Evaluated at 10/10 on `evals/learn_cases.jsonl`. Rung 1 = no mathematical vocabulary, rung 2 = name the concept, rung 3 = explain + apply.
 - **URL routing**: `openClass()` calls `history.pushState({cid}, '', '/?c=<id>')`. Back button returns to class list. Direct URL `/?c=<id>` auto-opens curriculum after login.
 - **Docker**: `Dockerfile` uses `python:3.12-slim`, gunicorn, `ENV DB_DIR=/app/.logs`, `ENV CHROMA_DIR=/app/data/chroma`, `VOLUME /app/.logs`. Build: `docker build -t edkernel .`
+- **GCSE Mathematics curriculum**: `curricula/gcse-maths/` — manifest, 5-topic `topics.json`, 20-question `questions.json` (MCQ with A/B/C/D options). No PDFs yet; RAG collection not ingested.
+- **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
+- **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
 
-## Pending (as of session 17b)
+## Pending (as of session 18)
 
-- Push to AWS ECR → ECS Fargate + ALB
+- Push to AWS ECR → ECS Fargate + ALB (hard competition requirement)
 - EFS mount for `/app/.logs` and `/app/data/chroma` (SQLite + ChromaDB persistence)
 - Teacher progress UI (`GET /api/teacher/curricula/<cid>/progress` route exists, no HTML yet)
 - Graviton EC2 benchmark (COOL Award — $1,000 prize)
+- Live bounding box display in step checker UI (promised to judges, API returns boxes already)
+- Manim video renderer — multi-agent headline feature; LLM writes Manim Python → renders MP4 → served in chat
+- AWS Bedrock provider in `core/llm/client.py` (tick competition AWS requirement)
 - 5-minute demo video (required for competition submission)
 - Technical report (required for competition submission)
 
@@ -101,6 +107,8 @@ Report what actually happened, including failures. Do not round a partial result
 - The default Groq vision model reasons out loud; `<think>` blocks must be stripped before any downstream use.
 - Past-paper answer keys were wrong 2-in-3 before the verification pass existed. Never trust a generated key without checking.
 - `docker build -t edkernel` without the trailing `.` gives "requires 1 argument" — always add the build context path.
+- `normaliseMath(undefined)` crashes with "Cannot read properties of undefined (reading 'split')". Guard: `if (!text) return '';`. Also check `data.error` before passing `data.response` to `appendBubble` — server errors return `{"error": "..."}` with no `response` field.
+- Browser caches `index.html` aggressively. The `/` route now sets `Cache-Control: no-store`. A stale cached page on another device shows the old UI; fix with hard refresh (`Ctrl+Shift+R`).
 
 ## Competition context
 
