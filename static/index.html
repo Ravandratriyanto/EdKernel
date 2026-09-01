@@ -1581,6 +1581,7 @@
 
     const attach = attachment;
     clearAttachment();
+    appendBubble('student', topic, attach);
     appendThinking();
 
     try {
@@ -2207,6 +2208,7 @@
   }
 
   function showClassesView() {
+    history.replaceState({ view: 'classes' }, '', '/');
     _hideAllViews();
     document.getElementById('classes-view').classList.remove('hidden');
     document.getElementById('btn-back').classList.add('hidden');
@@ -2262,6 +2264,7 @@
 
   function openClass(curriculum) {
     currentCurriculumId = curriculum.id;
+    history.pushState({ view: 'canvas', cid: curriculum.id }, '', '/?c=' + curriculum.id);
     showCanvasView(curriculum);
   }
 
@@ -2502,6 +2505,19 @@
     document.getElementById('canvas-view').classList.add('hidden');
     showClassesView();
   }
+
+  window.addEventListener('popstate', function(e) {
+    const state = e.state;
+    if (!state || state.view === 'classes') {
+      // No app state or explicitly classes — stay in app, show class list
+      if (currentCurriculumId) backToClasses();
+      else history.replaceState({ view: 'classes' }, '', '/');
+    } else if (state.view === 'canvas' && state.cid) {
+      // Back to a curriculum canvas
+      currentCurriculumId = state.cid;
+      backToCanvas();
+    }
+  });
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST' });

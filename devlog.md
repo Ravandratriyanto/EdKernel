@@ -2853,3 +2853,66 @@ Groq model catalogue continues to change without warning. Current default: `open
 4. Teacher progress UI
 5. Manim video renderer (multi-agent, innovation score)
 6. Graviton + COOL benchmark
+
+---
+
+## Session 19 — 2026-09-01
+
+### Prompt rewrite — TUTOR_SYSTEM_PROMPT
+
+The old prompt had grown to ~60 lines of patches on patches with three hard contradictions:
+
+- Line 50 said "always ask a question after a correct answer" — line 59 said "don't end every turn with a question"
+- Concept-intro rule mandated a check question — options rule was ambiguous about whether options were allowed there
+- Celebrate-then-ask rule clashed with the let-them-lead rule for long back-and-forths
+
+Rather than another patch, rewrote `TUTOR_SYSTEM_PROMPT` in `core/prompts.py` from scratch — shorter, structured into labelled sections with clear priority order: CONVERSATION RULES → TEACHING FLOW → EVALUATION SIGNALS → MULTIPLE CHOICE OPTIONS → VISUALS. No contradictions. All prior intent preserved (greeting rule, frustration detection, hint escalation, answer-as-question evaluation, options sparsity, graph blocks).
+
+### Killed extra model calls
+
+Previous architecture fired up to 3 model calls per turn:
+1. Main tutor reply
+2. `_ai_evaluate` — if no signal in the reply, second call to guess correct/wrong
+3. `_verify_math` — if numeric answer and signal was CORRECT, third call to re-solve and possibly override
+
+Problems: same model has correlated failures (verified 50 as correct when answer was 48), net 3–9 second latency on a bad turn, verification override sometimes broke a legitimately correct answer.
+
+Removed both call blocks from `api_reply` in `app.py`. Functions still defined (lines 830, 881) but not called. One model call per turn. Latency back to under 3 seconds.
+
+### Fallback coverage (audit)
+
+Confirmed in place:
+- `_EMPTY_REPLY` dict — tutor reply stripping to empty returns a canned sentence, never an empty bubble
+- `@app.errorhandler(Exception)` — catches all unhandled exceptions, returns JSON 500/503
+- `ConnectionError` → 503 with "Could not reach the model" message
+- RAG retrieval failure silently skipped — lesson still starts
+
+Not yet in place:
+- Frontend toast on 500 from `/api/reply` (spinner hangs, no visible error)
+- Model call timeout (hung request stays hung)
+- Groq 5xx retry
+
+These are deferred to post-AWS.
+
+### Known issues
+
+- No frontend error toast for `/api/reply` 500s
+- No model call timeout
+- No Groq 5xx retry
+- AWS not yet deployed (hard competition requirement, 10% of score)
+- Live bounding boxes not rendered in step checker UI
+- Teacher progress UI HTML not built
+- Manim video renderer not started
+- GCSE Maths RAG collection not ingested (no PDFs in curricula/gcse-maths/)
+
+### Next
+
+1. AWS: Docker → ECR → ECS Fargate + ALB
+2. EFS mount for `/app/.logs` and `/app/data/chroma`
+3. AWS Bedrock provider in `core/llm/client.py` (competition AWS requirement)
+4. Live bounding box display in step checker UI
+5. Teacher progress UI
+6. Manim video renderer
+7. Graviton + COOL benchmark
+8. 5-minute demo video
+9. Technical report

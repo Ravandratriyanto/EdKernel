@@ -601,7 +601,6 @@ def api_reply():
     raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
     response, correct = _tutor_reply(raw)
     messages.append({"role": "assistant", "content": response})
-
     log_turn("reply",
              session_id=data.get("session_id", ""),
              user_id=g.user["id"],
@@ -623,6 +622,7 @@ def api_reply():
         "done": "Topic complete." in response,
         "correct": correct,
     })
+    
 
 
 
@@ -826,6 +826,68 @@ def _transcription_note(attachment: dict, provider: str, model: str, host: str,
 def _strip_images(messages: list) -> list:
     return [{"role": m["role"], "content": m["content"]} for m in messages]
 
+
+def _ai_evaluate(student_input: str, tutor_reply: str, **llm) -> bool | None:
+    """Fallback evaluator when the tutor reply has no [CORRECT]/[WRONG] signal.
+
+    Makes one cheap call asking the model to judge based on the tutor's own
+    wording — if the tutor sounds affirming, it's correct; if it sounds
+    corrective, it's wrong. Returns None on any failure so callers stay
+    fail-open.
+    """
+    msgs = [{"role": "user", "content": (
+        f"A tutor responded to a student.\n\n"
+        f"Student said: {student_input}\n\n"
+        f"Tutor replied: {tutor_reply}\n\n"
+        "Based only on the tutor's reply, was the student's answer correct? "
+        "Reply with exactly one word: CORRECT or WRONG."
+    )}]
+    try:
+        r = chat(msgs, **llm)
+        upper = str(r).upper()
+        if "CORRECT" in upper: return True
+        if "WRONG"   in upper: return False
+    except Exception:
+        pass
+    return None
+
+
+_NUMERIC_RE = re.compile(r'\d')
+
+_FILLER_RE = re.compile(
+    r'\b(is\s+(it|this(\s+the\s+answer)?|that\s+(right|correct))|'
+    r'i\s+think\s+(it\'?s?|the\s+answer\s+is)|'
+    r'the\s+answer\s+is|would\s+it\s+be|so\s+it\'?s?)\b.*$',
+    re.IGNORECASE
+)
+
+def _extract_math(text: str) -> str:
+    """Strip English filler to isolate the mathematical expression."""
+    cleaned = _FILLER_RE.sub('', text).strip().strip(',').strip()
+    return cleaned if cleaned else text.strip()
+
+def _verify_math(student_input: str, messages: list, **llm) -> bool | None:
+    """Independently re-solves when tutor marks a numeric answer correct.
+    Never sees the tutor's verdict — solves from scratch to avoid agreeing blindly.
+    """
+    question = next(
+        (m["content"] for m in reversed(messages) if m["role"] == "assistant"),
+        ""
+    )
+    prompt = (
+        f"A student answered this maths question:\n{question}\n\n"
+        f"Their answer: {student_input}\n\n"
+        "Solve it yourself from scratch. Ignore what anyone else said. "
+        "Is the student's answer correct? Reply with exactly one word: VERIFIED or WRONG."
+    )
+    try:
+        r = chat([{"role": "user", "content": prompt}], **llm)
+        upper = str(r).upper()
+        if "VERIFIED" in upper: return True
+        if "WRONG"   in upper: return False
+    except Exception:
+        pass
+    return None
 
 
 PAPER_DOMAINS = [

@@ -74,7 +74,7 @@ Report what actually happened, including failures. Do not round a partial result
 
 `llama-3.3-70b-versatile` was deprecated. Current default: `openai/gpt-oss-120b` (OpenAI-compat endpoint via Groq). Check `https://console.groq.com/docs/models` if hitting model errors — the catalogue changes.
 
-## Features built (as of session 18)
+## Features built (as of session 19)
 
 - **OpenCV 5 pipeline**: rectify → binarise → segment → transcribe → evaluate. Bounding boxes returned to front end and drawn on canvas overlay (green = correct, red = error line).
 - **Maths PDF vision path**: `fitz` converts PDF pages to JPEG at 150 DPI; vision LLM transcribes. Auto-fallback triggers when pypdf returns <100 chars OR `_junk_ratio()` > threshold.
@@ -87,15 +87,17 @@ Report what actually happened, including failures. Do not round a partial result
 - **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
 - **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
 
-## Pending (as of session 18)
+## Pending (as of session 19)
 
-- Push to AWS ECR → ECS Fargate + ALB (hard competition requirement)
-- EFS mount for `/app/.logs` and `/app/data/chroma` (SQLite + ChromaDB persistence)
+- **AWS** — Docker → ECR → ECS Fargate + ALB (hard competition requirement, 10% of score) — **next priority**
+- EFS mount for `/app/.logs` and `/app/data/chroma` (SQLite + ChromaDB persistence on Fargate)
+- AWS Bedrock provider in `core/llm/client.py` (competition AWS requirement)
+- Frontend error toast for `/api/reply` 500s (spinner hangs silently on model error)
+- Model call timeout + Groq 5xx retry (deferred post-AWS)
 - Teacher progress UI (`GET /api/teacher/curricula/<cid>/progress` route exists, no HTML yet)
 - Graviton EC2 benchmark (COOL Award — $1,000 prize)
-- Live bounding box display in step checker UI (promised to judges, API returns boxes already)
+- Live bounding box display in step checker UI (API returns boxes, UI does not render them)
 - Manim video renderer — multi-agent headline feature; LLM writes Manim Python → renders MP4 → served in chat
-- AWS Bedrock provider in `core/llm/client.py` (tick competition AWS requirement)
 - 5-minute demo video (required for competition submission)
 - Technical report (required for competition submission)
 
@@ -108,6 +110,8 @@ Report what actually happened, including failures. Do not round a partial result
 - Past-paper answer keys were wrong 2-in-3 before the verification pass existed. Never trust a generated key without checking.
 - `docker build -t edkernel` without the trailing `.` gives "requires 1 argument" — always add the build context path.
 - `normaliseMath(undefined)` crashes with "Cannot read properties of undefined (reading 'split')". Guard: `if (!text) return '';`. Also check `data.error` before passing `data.response` to `appendBubble` — server errors return `{"error": "..."}` with no `response` field.
+- `_verify_math` and `_ai_evaluate` are defined in `app.py` but intentionally not called — they caused correlated failures (same model verified its own wrong answer) and added 3–9 s latency. Do not re-enable without switching to a separate verification model.
+- Patching `TUTOR_SYSTEM_PROMPT` incrementally creates contradictions fast. The prompt was rewritten clean in session 19. If adding new rules, check for contradictions with the four labelled sections before committing.
 - Browser caches `index.html` aggressively. The `/` route now sets `Cache-Control: no-store`. A stale cached page on another device shows the old UI; fix with hard refresh (`Ctrl+Shift+R`).
 
 ## Competition context
