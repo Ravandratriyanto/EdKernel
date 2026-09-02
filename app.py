@@ -8,6 +8,7 @@ import json
 import time
 import base64
 import hashlib
+import concurrent.futures
 from pathlib import Path
 from urllib.parse import urlparse
 import requests
@@ -48,13 +49,25 @@ app.register_blueprint(v1)
 
 users.purge_expired()
 
-
 @app.errorhandler(Exception)
 def _unhandled_exception(e):
     app.logger.exception(e)
     if isinstance(e, ConnectionError):
         return jsonify({"error": "Could not reach the model. Is Ollama running?"}), 503
-    return jsonify({"error": "Something went wrong on our end."}), 500
+    try:
+        from groq import APITimeoutError as _GroqTimeout, RateLimitError as _GroqRate
+        if isinstance(e, _GroqTimeout):
+            return jsonify({"error": "The model took too long. Try again."}), 503
+        if isinstance(e, _GroqRate):
+            return jsonify({"error": "Too many requests. Slow down a bit and try again."}), 429
+    except ImportError:
+        pass
+    return jsonify({"error": "Something went wrong on our end. My bad gng"}), 500
+
+@app.errorhandler(505)
+def _http_version_not_supported(e):
+    return jsonify({"error": "HTTP version not supported.THIS IS NOT OUR FAULT"}), 505
+
 
 SESSION_COOKIE = "ollm_session"
 
@@ -69,11 +82,10 @@ COOKIE_SECURE = os.environ.get("OLLM_HTTPS", "").strip().lower() in {"1", "true"
 
 _login_limiter = RateLimiter(max_failures=8, window_seconds=15 * 60)
 
-# Per-curriculum ingest state. Lives in process memory — resets on restart.
-# {"sat-alevel": {"state": "idle"|"running"|"error", "chunks": N}}
+
 _INGEST_STATUS: dict = {}
 
-# 20 LLM calls per user per minute — generous for a real lesson, blocks bots.
+
 _llm_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
 
 
@@ -555,6 +567,7 @@ def api_reply():
     data         = request.json
     messages     = data.get("messages", [])
     user_input   = data.get("input", "")
+    user_input = user_input[:2000]
     provider     = data.get("provider", "ollama")
     model        = data.get("model", "gemma4")
     host         = data.get("host", "http://localhost:11434")
@@ -598,8 +611,45 @@ def api_reply():
 
     messages.append(user_msg)
     started = time.monotonic()
-    raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
-    response, correct = _tutor_reply(raw)
+
+    llm = dict(model=model, host=host, provider=provider, api_key=api_key)
+    last_question = next(
+        (m["content"] for m in reversed(messages[:-1]) if m["role"] == "assistant"),
+        ""
+    )
+
+    def _tutor_call():
+        return _tutor_reply(chat(messages, **llm))
+
+    def _eval_call():
+        if not user_input.strip():
+            print("EVAL: empty input, skipping")
+            return None
+        try:
+            r = chat([{"role": "user", "content": (
+                f"A student was asked this question:\n{last_question}\n\n"
+                f"The student replied: {user_input}\n\n"
+                "Is the student's reply an attempt to answer the question (a value, calculation, or factual response)?\n"
+                "- If YES and the answer is correct: reply CORRECT\n"
+                "- If YES and the answer is wrong: reply WRONG\n"
+                "- If NO (greeting, 'idk', frustration, off-topic, asking a question): reply SKIP\n"
+                "Reply with exactly one word."
+            )}], **llm)
+            upper = str(r).upper()
+            if "SKIP"    in upper: return None
+            if "WRONG"   in upper: return False
+            if "CORRECT" in upper: return True
+        except Exception as e:
+            print(f"EVAL ERR: {e}")
+        return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        tf = pool.submit(_tutor_call)
+        ef = pool.submit(_eval_call)
+        response, tutor_signal = tf.result()
+        eval_signal = ef.result()
+
+    correct = tutor_signal if tutor_signal is not None else eval_signal
     messages.append({"role": "assistant", "content": response})
     log_turn("reply",
              session_id=data.get("session_id", ""),
@@ -609,7 +659,7 @@ def api_reply():
              input=user_input, output=response,
              correct=correct, wrong_streak=wrong_streak,
              attachment=attachment_meta(attachment),
-             tokens=getattr(raw, "usage", {}),
+             tokens={},
              latency_ms=round((time.monotonic() - started) * 1000))
 
     cid = (data.get("curriculum_id") or "").strip()
@@ -865,6 +915,34 @@ def _extract_math(text: str) -> str:
     """Strip English filler to isolate the mathematical expression."""
     cleaned = _FILLER_RE.sub('', text).strip().strip(',').strip()
     return cleaned if cleaned else text.strip()
+
+_NUMBER_TOKEN_RE = re.compile(r'[-+]?\d+(?:[./]\d+)?')
+
+def _parse_number(s: str):
+    """Parse a student answer string into a fractions.Fraction, or None if unparseable."""
+    import fractions
+    s = s.strip().rstrip('%').strip()
+    try:
+        return fractions.Fraction(s)
+    except Exception:
+        return None
+
+def _cross_check(student_input: str, tutor_reply: str) -> bool | None:
+    """Cross-check a numeric student answer against the last number in the tutor's shown working.
+
+    Only fires when tutor said [CORRECT]. Returns False if the numbers disagree,
+    None if it cannot parse either side (fail-open). Never upgrades WRONG to CORRECT.
+    """
+    student_val = _parse_number(_extract_math(student_input))
+    if student_val is None:
+        return None
+    nums = _NUMBER_TOKEN_RE.findall(tutor_reply)
+    if not nums:
+        return None
+    tutor_val = _parse_number(nums[-1])
+    if tutor_val is None:
+        return None
+    return None if student_val == tutor_val else False
 
 def _verify_math(student_input: str, messages: list, **llm) -> bool | None:
     """Independently re-solves when tutor marks a numeric answer correct.

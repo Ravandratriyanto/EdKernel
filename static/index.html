@@ -1645,6 +1645,12 @@
       });
       const data = await res.json();
       removeThinking();
+      if (!res.ok || data.error) {
+        appendBubble('tutor', data.error || 'Something went wrong. Try again.');
+        document.getElementById('btn-send').disabled = false;
+        busy = false;
+        return;
+      }
       messages = data.messages;
       if (data.correct === true)  wrongStreak = 0;
       if (data.correct === false) wrongStreak += 1;
