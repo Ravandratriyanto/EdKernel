@@ -2916,3 +2916,89 @@ These are deferred to post-AWS.
 7. Graviton + COOL benchmark
 8. 5-minute demo video
 9. Technical report
+
+---
+
+## Session 20 — 2026-09-02
+
+### Signal system rewrite — parallel eval call
+
+`openai/gpt-oss-120b` (the current Groq default after `llama-3.3-70b-versatile` was decommissioned) does not reliably produce `[CORRECT]`/`[WRONG]` markers in its output even with explicit instructions and few-shot examples. Signals were always None — no progress tracking, no hint escalation, no visual feedback.
+
+Fix: parallel eval architecture. `api_reply` now fires two concurrent calls via `ThreadPoolExecutor(max_workers=2)`:
+1. **Tutor call** — generates the pedagogical reply as before
+2. **Eval call** — separate focused prompt: "Student was asked X, answered Y. CORRECT, WRONG, or SKIP?"
+
+Both calls run simultaneously so latency stays the same as a single call. Tutor signal is preferred if the model does produce one; eval signal is the reliable fallback. SKIP is returned for greetings, frustration, and off-topic inputs — maps to `None` so no false verdict is recorded.
+
+Also fixed CORRECT/WRONG check order — `"WRONG"` must be checked before `"CORRECT"` because `"INCORRECT"` contains `"CORRECT"` as a substring.
+
+Removed `_cross_check` from the call path — it was using the last number in the tutor's entire reply (including numbers in the next question) as the "expected answer", which caused correct numeric answers to be overridden as wrong. Functions remain defined but are not called.
+
+Signal test results (all pass):
+- Correct numeric answer → True
+- Wrong numeric answer → False  
+- Greeting ("hi") → None
+- Frustration ("idk") → None
+- Answer-as-question ("is it 12?") → correctly evaluated against actual question
+
+### Input robustness
+
+Added three hardening changes:
+
+1. **Input truncation** (`app.py`): `user_input[:2000]` — prevents token-limit 400s from very long inputs. Truncates silently, doesn't reject.
+
+2. **Model call timeout** (`core/llm/client.py`): `timeout=30.0` on the Groq create call. Groq is normally sub-3s; 30s means something is wrong.
+
+3. **Error handlers** (`app.py`): `groq.APITimeoutError` → 503, `groq.RateLimitError` → 429, HTTP 505 handler added. All return JSON with a human-readable message.
+
+Edge case test results:
+- 3000-char spam input → truncated to 2000, tutor responded normally
+- Emoji-only (`🎉🤔💀🔥`) → None signal, tutor replied "Nice vibes!"
+- Arabic input → hit Groq rate limit (429) during rapid test — not an Arabic bug
+
+### Prompt additions
+
+- Added "show your working" rule to TEACHING FLOW for numeric/probability questions
+- Added "student says they have a question → stop teaching, wait" rule to CONVERSATION RULES
+- Added few-shot signal examples (did not fix the model's signal behaviour but left in as guidance)
+- `_INLINE_MARKER_RE` extended to strip any `[ALLCAPS]` inline token, not just CORRECT/WRONG/OPEN — catches `[WAITING]` and similar stray markers the model occasionally produces
+
+### Git housekeeping
+
+- Removed `backliner239` stale GitHub account (expired token) via `gh auth logout`
+- Renamed default branch `master` → `main` on both local and remote
+- All commits from `master` preserved — `main` on remote had only the initial commit, force-pushed the full history over it
+- Git global identity set to `ravandratriyanto@gmail.com` / `Ravandratriyanto`
+
+### Groq model situation
+
+Only two models currently active on this account's tier:
+- `openai/gpt-oss-120b` — works, instruction-following mediocre for custom markers
+- `compound-beta` — works, dumps full lesson content without asking questions
+
+All other models (llama-3.1-8b-instant, llama-3.3-70b-versatile, gemma2-9b-it, mixtral-8x7b-32768, deepseek-r1-distill-llama-70b) return 404 or 400 (decommissioned). Check `console.groq.com/docs/models` before each session.
+
+TPM limit on free tier is 8000 tokens/minute — hits fast during multi-turn testing. Upgrading to Dev Tier ($5-10/month) is effectively required for a classroom demo.
+
+### Known issues
+
+- Frontend spinner hangs on 500 (backend handler done, frontend change still needed)
+- History not trimmed — long sessions send full message history to Groq each turn, burns TPM fast
+- AWS not deployed (hard competition requirement, 10% of score)
+- Live bounding boxes not rendered in step checker UI
+- Teacher progress UI HTML not built
+- Manim video renderer not started
+- GCSE Maths RAG collection not ingested
+
+### Next
+
+1. Frontend error toast for `/api/reply` 500s
+2. History trimming (cap at last 10 turns)
+3. AWS: install CLI → configure credentials → ECR → ECS Fargate + ALB
+4. EFS mount for `/app/.logs` and `/app/data/chroma`
+5. AWS Bedrock provider (competition AWS requirement)
+6. Live bounding box display
+7. Teacher progress UI
+8. Manim video renderer
+9. 5-minute demo video + technical report
