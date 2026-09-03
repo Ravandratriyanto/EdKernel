@@ -3183,3 +3183,133 @@ present after the pull).
 5. Fix `teststart.sh` `rag.ingest` → `core.rag.ingest`
 6. Everything still open from Session 20: AWS, live bounding boxes,
    teacher progress UI, Manim, demo video, technical report
+
+---
+
+## Session 22 — 2026-09-03
+
+A live chemistry lesson revealed a missing-marker failure mode, which got
+fixed with two layers of defence. Then the project's model strategy was
+settled, and AWS account creation began.
+
+### Fine-tuned tutor model research
+
+Researched TutorRL-7B (`eth-nlped/TutorRL-7B`) and SocraticLM
+(`CogBase-USTC/SocraticLM`) as drop-in alternatives to `openai/gpt-oss-120b`.
+
+Key findings:
+- **TutorRL-7B** — Qwen2.5-7B-Instruct fine-tuned with GRPO in a synthetic
+  multi-turn classroom setting. Trained to scaffold reasoning and withhold
+  answers. Available on HuggingFace free inference tier (7B fits under the
+  param limit). Cold starts on non-popular models: 30-60s.
+- **SocraticLM** — Qwen2.5-Math-7B-Instruct fine-tuned on 35K Socratic
+  dialogues (SocraTeach dataset). NeurIPS 2024 Spotlight. Math-specific.
+- Neither is on Groq. Running them requires Ollama (no GPU on dev machine)
+  or HuggingFace Serverless API.
+
+**Decision: stay on `openai/gpt-oss-120b` for the competition.** The raw
+model diagnostic from Session 21 already proved the 120B model passes every
+Socratic behaviour test without a system prompt. The problem has always been
+the prompt, not the model. Swapping to an unknown 7B model one month before
+the deadline is the wrong trade.
+
+**Model swappability:** the `provider`/`model` abstraction in
+`core/llm/client.py` is already enough. No UI dropdown. Different models are
+a `.env` change, not a product decision. Recorded and closed.
+
+### Live equilibrium test — missing [CORRECT] confirmed
+
+Ran the app live with a Le Chatelier's principle question
+(`N₂ + 3H₂ ⇌ 2NH₃`, increasing pressure). The Socratic flow was correct:
+two guiding questions before the student submitted "More NH₃", then a verbal
+confirmation with arithmetic (`1 + 3 = 4 mol, right side 2, shift right`).
+
+But the final confirmation reply had **no `[CORRECT]` marker**. White bubble,
+no green banner. The model said "Right." and explained, then rolled into the
+next question — and dropped the signal. The `evals/conversations.py` harness
+was already built to catch exactly this case.
+
+### [CORRECT] signal fix — two layers
+
+**Layer 1 — prompt:** Added to `TUTOR_SYSTEM_PROMPT` in `core/prompts.py`:
+
+> "If your reply starts with 'Right', 'Correct', 'Exactly', 'Yes', or
+> 'Good' in response to a submitted answer, it MUST end with [CORRECT] —
+> there are no exceptions."
+
+**Layer 2 — code fallback:** Added `_AFFIRM_RE` to `app.py`:
+
+```python
+_AFFIRM_RE = re.compile(
+    r'^(right|correct|exactly|yes[,!.\s]|great|perfect|spot.?on|well done|'
+    r'that\'?s?\s+(right|correct)|good\s+(job|work|answer|one))',
+    re.IGNORECASE
+)
+```
+
+In `api_reply`, after both `tutor_signal` and `eval_signal` are resolved:
+
+```python
+if correct is None and _AFFIRM_RE.match(response.strip()):
+    correct = True
+```
+
+Only fires when both signals are `None`. Only infers `True` (never `WRONG`)
+from affirmation language. Anchored to the start of the reply — can't
+false-positive on "right" buried mid-sentence. Never overrides a real
+`False`.
+
+The fix is safe because: tutor said "Right." = it knows the answer is
+correct. If it knows but forgot the bracket, the affirmation is authoritative.
+
+### Student behaviour research
+
+Researched what students actually ask AI tutors to inform eval coverage and
+prompt edge cases. Key findings:
+
+- **Common phrasing:** "I don't get it" (vague, no signal should fire),
+  "just tell me the answer" (refusal test), "is it 5?" (answer-as-question,
+  should evaluate), "idk" (frustration, acknowledge first)
+- **Hardest A-level topics:** integration, proof, trigonometry (maths);
+  atomic structure, equilibrium (chemistry); genetics, cell division (biology)
+- **Current eval gap:** all 5 cases are maths. Zero chemistry/biology,
+  zero frustration/vague cases, zero "just tell me" refusal test
+
+Derived 11 new test prompts covering signals, edge-case behaviour, and
+A-level subjects including chemistry equilibrium and biology opinion questions.
+
+### AWS account creation — in progress
+
+First attempt: email already associated with a half-created account from a
+dropped session. Fixed via "Forgot password" → reset → signed in.
+
+Billing verification: GPN card (Malaysian student savings — `Simpanan
+Pelajar`) is domestic-only and not accepted by AWS. Options explored:
+Touch 'n Go virtual Visa (fastest), BigPay. Session ended with billing still
+pending — card issue unresolved.
+
+IAM vs root: root is fine for initial setup. Standard IAM user with
+ECR/ECS/ELB/VPC permissions should be created immediately after first login
+and used for all subsequent work.
+
+### Known issues / caveats
+
+- **[CORRECT] fix unverified live.** App was restarted but a fresh
+  Le Chatelier's test was not completed this session. The code change is
+  correct; whether the affirmation regex fires on the real reply needs one
+  more live turn
+- AWS billing still blocked (payment method). Competition deadline is
+  26 Oct 2026; nothing is deployed yet
+- Eval coverage gap: no frustration/vague/refusal cases, no biology cases
+- `evals/conversations.py` still has no honest run against a model
+
+### Next
+
+1. Verify the [CORRECT] fix live — repeat the NH₃ test, confirm green banner
+2. Run `evals/conversations.py` — first honest score
+3. Add frustration, refusal, and biology cases to `conversations.jsonl`
+4. Resolve AWS billing (Touch 'n Go or family card) and complete account setup
+5. Create IAM user, install AWS CLI, configure credentials
+6. Docker → ECR → ECS Fargate + ALB
+7. Everything still open from Session 20: live bounding boxes, teacher
+   progress UI, Manim, demo video, technical report

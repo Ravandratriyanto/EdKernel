@@ -1,24 +1,3 @@
-"""Score multi-turn tutor conversations against a scripted dialogue.
-
-    python -m evals.conversations
-    python -m evals.conversations --case chem_chlorine
-    python -m evals.conversations --show
-
-Each case is a scripted student conversation. For every turn we send the
-student line, receive the tutor reply, and judge it against per-turn rubric
-(marker present, arithmetic shown, no leaked answer). This catches classes
-of failure the single-turn check-mode eval cannot see:
-
-  - a correct numeric answer confirmed without a [CORRECT] marker on the
-    transition to the next question (the miss noted in Session 20)
-  - a numeric confirmation reply that skips the arithmetic
-  - the answer leaked at concept-intro before the student ever computes it
-
-Runs jobs=1 by default. Each case sends N turns whose history grows each
-turn — cheaper to serialise than to explain why the rate limit ate half the
-cases.
-"""
-
 import argparse
 import json
 import os
@@ -70,6 +49,8 @@ def run_case(case, provider, model, host, api_key, tries=4):
     prefix = f"Reference material:\n{context}\n\n" if context else ""
 
     messages = [{"role": "system", "content": TUTOR_SYSTEM_PROMPT}]
+    messages += [{"role": m["role"], "content": m["content"]}
+                 for m in case.get("context", [])]
     first = True
     replies = []
 
@@ -108,7 +89,7 @@ def judge_turn(reply, expect):
     checks = []
 
     if "marker" in expect:
-        want, got = expect["marker"].upper(), reply["marker"]
+        want, got = expect["marker"].upper(), reply["marker"].upper()
         checks.append(("marker", got == want,
                        f"wanted [{want}], got [{got}]"))
 

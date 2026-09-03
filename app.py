@@ -538,7 +538,7 @@ def api_start():
     context        = "\n\n".join(context_chunks) if context_chunks else ""
     context_prefix = f"Reference material:\n{context}\n\n" if context else ""
 
-    user_msg = {"role": "user", "content": f"{context_prefix}Teach me about: {topic}"}
+    user_msg = {"role": "user", "content": f"{context_prefix}Topic: {topic}. Start the lesson now — ask me exactly one question. No greeting, no preamble, just the question."}
     if attachment:
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
@@ -650,6 +650,8 @@ def api_reply():
         eval_signal = ef.result()
 
     correct = tutor_signal if tutor_signal is not None else eval_signal
+    if correct is None and _AFFIRM_RE.match(response.strip()):
+        correct = True
     messages.append({"role": "assistant", "content": response})
     log_turn("reply",
              session_id=data.get("session_id", ""),
@@ -903,6 +905,14 @@ def _ai_evaluate(student_input: str, tutor_reply: str, **llm) -> bool | None:
 
 
 _NUMERIC_RE = re.compile(r'\d')
+
+# Tutor sometimes verbally confirms ("Right.", "Exactly!") without emitting [CORRECT].
+# Used as last-resort fallback when both tutor_signal and eval_signal are None.
+_AFFIRM_RE = re.compile(
+    r'^(right|correct|exactly|yes[,!.\s]|great|perfect|spot.?on|well done|'
+    r'that\'?s?\s+(right|correct)|good\s+(job|work|answer|one))',
+    re.IGNORECASE
+)
 
 _FILLER_RE = re.compile(
     r'\b(is\s+(it|this(\s+the\s+answer)?|that\s+(right|correct))|'

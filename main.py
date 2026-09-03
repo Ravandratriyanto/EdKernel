@@ -5,14 +5,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from llm.client import generate, chat
-from rag.retrieve import retrieve
-from vision.image_handler import transcribe
+from core.llm.client import generate, chat
+from core.rag.retrieve import retrieve
+from core.vision.image_handler import transcribe
 
-from video import video_handler
-from video.frame_extractor import ExtractError
+from core.video import video_handler
+from core.video.frame_extractor import ExtractError
 
-from prompts import (
+from core.prompts import (
     build_check_prompt, strip_signal,
     CLI_TUTOR_SYSTEM_PROMPT as TUTOR_SYSTEM_PROMPT,
 )
