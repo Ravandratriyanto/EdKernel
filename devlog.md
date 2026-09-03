@@ -3002,3 +3002,184 @@ TPM limit on free tier is 8000 tokens/minute — hits fast during multi-turn tes
 7. Teacher progress UI
 8. Manim video renderer
 9. 5-minute demo video + technical report
+
+
+## Session 21 — 2026-09-03
+
+Two weeks of remote-only work landed locally today, a live chemistry lesson
+turned up an old signal-emission regression, and a new eval was built to catch
+that class of failure. Nothing here needs a model call to reproduce except the
+one thing that does.
+
+### The pull nobody could pull
+
+Local `master` was 9 commits behind `origin/master`, and `origin/master`
+itself had been superseded by `origin/main` after the branch rename. First
+attempt was `git pull --ff-only origin master` and it aborted with:
+
+    error: invalid path 'curricula/<cid>/questions.json'
+
+Someone had committed a literal `<cid>` directory as a placeholder — Windows
+cannot create a file with `<` or `>` in the name, so the working-tree write
+fails and the whole pull rolls back. Not a Windows quirk to route around;
+the file is genuinely invalid.
+
+`origin/main` was already 3 commits ahead of `origin/master`, and one of
+them is titled `remove invalid <cid> stub — breaks git pull on Windows`.
+So the fix was already on the right branch; local just needed to move to it.
+
+    git branch -m master main
+    git branch --set-upstream-to=origin/main main
+    git pull --ff-only
+
+Fast-forwarded cleanly, `d76c1a0..ab30b1e`, 68 files changed, +7,557 / -789.
+`llm/`, `rag/`, `vision/`, `video/` moved under `core/`, `prompts.py`
+became `core/prompts.py`, and the whole curriculum system (`curricula.py`
+plus five curriculum folders) appeared. Also new: `api_v1.py`, `Dockerfile`,
+`settings.py`, `static/admin.html`, `static/teacher.html`, `stubtesting/`,
+`flowcharts.html`.
+
+`CLAUDE.md` still says *"Work on `master` and push there — `main` exists on
+GitHub but `master` is the working branch."* That is now factually reversed
+and was not updated this session. `devlog.md:2970` already recorded the
+rename cleanly in Session 20, so the source of truth is fine — just the
+working notes are stale.
+
+### Auth off for dev, again
+
+`settings.json` is gitignored (`.gitignore:6`), so a fresh clone reverts to
+the `settings.py:14` default of `auth_required: True` and the login gate
+comes back. Created `D:\OLLM\settings.json` locally:
+
+    { "auth_required": false, "stub_testing": true, "rate_limiting": true }
+
+Confirmed live: `/api/me` returned `{"user": {"id": 0, "username": "dev"}}`,
+gate hid, UI usable.
+
+An earlier attempt this session edited `app.py`'s `_load_user` directly to
+synthesise a dev user — that predated finding out `settings.py` already
+existed. Reverted before pulling.
+
+### A live chlorine lesson, and the regression it caught
+
+Four turns through the web UI on `openai/gpt-oss-120b`, from *"Why is the
+atomic mass of chlorine 35.5 instead of a whole number?"* to a confirmed
+`35.5`. The rubric was decided up front: no answer leak at concept-intro,
+Socratic ending after each hint, arithmetic shown on confirmation, marker
+on the final terminal answer.
+
+The teaching was strong. Turn 1 introduced isotopes with an inline gloss
+(*"atoms of the same element with different neutron numbers"*), ended on a
+question, leaked no numbers. Turn 2 named the concept (*"weighted-average
+mass"*), gave the method, held the answer back — the exact behaviour that
+failed on h3 photosynthesis in Session 15, working here. Turn 3 confirmed,
+walked the arithmetic (*"0.75 × 35 + 0.25 × 37 = 26.25 + 9.25 = 35.5"*),
+tied the number back to the original *why* question, and extended with a
+transfer case (40/60 split). Textbook.
+
+But the confirmation reply for `35.5` **had no `[CORRECT]` marker.** Plain
+white bubble, no green banner. Session 20 had already flagged this pattern:
+*"few-shot signal examples (did not fix the model's signal behaviour but
+left in as guidance)"*. When the tutor rolls straight into a next question
+the model tends to drop the marker. Reproduced live today. Not a
+regression, then — a known failure mode the guidance didn't cure.
+
+Small aside: the class banner said "GCSE Mathematics" and the conversation
+was chemistry. The `prompt_flavour` field in
+`curricula/gcse-maths/manifest.json` is meant to steer persona. Whether
+it's missing, empty, or ignored wasn't chased today.
+
+### `evals/conversations.py`
+
+Built to catch that missing-marker class structurally, and other multi-turn
+failure modes the check-mode eval cannot see. Same shape as `learn.py`:
+scripted student turns, no LLM-as-judge, regex/substring only.
+
+Case schema is one JSON object per line in `evals/conversations.jsonl`:
+
+    {"id": "...", "topic": "...", "turns": [
+      {"student": "...", "expect": {"marker": "...", "absent": [...], ...}}
+    ]}
+
+Per-turn rubric supports four checks, any subset:
+
+- `marker`: `CORRECT` / `WRONG` / `OPEN` / `none` — trailing signal must match
+- `shows_arithmetic`: true — reply must contain an `a op b = c` line
+- `contains`: [...] — every string present (case-insensitive)
+- `absent`: [...] — no string present (catches the intro-leak class)
+
+Judging is per-turn, so failures print as `turn 3 — marker: FAIL wanted
+[CORRECT] got [none]` — the exact bug from today. `--jobs 1` by default
+because each case is multi-turn and history grows every turn; the free-tier
+TPM ceiling is 8,000.
+
+Five starter cases: `chem_chlorine` (the four-turn dialogue from today),
+`chem_open` (single-turn `[OPEN]` probe), `math_linear`, `math_percentage`,
+`math_wrong` (two-turn expecting `[WRONG]`).
+
+### Typing was rough
+
+`evals/conversations.py` was typed by the user in this session. Two rounds
+of typo fixes. First round caught five (a leading-underscore-mismatch on
+`_MARKER_RE`, `raw.reply` vs `raw_reply`, `_ARTIH_RE`, a doubled `prefix =`,
+a missing comma in the system message that would have concatenated
+`"system"` and `"content"` into `"systemcontent"`). The second round was
+larger — broken `judge_turn` (assigning through a call to a nonexistent
+`except(...)` name), `strip_sginal`, `checks/append` where `.` was meant,
+`_missing` used for both absent and leaked (a real logic bug, not a typo),
+missing `run_cases`/`report`/`main`. Rewrote clean rather than patch.
+
+The finished file parses, imports resolve (`core.llm.client`,
+`core.rag.retrieve`, `core.prompts`, `core.vision.image_handler` all
+present after the pull).
+
+### Current state
+
+- Local branch `main`, tracking `origin/main`, at `ab30b1e`
+- Auth off via local `settings.json` (gitignored)
+- Server up and serving on `127.0.0.1:5000`, model `openai/gpt-oss-120b`
+- `evals/conversations.py` parses and imports cleanly
+- `evals/conversations.jsonl` has 5 cases, all valid JSONL
+- Live behaviour observed: strong Socratic teaching, missing marker on
+  confirmed-answer-plus-next-question transitions
+
+### Known issues / caveats
+
+- **`evals/conversations.py` has not been run against a model.** Zero honest
+  measurements. `_ARITH_RE` may over- or under-match real replies. Whether
+  `chem_chlorine` reproduces the missing-marker bug in the harness (it
+  should, based on what was observed live) is untested.
+- Missing `[CORRECT]` marker on rolling-into-next-question replies —
+  reproducible on `openai/gpt-oss-120b`, and the few-shot examples added
+  in Session 20 did not fix it
+- `CLAUDE.md` Git section says "work on `master`" — factually reversed now
+- `start.bat` has none of `start.sh`'s guardrails: no `.venv` detection, no
+  port checks, no wait-for-port, no log to file. `requirements.txt` gained
+  `opencv-python-headless`, `pymupdf`, `python-pptx`, `gunicorn` in the
+  pull, and if system `python` is missing any, `start.bat` opens a
+  detached `cmd /k` that dies silently on ImportError. Failure mode
+  observed early this session
+- `teststart.sh:10` calls `python -m rag.ingest --curriculum demo`. `rag/`
+  moved to `core/rag/` in the pull; script is stale. Linux only, deferred
+- `curricula/gcse-maths/manifest.json` may not set `prompt_flavour`
+  meaningfully — a maths curriculum accepted a chemistry conversation with
+  no visible steering. Unverified
+- `_load_user` bypass edit was made mid-session before `settings.py` was
+  found. Reverted; do not add both
+
+### Next
+
+1. **Run `evals/conversations.py` live.** `python -m evals.conversations
+   --api-key $env:GROQ_API_KEY --show`. This is the eval's first honest
+   number. Adjust `_ARITH_RE` if it over- or under-matches real replies.
+   If `chem_chlorine` fails on turn 4's marker check, that's a reproducible
+   regression to hand to Session 22 as a prompt-fix target
+2. Widen the case set with today's other probes: `math_factorising`
+   (rung-1 concept), `math_word_problem` (error localisation),
+   `chem_ph` (log trap), `chem_empirical_formula` (multi-step)
+3. Update `CLAUDE.md`'s Git section to reflect `main` as the working branch
+4. Fix `start.bat`: `.venv` detection, wait-for-port, log to
+   `.logs\flask.log`. The silent-failure mode cost time twice already
+5. Fix `teststart.sh` `rag.ingest` → `core.rag.ingest`
+6. Everything still open from Session 20: AWS, live bounding boxes,
+   teacher progress UI, Manim, demo video, technical report

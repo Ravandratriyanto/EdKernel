@@ -5,14 +5,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from core.llm.client import generate, chat
-from core.rag.retrieve import retrieve
-from core.vision.image_handler import transcribe
+from llm.client import generate, chat
+from rag.retrieve import retrieve
+from vision.image_handler import transcribe
 
-from core.video import video_handler
-from core.video.frame_extractor import ExtractError
+from video import video_handler
+from video.frame_extractor import ExtractError
 
-from core.prompts import (
+from prompts import (
     build_check_prompt, strip_signal,
     CLI_TUTOR_SYSTEM_PROMPT as TUTOR_SYSTEM_PROMPT,
 )
@@ -116,6 +116,7 @@ def learn_mode(topic: str, model: str, host: str,
         user_input = input("You: ").strip()
         if user_input.lower() in ("quit", "exit"):
             print("Session ended.")
+            
             break
 
         messages.append({"role": "user", "content": user_input})

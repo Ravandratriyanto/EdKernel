@@ -1,12 +1,3 @@
-"""Bugs this project has already fixed once, so they cannot come back.
-
-Every case here is a real defect from the devlog, not a hypothetical. No model
-calls, so this runs in seconds, costs nothing, and the answer never moves.
-
-A check returns True to pass, False to fail, or None to skip — skip is for a
-check whose input is missing, which is not the same as a pass.
-"""
-
 import glob
 import re
 
@@ -20,14 +11,6 @@ CHECKS = []
 
 
 def check(name):
-    """Register a function as a named regression check.
-
-    A decorator that takes an argument is two layers deep: check("...") runs
-    first and returns `wrap`, then Python applies `wrap` to the function
-    underneath it. `wrap` stores the pair and hands the function straight back,
-    so the registry builds itself as this file loads. Adding a check is one
-    function with no list to keep in step.
-    """
     def wrap(fn):
         CHECKS.append((name, fn))
         return fn

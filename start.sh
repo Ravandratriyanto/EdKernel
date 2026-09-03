@@ -41,9 +41,6 @@ wait_for_port() {
 
 echo "Starting OLLM Tutor..."
 
-# --- Ollama ---------------------------------------------------------------
-# Skipped if already running, or if ollama isn't installed (the Groq provider
-# can be selected in the UI instead).
 if port_open "$OLLAMA_PORT"; then
     echo "Ollama already running on port $OLLAMA_PORT"
 elif command -v ollama >/dev/null 2>&1; then
