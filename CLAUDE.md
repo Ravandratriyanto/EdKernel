@@ -58,7 +58,9 @@ Commit and push **only when asked**. Write devlog entries when asked, matching t
 
 ## How the user likes to work
 
-**Ask before writing code they might want to type.** They often want to read every line and type it in — that is how they learn. If they say "let me code it", give design + code to work from, not edits to files. If they say "just do it", go ahead.
+**Bias toward action, not questions.** When the task is clear, make the reasonable call and do it. Do not pause to ask which approach, which file, or whether to proceed — just go. They will redirect if needed.
+
+**Ask before writing code they might want to type.** They often want to read every line and type it in — that is how they learn. If they say "let me code it", give the file path + exact change to make, not edits to files. If they say "just do it" or "run it", go ahead.
 
 **Explain unfamiliar Python as you go.** Short, plain explanations of syntax — what `rf"..."` means, why `.b64encode(...).decode()` is two steps. Assume the logic is clear and the syntax is not.
 

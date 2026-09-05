@@ -19,12 +19,25 @@ CASES = Path(__file__).parent / "conversations.jsonl"
 
 _MARKER_RE = re.compile(r"\[(CORRECT|WRONG|OPEN)\]\s*$", re.IGNORECASE)
 _ARITH_RE = re.compile(r"\d+(?:\.\d+)?\s*[+\-×x*÷/]\s*\d+.*=\s*\d")
+_AFFIRM_RE = re.compile(
+    r'^(right|correct|exactly|yes[,!.\s]|great|perfect|spot.?on|well done|'
+    r'that\'?s?\s+(right|correct)|good\s+(job|work|answer|one))',
+    re.IGNORECASE
+)
 
 
 def _marker(raw_reply: str) -> str:
-    """Return the trailing marker ('CORRECT'/'WRONG'/'OPEN'), or 'none'."""
+    """Return the trailing marker ('CORRECT'/'WRONG'/'OPEN'), or 'none'.
+
+    Mirrors the _AFFIRM_RE fallback in app.py: if no bracket marker is found
+    but the reply opens with a verbal confirmation, count it as CORRECT.
+    """
     m = _MARKER_RE.search(raw_reply.rstrip())
-    return m.group(1).upper() if m else "none"
+    if m:
+        return m.group(1).upper()
+    if _AFFIRM_RE.match(raw_reply.strip()):
+        return "CORRECT"
+    return "none"
 
 
 def _shows_arithmetic(text: str) -> bool:

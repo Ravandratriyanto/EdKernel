@@ -3313,3 +3313,111 @@ and used for all subsequent work.
 6. Docker → ECR → ECS Fargate + ALB
 7. Everything still open from Session 20: live bounding boxes, teacher
    progress UI, Manim, demo video, technical report
+
+---
+
+## Session 23 — 2026-09-04
+
+Eval harness fixed, coverage expanded from 5 to 9 cases, score reached 9/9.
+AWS still blocked on banking — worked on evals while waiting.
+
+### CLAUDE.md — working style update
+
+Added two rules to the "How the user likes to work" section:
+
+- **Bias toward action** — make the reasonable call and go; don't pause to ask
+  which file, which approach, or whether to proceed.
+- **"Let me code it" means file path + exact change** — not edits to files.
+  The user types every line they want to understand.
+
+### `chem_open` case fixed
+
+The previous `chem_open` student message was `"Which is more important for
+organic chemistry — carbon or oxygen?"` — phrased as a question. The model
+correctly treated it as "student has a question incoming" and replied
+`"Go ahead!"` with no marker, which the case expected `[OPEN]` for.
+
+Fix: changed to `"I think carbon is more important than oxygen for organic
+chemistry."` — phrased as a submitted opinion. Model now correctly returns
+`[OPEN]`.
+
+### conversations.jsonl recovered after accidental overwrite
+
+The user rewrote the file while adding cases. The result:
+
+- `chem_chlorine` deleted entirely (replaced by orphaned multi-line JSON)
+- Duplicate `chem_open` entries (old + new)
+- `math_linear`, `math_percentage`, `math_wrong` lost their `context` blocks
+  and reverted to the broken multi-turn scripted format
+
+Restored the five original cases with `context` pre-loading intact, keeping
+the `chem_open` fix. Multi-line JSON in a `.jsonl` file breaks the parser —
+every case must be on one line.
+
+### `_AFFIRM_RE` mirrored in eval harness
+
+`chem_chlorine` was failing at 4/5: the model replied `"Great! 7.5 + 3.5 =
+11.0 amu, which matches your answer. Topic complete."` — verbal confirmation
+with arithmetic, no `[CORRECT]` bracket.
+
+The same pattern is handled in `app.py` via `_AFFIRM_RE`. The eval harness
+didn't have it, so it was testing the raw model rather than what the app
+actually does in production.
+
+Fixed by adding the same regex to `_marker()` in `evals/conversations.py`:
+
+```python
+_AFFIRM_RE = re.compile(
+    r'^(right|correct|exactly|yes[,!.\s]|great|perfect|spot.?on|well done|'
+    r'that\'?s?\s+(right|correct)|good\s+(job|work|answer|one))',
+    re.IGNORECASE
+)
+
+def _marker(raw_reply: str) -> str:
+    m = _MARKER_RE.search(raw_reply.rstrip())
+    if m:
+        return m.group(1).upper()
+    if _AFFIRM_RE.match(raw_reply.strip()):
+        return "CORRECT"
+    return "none"
+```
+
+### Four new eval cases added
+
+| id | what it tests | result |
+|----|--------------|--------|
+| `answer_as_question` | "is it 12?" treated as answer, not ignored | CORRECT |
+| `frustration` | "idk i give up" → empathise, no marker fired | none |
+| `bio_correct` | "replication" → CORRECT with no arithmetic check | CORRECT |
+| `greeting` | "hey what's up" → warm reply, no lesson, no marker | none |
+
+All four use `context` pre-loading to skip multi-turn scripting drift.
+
+### Final score
+
+```
+conversations     9/9  (100%)
+  turn 1 — marker          9/9
+  turn 1 — shows arithmetic  3/3
+```
+
+### Known issues / caveats
+
+- AWS billing still blocked (GPN card domestic-only). Need Touch 'n Go
+  virtual Visa or BigPay before account setup can continue
+- Live [CORRECT] fix still unverified — code is correct but no fresh
+  NH₃ test run this session
+- No refusal case yet ("just tell me the answer") — deferred
+
+### Next
+
+1. Resolve AWS billing → account setup → IAM user → CLI configure
+2. Docker → ECR → ECS Fargate + ALB (10% of competition score)
+3. ~~Teacher progress UI HTML~~ — done this session
+4. Live bounding box display in step checker
+5. Add refusal eval case ("just tell me the answer")
+6. Manim video renderer, demo video, technical report
+
+### Maybe
+
+- **Provider/model picker in admin panel** — dropdown in `admin.html`, `POST /api/admin/model` writes to runtime config, `core/llm/client.py` reads it instead of env var. Admin picks the model, not students. Low competition score impact; skip until after AWS and demo video are done.

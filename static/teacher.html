@@ -117,7 +117,20 @@
     .modal-field label { display:block; color:var(--muted); font-size:11px; margin-bottom:4px; text-transform:uppercase; letter-spacing:.06em; }
     .modal-field input { width:100%; padding:7px 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:inherit; font-size:13px; }
     .modal-field input:focus { outline:none; border-color:var(--accent); }
+
+    /* Progress tab */
+    .progress-scroll { overflow-x:auto; }
+    .prog-table { border-collapse:collapse; font-size:12px; white-space:nowrap; }
+    .prog-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:6px 12px; border-bottom:1px solid var(--border); }
+    .prog-table td { padding:6px 12px; border-bottom:1px solid var(--border); }
+    .prog-name { color:var(--text); min-width:120px; }
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin-right:5px; }
+    .dot-green  { background:var(--green); }
+    .dot-yellow { background:var(--yellow); }
+    .dot-grey   { background:var(--border); }
+    .prog-frac { font-size:11px; color:var(--muted); }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -170,6 +183,7 @@
           <button class="tab-btn active" data-tab="topics">Topics</button>
           <button class="tab-btn" data-tab="materials">Materials</button>
           <button class="tab-btn" data-tab="questions">Questions</button>
+          <button class="tab-btn" data-tab="progress">Progress</button>
         </div>
 
         <!-- Topics tab -->
@@ -246,6 +260,17 @@
           <div id="questions-list"></div>
         </div>
 
+        <!-- Progress tab -->
+        <div class="tab-panel" id="tab-progress">
+          <section>
+            <h3>Student progress</h3>
+            <div id="progress-container"><p style="color:var(--muted);font-size:12px">Select a curriculum to view progress.</p></div>
+            <div id="progress-chart-wrap" style="display:none;position:relative;height:320px;margin-top:16px">
+              <canvas id="progress-chart"></canvas>
+            </div>
+          </section>
+        </div>
+
       </div>
     </main>
   </div>
@@ -253,6 +278,7 @@
 
 <script>
   let currentId = null;
+  let currentTopics = [];
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   async function init() {
@@ -319,7 +345,8 @@
     document.getElementById("editor-body").style.display = "block";
     document.getElementById("editor-title").textContent = data.manifest.name;
     document.getElementById("editor-id-badge").textContent = id;
-    renderTopics(data.topics || []);
+    currentTopics = data.topics || [];
+    renderTopics(currentTopics);
     loadFiles();
     loadQuestions();
   }
@@ -331,6 +358,7 @@
       document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      if (btn.dataset.tab === "progress") loadProgress();
     });
   });
 
@@ -511,6 +539,72 @@
     await fetch(`/api/teacher/curricula/${currentId}/questions/${qid}`, { method: "DELETE" });
     loadQuestions();
   }
+
+  // ── Progress ──────────────────────────────────────────────────────────────────
+  let _progressChart = null;
+
+  async function loadProgress() {
+  if (!currentId) return;
+  const res = await fetch(`/api/teacher/curricula/${currentId}/progress`);
+  if (!res.ok) return;
+  const rows = await res.json();
+  const container = document.getElementById("progress-container");
+  const wrap      = document.getElementById("progress-chart-wrap");
+  const canvas    = document.getElementById("progress-chart");
+
+  if (!rows.length) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:12px">No student activity yet.</p>';
+    wrap.style.display = "none";
+    return;
+  }
+
+  const topicIds = currentTopics.length
+    ? currentTopics.map(t => t.name)
+    : [...new Set(rows.map(r => r.topic_id))];
+
+  const byStudent = {};
+  rows.forEach(r => {
+    if (!byStudent[r.username]) byStudent[r.username] = {};
+    byStudent[r.username][r.topic_id] = r.attempts ? Math.round(r.correct / r.attempts * 100) : 0;
+  });
+
+  const students = Object.keys(byStudent).sort();
+  const colours  = ["#6366f1","#22c55e","#eab308","#ef4444","#06b6d4"];
+
+  const datasets = students.map((u, i) => ({
+    label: u.split("@")[0],
+    data: topicIds.map(t => byStudent[u][t] ?? null),
+    backgroundColor: colours[i % colours.length] + "cc",
+    borderColor:     colours[i % colours.length],
+    borderWidth: 1,
+    borderRadius: 4,
+  }));
+
+  container.innerHTML = "";
+  wrap.style.display = "block";
+
+  if (_progressChart) _progressChart.destroy();
+  _progressChart = new Chart(canvas, {
+    type: "bar",
+    data: { labels: topicIds, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#e2e8f0", font: { family: "monospace", size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? 0}%` } },
+      },
+      scales: {
+        x: { ticks: { color: "#64748b" }, grid: { color: "#2a2d3a" } },
+        y: {
+          min: 0, max: 100,
+          ticks: { color: "#64748b", callback: v => v + "%" },
+          grid: { color: "#2a2d3a" },
+        },
+      },
+    },
+  });
+}
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   function esc(s) {
