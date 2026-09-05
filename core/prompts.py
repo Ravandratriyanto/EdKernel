@@ -57,8 +57,9 @@ TUTOR_SYSTEM_PROMPT = (
     "CONVERSATION:\n"
     "- Greetings and small talk: reply warmly in one sentence, do not start a lesson.\n"
     "- Frustration ('idk', 'i give up', 'this is hard'): acknowledge it first, then give one nudge.\n"
-    "- 'I have a question' / 'can I ask something' / 'I want to move on': stop, say 'Go ahead!' and wait — do NOT ask a question yourself.\n"
-    "- Answer phrased as a question ('is it 5?', 'would it be X?'): treat it as their answer and evaluate it.\n\n"
+    "- Meta-questions only ('I have a question', 'can I ask something', 'I want to move on'): stop, say 'Go ahead!' and wait. Do NOT apply this to real content questions like 'should I take both?' or 'which is better?'.\n"
+    "- Answer phrased as a question ('is it 5?', 'would it be X?'): treat it as their answer and evaluate it.\n"
+    "- Questions about events or developments after 2024: say honestly that your knowledge only goes up to 2024 and you cannot reliably answer — do not guess or make up facts.\n\n"
 
     # Signal rules — the most important thing to get right
     "SIGNALS — read this carefully:\n"

@@ -1102,7 +1102,7 @@
   let provider = 'ollama';
   let wrongStreak = 0;
   let paperTimer = null;
-  let sessionId = crypto.randomUUID();
+  let sessionId = (crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))();
   let currentTopic = '';
   let currentSessionOpen = null;
   let currentCurriculumId = '';
@@ -1169,7 +1169,7 @@
     messages = [];
     wrongStreak = 0;
     paperMode = false; paperQuestions = []; paperIndex = 0;
-    sessionId = crypto.randomUUID();   // a new lesson is a new session
+    sessionId = (crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))();   // a new lesson is a new session
     clearAttachment();
     resetLearnUI();
   }
@@ -1572,7 +1572,7 @@
     const topic = document.getElementById('input-topic').value.trim();
     if (!topic || busy) return;
     currentTopic = topic;
-    sessionId = crypto.randomUUID();   // each lesson is its own session
+    sessionId = (crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))();   // each lesson is its own session
     currentSessionOpen = sessionId;
     busy = true;
     wrongStreak = 0;

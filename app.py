@@ -538,7 +538,7 @@ def api_start():
     context        = "\n\n".join(context_chunks) if context_chunks else ""
     context_prefix = f"Reference material:\n{context}\n\n" if context else ""
 
-    user_msg = {"role": "user", "content": f"{context_prefix}Topic: {topic}. Start the lesson now — ask me exactly one question. No greeting, no preamble, just the question."}
+    user_msg = {"role": "user", "content": f"{context_prefix}{topic}"}
     if attachment:
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
@@ -790,7 +790,7 @@ def api_check():
         image_context = _transcription_note(attachment, provider, model, host, api_key, vision_model).strip() + "\n\n"
 
     prompt   = build_check_prompt(
-        question, answer, context_prefix=f"{context_prefix}{pdf_context}{image_context}")
+        question, answer, context_prefix=context_prefix)
     started  = time.monotonic()
     raw      = generate(prompt, model=model, host=host, provider=provider, api_key=api_key)
     response, correct = _tutor_reply(raw)

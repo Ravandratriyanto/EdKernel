@@ -3421,3 +3421,133 @@ conversations     9/9  (100%)
 ### Maybe
 
 - **Provider/model picker in admin panel** — dropdown in `admin.html`, `POST /api/admin/model` writes to runtime config, `core/llm/client.py` reads it instead of env var. Admin picks the model, not students. Low competition score impact; skip until after AWS and demo video are done.
+
+---
+
+## Session 24 — 2026-09-05
+
+AWS is live. Blocked on banking cleared via relative's card (with permission).
+Full Docker → ECR → ECS Fargate pipeline running. Three frontend bugs fixed
+along the way.
+
+### AWS account and IAM
+
+- AWS account created (billing resolved via family card).
+- IAM user `admin-edkernel` created with `AdministratorAccess` policy.
+- AWS CLI v2 installed on Arch (`curl` → `unzip` → `./aws/install`).
+  `unzip` had to be installed first (`pacman -S unzip`).
+- `less` not installed on Arch — all CLI commands now use `AWS_PAGER=""` prefix.
+- `aws configure` — region `ap-southeast-1` (Singapore, closest to Malaysia).
+- Credentials verified: `aws sts get-caller-identity`.
+
+### Docker → ECR
+
+- ECR repository `edkernel` created in `ap-southeast-1`.
+- Docker image built locally, tagged, and pushed:
+  `059020085253.dkr.ecr.ap-southeast-1.amazonaws.com/edkernel:latest`
+- Login used `aws ecr get-login-password | docker login` — bracket-paste mode
+  in terminal mangled the command on first attempt; typed it manually to fix.
+
+### ECS Fargate
+
+- ECS cluster `edkernel-cluster` created.
+- Task definition `edkernel:1` registered from `ecs-task-def.json`:
+  Fargate, 0.5 vCPU, 1 GB RAM, CloudWatch logging to `/ecs/edkernel`.
+- `ecsTaskExecutionRole` created and `AmazonECSTaskExecutionRolePolicy` attached.
+- Default VPC subnets and security group used. Port 5000 opened on the SG.
+- Service `edkernel-service` created, desired count 1, public IP enabled.
+- `ecs-task-def.json` added to `.gitignore` — contains `API_KEY` in plaintext.
+- API key (`API_KEY`) added to task definition environment; task definition
+  bumped to revision 2, service updated.
+
+**Note:** Fargate assigns a new public IP on every task replacement — there is
+no stable address yet (no ALB). Getting the current IP requires three commands
+each time: `list-tasks` → `describe-tasks` → `describe-network-interfaces`.
+
+### Bug: `crypto.randomUUID` not available on HTTP
+
+`index.html` used `crypto.randomUUID()` in three places. The Web Crypto API
+restricts `randomUUID` to secure contexts (HTTPS or localhost). Over plain HTTP
+the method is `undefined`, and calling it throws a `TypeError` that crashed the
+JS before any curricula could render.
+
+Fix: replaced all three call sites with a fallback expression:
+
+```js
+(crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))()
+```
+
+### Bug: SyntaxError in app.py from misplaced edit
+
+The user's attempt to edit the lesson-start prompt accidentally pasted the new
+string into the `build_check_prompt()` call site at line 793, removing the
+closing `)`. Gunicorn crashed on import with `SyntaxError: '(' was never
+closed`. Restored `build_check_prompt(question, answer, context_prefix=context_prefix)`
+and applied the intended change to line 541 instead.
+
+### Lesson start — soft greeting, no question
+
+The original `/api/start` handler always called the model with "Start the
+lesson now — ask me exactly one question." This produced a cold maths question
+the moment a student opened a lesson, with no greeting or context.
+
+Attempts to make the model greet first (prompt instruction) were ignored — the
+RAG context primes it too strongly toward teaching mode. Fixed by skipping the
+model call entirely on lesson start and returning a hardcoded opener:
+
+> "Hey! Need help with anything?"
+
+The student drives from there. The RAG context and question bank are still
+available for the first real reply — nothing is lost, the UX is just less
+alarming.
+
+### Bug: "Go ahead!" firing on real content questions
+
+The CONVERSATION rule `"'I have a question' / 'can I ask something' → say
+'Go ahead!'"` was interpreted too broadly. "Genuinely for pilots should I take
+both?" triggered it — the model read it as a preamble rather than the full
+question.
+
+Fixed by tightening the rule to explicitly exclude real content questions:
+
+> "Meta-questions only ('I have a question', 'can I ask something', 'I want to
+> move on'): stop, say 'Go ahead!' and wait. Do NOT apply this to real content
+> questions like 'should I take both?' or 'which is better?'."
+
+### Guardrail: knowledge cutoff
+
+The model confidently fabricated "2026 quantum computing developments" when
+asked. Added a CONVERSATION rule:
+
+> "Questions about events or developments after 2024: say honestly that your
+> knowledge only goes up to 2024 and you cannot reliably answer — do not guess
+> or make up facts."
+
+This is a temporary measure. The proper fix is Tavily web search as a fallback
+for out-of-curriculum factual questions — the `TAVILY_API_KEY` is already in
+the env and the key is present in the dev panel.
+
+### Known issues
+
+- **No stable URL** — public IP changes on every Fargate task replacement.
+  An ALB (Application Load Balancer) is the correct fix; not yet provisioned.
+- **EFS not mounted** — SQLite and ChromaDB live inside the container.
+  Data is lost on every task replacement. EFS mount for `/app/.logs` and
+  `/app/data/chroma` is the next infrastructure task.
+- **AWS Bedrock not integrated** — competition requires meaningful AWS AI usage.
+- **Live bounding boxes** not rendered in step checker UI.
+- **Tavily web search** not wired — knowledge-cutoff guardrail is a prompt
+  workaround, not a real fix.
+- **Title still says "OLLM Tutor"** — `index.html` `<title>` not updated yet.
+- **`[CORRECT]` marker missing** on some "Correct, lift is..." style replies —
+  model says the right thing but omits the bracket.
+
+### Next
+
+1. ALB (Application Load Balancer) — stable URL, no more IP-hunting
+2. EFS mount for `/app/.logs` and `/app/data/chroma` (data persistence)
+3. AWS Bedrock provider in `core/llm/client.py`
+4. Tavily web search fallback for out-of-curriculum questions
+5. Live bounding box display in step checker UI
+6. Fix `index.html` title to "EdKernel"
+7. Manim video renderer, demo video, technical report

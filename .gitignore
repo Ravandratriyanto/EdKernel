@@ -4,6 +4,7 @@ __pycache__/
 data/chroma/
 .env
 settings.json
+ecs-task-def.json
 static/dev.html
 .venv/
 .logs/
