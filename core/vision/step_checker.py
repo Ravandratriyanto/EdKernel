@@ -53,8 +53,9 @@ def check_working(path, *, provider, model, host, api_key, vision_model) -> dict
             return {
                 "steps": steps,
                 "boxes": boxes,
+                "image_size": [binary.shape[0], binary.shape[1]],
                 "error_index": i,
                 "explanation": reply.strip()[2:].strip(),
             }
 
-    return {"steps": steps, "boxes": boxes, "error_index": None, "explanation": None}
+    return {"steps": steps, "boxes": boxes, "image_size": [binary.shape[0], binary.shape[1]], "error_index": None, "explanation": None}

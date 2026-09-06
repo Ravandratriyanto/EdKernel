@@ -76,32 +76,34 @@ Report what actually happened, including failures. Do not round a partial result
 
 `llama-3.3-70b-versatile` was deprecated. Current default: `openai/gpt-oss-120b` (OpenAI-compat endpoint via Groq). Check `https://console.groq.com/docs/models` if hitting model errors — the catalogue changes.
 
-## Features built (as of session 19)
+## Features built (as of session 25)
 
 - **OpenCV 5 pipeline**: rectify → binarise → segment → transcribe → evaluate. Bounding boxes returned to front end and drawn on canvas overlay (green = correct, red = error line).
+- **Step checker inline**: no longer a separate mode — fires automatically when a student attaches an image in Learn mode. `runStepChecker(attach)` called after the tutor bubble renders; bounding-box canvas appears if steps are found; silent if not.
 - **Maths PDF vision path**: `fitz` converts PDF pages to JPEG at 150 DPI; vision LLM transcribes. Auto-fallback triggers when pypdf returns <100 chars OR `_junk_ratio()` > threshold.
-- **Auto-reingest**: uploading a new paper or curriculum triggers background ingest. `_INGEST_STATUS` dict tracks per-curriculum state. Admin and teacher panels poll `GET /api/admin/ingest/<cid>` for live status.
+- **Auto-reingest**: uploading a new paper or curriculum triggers background ingest. `_INGEST_STATUS` dict tracks per-curriculum state. Admin and teacher panels poll `GET /api/admin/ingest/<cid>` for live status. **Caveat**: Gunicorn multi-worker means GET may hit a different worker than POST — dict state unreliable; verify by testing the endpoint, not the status.
 - **Progress tracking**: SQLite `progress` table `(user_id, curriculum, topic_id, attempts, correct, last_seen)`. Mastery = correct/attempts: ≥0.8 green dot, >0 yellow, untouched grey. Student sees dots on topic list; "Continue" banner shows recommended next topic.
 - **Hint ladder**: 4-rung escalation. Evaluated at 10/10 on `evals/learn_cases.jsonl`. Rung 1 = no mathematical vocabulary, rung 2 = name the concept, rung 3 = explain + apply.
 - **URL routing**: `openClass()` calls `history.pushState({cid}, '', '/?c=<id>')`. Back button returns to class list. Direct URL `/?c=<id>` auto-opens curriculum after login.
-- **Docker**: `Dockerfile` uses `python:3.12-slim`, gunicorn, `ENV DB_DIR=/app/.logs`, `ENV CHROMA_DIR=/app/data/chroma`, `VOLUME /app/.logs`. Build: `docker build -t edkernel .`
-- **GCSE Mathematics curriculum**: `curricula/gcse-maths/` — manifest, 5-topic `topics.json`, 20-question `questions.json` (MCQ with A/B/C/D options). No PDFs yet; RAG collection not ingested.
+- **AWS ECS Fargate**: Docker → ECR → ECS Fargate + ALB. Stable URL: `edkernel-alb-1135643304.ap-southeast-1.elb.amazonaws.com`. EFS mounted at `/app/.logs` and `/app/data/chroma` for SQLite + ChromaDB persistence across task replacements. Current task definition: revision 14.
+- **GCSE Mathematics curriculum (PMT)**: 88 revision note PDFs from Physics and Maths Tutor ingested into `gcse_maths` ChromaDB collection (951 chunks). Covers Number, Algebra, Ratio/Proportion, Geometry, Probability, Statistics. PDFs live in `curricula/gcse-maths/reference/` (baked into image via `.dockerignore` rules).
+- **RAG-based MCQ generation**: `/api/papers` falls back to `retrieve(topic, n_results=10, collection_name=collection)` when `TAVILY_API_KEY` is absent. Generates A/B/C/D MCQs from curriculum chunks. Verification (`_verify_questions`) filters with unverified fallback if verifier rejects all.
 - **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
 - **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
 
-## Pending (as of session 19)
+## Pending (as of session 25)
 
-- **AWS** — Docker → ECR → ECS Fargate + ALB (hard competition requirement, 10% of score) — **next priority**
-- EFS mount for `/app/.logs` and `/app/data/chroma` (SQLite + ChromaDB persistence on Fargate)
-- AWS Bedrock provider in `core/llm/client.py` (competition AWS requirement)
+- **AWS Bedrock provider** in `core/llm/client.py` (competition AWS requirement — meaningful AWS AI usage)
+- **Teacher progress UI** (`GET /api/teacher/curricula/<cid>/progress` route exists, no HTML yet)
+- **Graviton EC2 benchmark** (COOL Award — $1,000 prize)
+- **Fix `index.html` title** from "OLLM Tutor" to "EdKernel"
+- **Live bounding boxes** in step checker UI (backend returns boxes; frontend does not draw overlay on the canvas)
+- **Tavily web search fallback** — knowledge-cutoff guardrail is currently a prompt workaround; Tavily key is already in env
+- **Manim video renderer** — LLM writes Manim Python → renders MP4 → served in chat
+- **5-minute demo video** (required for competition submission)
+- **Technical report** (required for competition submission)
+- **Ingest auto-trigger on container start** — currently must be re-run manually after each ECS task replacement
 - Frontend error toast for `/api/reply` 500s (spinner hangs silently on model error)
-- Model call timeout + Groq 5xx retry (deferred post-AWS)
-- Teacher progress UI (`GET /api/teacher/curricula/<cid>/progress` route exists, no HTML yet)
-- Graviton EC2 benchmark (COOL Award — $1,000 prize)
-- Live bounding box display in step checker UI (API returns boxes, UI does not render them)
-- Manim video renderer — multi-agent headline feature; LLM writes Manim Python → renders MP4 → served in chat
-- 5-minute demo video (required for competition submission)
-- Technical report (required for competition submission)
 
 ## Things that keep biting
 
@@ -115,6 +117,9 @@ Report what actually happened, including failures. Do not round a partial result
 - `_verify_math` and `_ai_evaluate` are defined in `app.py` but intentionally not called — they caused correlated failures (same model verified its own wrong answer) and added 3–9 s latency. Do not re-enable without switching to a separate verification model.
 - Patching `TUTOR_SYSTEM_PROMPT` incrementally creates contradictions fast. The prompt was rewritten clean in session 19. If adding new rules, check for contradictions with the four labelled sections before committing.
 - Browser caches `index.html` aggressively. The `/` route now sets `Cache-Control: no-store`. A stale cached page on another device shows the old UI; fix with hard refresh (`Ctrl+Shift+R`).
+- PMT revision PDFs are diagram-heavy and often scan-based. pypdf extracts garbled text from them, producing low-quality RAG chunks. Generated MCQ answer keys can be wrong even when the question looks plausible. Vision transcription of PDF pages would improve this, but is not implemented for the ingestion path.
+- Gunicorn multi-worker means `_INGEST_STATUS` (in-process dict) is unreliable as a status indicator: a GET may hit a different worker than the POST that started ingest. The EFS writes still succeed. Never trust the status endpoint alone — verify by hitting the feature directly.
+- LaTeX in dynamically-created MCQ option buttons requires `btn.innerHTML` (not `textContent`) plus `renderMathInElement(optRow, {...})` called after all buttons are appended. Store the letter in `btn.dataset.letter` — KaTeX rewrites `textContent`, so reading `textContent[0]` breaks after rendering.
 
 ## Competition context
 

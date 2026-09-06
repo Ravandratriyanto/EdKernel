@@ -896,8 +896,6 @@
   <span id="header-class-name" class="hidden"></span>
   <div id="mode-toggle-wrap" class="mode-toggle hidden">
     <button id="btn-learn" class="active" onclick="setMode('learn')">Learn</button>
-    <button id="btn-check" onclick="setMode('check')">Check</button>
-    <button id="btn-steps" onclick="setMode('steps')">Steps</button>
   </div>
   <button id="btn-questions" class="hidden" onclick="openQuestions()"
           style="border:none;background:rgba(255,255,255,0.1);color:white;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem">
@@ -1067,28 +1065,7 @@
   </div>
 </div>
 
-<div id="check-panel" class="hidden">
-  <div id="check-attach-strip" class="attach-strip hidden"></div>
-  <div class="input-row" style="align-items:stretch">
-    <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('check')" style="align-self:flex-end">📎</button>
-    <div style="flex:1; display:flex; flex-direction:column; gap:8px">
-      <textarea id="input-question" placeholder="Question"></textarea>
-      <textarea id="input-check-answer" placeholder="Your answer"></textarea>
-    </div>
-    <button class="send-btn" onclick="submitCheck()" style="align-self:flex-end">Check</button>
-  </div>
-</div>
 
-<div id="steps-panel" class="hidden">
-  <div id="steps-attach-strip" class="attach-strip hidden"></div>
-  <div class="input-row">
-    <button class="icon-btn" title="Attach a photo of handwritten working" onclick="openFilePicker('steps')">📎</button>
-    <span style="flex:1; color:#6b7280; font-size:0.85rem; padding:0 8px">
-      Attach a photo of handwritten working — each step will be checked
-    </span>
-    <button class="send-btn" onclick="submitWorking()">Check steps</button>
-  </div>
-</div>
 
 </div><!-- /main-col -->
 </div><!-- /body-row -->
@@ -1159,12 +1136,6 @@
   /* ---- mode ---- */
   function setMode(m) {
     mode = m;
-    document.getElementById('btn-learn').classList.toggle('active', m === 'learn');
-    document.getElementById('btn-check').classList.toggle('active', m === 'check');
-    document.getElementById('btn-steps').classList.toggle('active', m === 'steps');
-    document.getElementById('learn-panel').classList.toggle('hidden', m !== 'learn');
-    document.getElementById('check-panel').classList.toggle('hidden', m !== 'check');
-    document.getElementById('steps-panel').classList.toggle('hidden', m !== 'steps');
     clearChat();
     messages = [];
     wrongStreak = 0;
@@ -1425,11 +1396,22 @@
       options.forEach(opt => {
         const btn = document.createElement('button');
         btn.className = 'option-btn';
-        btn.textContent = `${opt.letter}) ${opt.text}`;
+        btn.dataset.letter = opt.letter;
+        const safe = opt.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        btn.innerHTML = `${opt.letter}) ${safe}`;
         btn.onclick = onOptionSelect
           ? () => onOptionSelect(opt.letter, opt.text, optRow)
           : () => selectOption(`${opt.letter}) ${opt.text}`, optRow);
         optRow.appendChild(btn);
+      });
+      renderMathInElement(optRow, {
+        delimiters: [
+          { left: '\\(', right: '\\)', display: false },
+          { left: '\\[', right: '\\]', display: true  },
+          { left: '$$',  right: '$$',  display: true  },
+          { left: '$',   right: '$',   display: false },
+        ],
+        throwOnError: false,
       });
       area.appendChild(optRow);
     }
@@ -1655,6 +1637,7 @@
       if (data.correct === true)  wrongStreak = 0;
       if (data.correct === false) wrongStreak += 1;
       appendBubble('tutor', data.response);
+      if (attach && attach.type === 'image') runStepChecker(attach);
       loadSessions();          // turn count and timestamp just changed
       if (data.papers && data.papers.length) showPapers(data.papers, null, 0);
 
@@ -1678,93 +1661,66 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAnswer(); }
   }
 
-  /* ---- check ---- */
-  async function submitCheck() {
-    const question = document.getElementById('input-question').value.trim();
-    const answer   = document.getElementById('input-check-answer').value.trim();
-    if (!question || !answer || busy) return;
-    busy = true;
-
-    const attach = attachment;
-    clearAttachment();
-    clearChat();
-    appendBubble('student', `**Q:** ${question}\n\n**A:** ${answer}`, attach);
-    appendThinking();
-
+  async function runStepChecker(attach) {
     try {
-      const res  = await fetch('/api/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, answer, ...basePayload(), attachment: attach }),
-      });
-      const data = await res.json();
-      removeThinking();
-      appendBubble('tutor', data.response, null, null, data.correct);
-    } catch (e) {
-      removeThinking();
-      appendBubble('tutor', `Error: ${e.message}`);
-    }
-    busy = false;
-  }
-
-  async function submitWorking() {
-    if (!attachment || attachment.type !== 'image' || busy) {
-      if (!attachment) appendBubble('tutor', 'Attach a photo of handwritten working first.');
-      else if (attachment.type !== 'image') appendBubble('tutor', 'Steps mode needs an image, not a PDF.');
-      return;
-    }
-    busy = true;
-    const attach = attachment;
-    clearAttachment();
-    clearChat();
-    appendBubble('student', 'Checking handwritten working…', attach);
-    appendThinking();
-
-    try {
-      const res  = await fetch('/api/check_working', {
+      const res = await fetch('/api/check_working', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ b64: attach.b64, ...basePayload(),
                                vision_model: attach.vision_model || '' }),
       });
       const data = await res.json();
-      removeThinking();
+      if (!data.error) appendWorkingResult(attach, data);
+    } catch (_) { /* silently ignore — step checking is optional */ }
+  }
 
-      if (data.error) { appendBubble('tutor', `Error: ${data.error}`); busy = false; return; }
+  function appendWorkingResult(attach, data) {
+    const { steps, boxes, image_size, error_index, explanation } = data;
+    if (!steps || steps.length === 0) return;
 
-      const { steps, error_index, explanation } = data;
-      if (!steps || steps.length === 0) {
-        appendBubble('tutor', 'No lines of working found in the image.');
-        busy = false; return;
-      }
+    const items = steps.map((s, i) => {
+      const isErr = i === error_index;
+      return `<li class="${isErr ? 'step-error' : ''}">`
+           + `<span style="color:#6b7280;font-size:0.8rem;margin-right:8px">Line ${i + 1}</span>`
+           + `${s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`
+           + (isErr ? `<span class="step-error-label">← error here</span>` : '')
+           + `</li>`;
+    }).join('');
 
-      const items = steps.map((s, i) => {
-        const isErr = i === error_index;
-        return `<li class="${isErr ? 'step-error' : ''}">`
-             + `<span style="color:#6b7280;font-size:0.8rem;margin-right:8px">Line ${i + 1}</span>`
-             + `${s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`
-             + (isErr ? `<span class="step-error-label">← error here</span>` : '')
-             + `</li>`;
-      }).join('');
-
-      let html = `<ul class="step-list">${items}</ul>`;
-      if (error_index === null) {
-        html += `<p style="color:#16a34a;font-weight:600;margin-top:8px">✓ No errors found</p>`;
-      } else if (explanation) {
-        html += `<div class="step-explanation">${explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
-      }
-
-      const bubble = document.createElement('div');
-      bubble.className = 'message tutor';
-      bubble.innerHTML = `<div class="bubble">${html}</div>`;
-      document.getElementById('chat-area').appendChild(bubble);
-      document.getElementById('chat-area').scrollTop = 9e9;
-
-    } catch (e) {
-      removeThinking();
-      appendBubble('tutor', `Error: ${e.message}`);
+    let html = `<ul class="step-list">${items}</ul>`;
+    if (error_index === null) {
+      html += `<p style="color:#16a34a;font-weight:600;margin-top:8px">✓ No errors found</p>`;
+    } else if (explanation) {
+      html += `<div class="step-explanation">${explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
     }
-    busy = false;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'message tutor';
+    bubble.innerHTML = `<div class="bubble">${html}</div>`;
+    document.getElementById('chat-area').appendChild(bubble);
+    document.getElementById('chat-area').scrollTop = 9e9;
+
+    if (boxes && image_size && attach.previewUrl) {
+      const imgEl = new Image();
+      imgEl.onload = () => {
+        const cvs = document.createElement('canvas');
+        cvs.width = imgEl.naturalWidth;
+        cvs.height = imgEl.naturalHeight;
+        const ctx = cvs.getContext('2d');
+        ctx.drawImage(imgEl, 0, 0);
+        const sx = imgEl.naturalWidth  / image_size[1];
+        const sy = imgEl.naturalHeight / image_size[0];
+        boxes.forEach(([x, y, w, h], i) => {
+          ctx.strokeStyle = (i === error_index) ? '#ef4444' : '#16a34a';
+          ctx.lineWidth = Math.max(2, Math.round(imgEl.naturalWidth / 300));
+          ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
+        });
+        cvs.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin:8px auto 0';
+        document.getElementById('chat-area').appendChild(cvs);
+        document.getElementById('chat-area').scrollTop = 9e9;
+      };
+      imgEl.src = attach.previewUrl;
+    }
   }
   
 
@@ -2023,10 +1979,11 @@
 
     optRow.querySelectorAll('.option-btn').forEach(btn => {
       btn.disabled = true;
-      const btnLetter = btn.textContent.trim()[0];
+      const btnLetter = (btn.dataset.letter || btn.textContent.trim())[0];
       if (btnLetter === letter)   btn.classList.add(letter === q.answer ? 'correct' : 'wrong');
       if (btnLetter === q.answer && letter !== q.answer) btn.classList.add('correct');
     });
+
 
     appendBubble('student', `${letter}) ${optText}`);
 
@@ -2231,7 +2188,6 @@
     document.getElementById('body-row').classList.remove('hidden');
     document.getElementById('btn-back').classList.remove('hidden');
     document.getElementById('header-class-name').classList.remove('hidden');
-    document.getElementById('mode-toggle-wrap').classList.remove('hidden');
     document.getElementById('btn-sidebar').classList.remove('hidden');
     document.getElementById('btn-questions').classList.remove('hidden');
     loadSessions();

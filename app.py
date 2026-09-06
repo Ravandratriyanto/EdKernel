@@ -352,7 +352,7 @@ PDF_TEXT_LIMIT  = 8000
 PAPER_CACHE_DIR = Path(__file__).parent / "data" / "papers"
 PAPER_MAX_BYTES = 20 * 1024 * 1024   
 PAPER_MAX_FETCH = 3                  
-VERIFY_OVERSHOOT = 3                 
+VERIFY_OVERSHOOT = 5
 _PAPER_ID_RE    = re.compile(r'^[0-9a-f]{16}$')
 _GREETING_RE = re.compile(
     r"^\s*(?:h(?:i|ey|ello|igh)|yo|sup|good\s+(?:morning|afternoon|evening))"
@@ -992,8 +992,8 @@ PAPER_DOMAINS = [
 ]
 
 PAPER_GEN_PROMPT = (
-    "You are an SAT/A-level exam question writer.\n"
-    "Read the content below from past papers and generate {n} multiple-choice questions "
+    "You are an exam question writer.\n"
+    "Read the content below and generate {n} multiple-choice questions "
     "that test understanding of key concepts.\n\n"
     "Use this EXACT format — no deviations:\n\n"
     "Q1. Question text here\n"
@@ -1007,12 +1007,13 @@ PAPER_GEN_PROMPT = (
     "- Always exactly 4 options: A B C D\n"
     "- Always end each question with [ANSWER: X] on its own line\n"
     "- One correct answer, three plausible distractors\n"
-    "- Match SAT/A-level difficulty\n"
     "- Blank line between questions\n"
-    "- Base every question on the subject matter being examined. Ignore cover pages, instructions, "
-    "copyright notices, exam board names and any marketing text — never write a question about the "
-    "exam board, the test itself, or the organisation that published the paper\n\n"
-    "Past paper content:\n{content}"
+    "- Every question must test a mathematical concept, fact, or procedure — not document structure.\n"
+    "- NEVER ask about worksheet titles, document names, topic headings, or how content is organised.\n"
+    "- NEVER ask about the exam board, the publisher, or the format of the notes.\n"
+    "- BAD example (forbidden): 'Which topic includes a worksheet titled X?' — this tests nothing mathematical.\n"
+    "- GOOD example: 'What is the gradient of the line y = 3x + 2?' — this tests mathematical knowledge.\n\n"
+    "Content:\n{content}"
 )
 
 def _allowed_paper_host(url: str) -> bool:
@@ -1177,8 +1178,38 @@ def api_papers():
 
     if not topic:
         return jsonify({"error": "No topic provided"}), 400
+
     if not tavily_key:
-        return jsonify({"error": "Tavily API key required"}), 400
+        # RAG fallback: generate from ingested curriculum notes
+        _, collection = _curriculum_params(data)
+        chunks = retrieve(topic, n_results=10, collection_name=collection)
+        if not chunks:
+            return jsonify({"error": "No curriculum content found for that topic. "
+                                     "Add a Tavily key or ingest reference material first."}), 404
+        combined = "\n\n---\n\n".join(chunks)[:7000]
+        sources = []
+        papers = []
+        prompt = PAPER_GEN_PROMPT.format(n=n_questions + VERIFY_OVERSHOOT, content=combined)
+        llm_kwargs = {"model": model_name, "host": host,
+                      "provider": provider, "api_key": api_key}
+        try:
+            raw = chat([{"role": "user", "content": prompt}], **llm_kwargs)
+        except Exception as e:
+            return jsonify({"error": f"Question generation failed: {e}"}), 500
+        questions = _parse_questions(raw)
+        verified, dropped = _verify_questions(questions, **llm_kwargs)
+        # fall back to unverified if verifier rejected everything
+        final = (verified if verified else questions)[:n_questions]
+        if not final:
+            return jsonify({"error": "Could not generate questions for that topic. "
+                                     "Try a more specific topic."}), 502
+        return jsonify({
+            "questions": _format_questions(final),
+            "sources": sources,
+            "papers": papers,
+            "grounded": True,
+            "dropped": dropped,
+        })
 
     try:
         results = _search_papers(topic, tavily_key)

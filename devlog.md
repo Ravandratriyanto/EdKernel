@@ -3551,3 +3551,137 @@ the env and the key is present in the dev panel.
 5. Live bounding box display in step checker UI
 6. Fix `index.html` title to "EdKernel"
 7. Manim video renderer, demo video, technical report
+
+## Session 25 — 2026-09-06
+
+ALB and EFS were in place before this session (ECS revision 6, stable URL
+`edkernel-alb-1135643304.ap-southeast-1.elb.amazonaws.com`). This session
+removed two now-redundant UI modes, ingested the GCSE Maths curriculum from
+Physics and Maths Tutor, and wired RAG-based MCQ generation as a Tavily
+fallback. Four question-quality bugs found and fixed. Finished at ECS
+revision 14.
+
+### Step checker moved into Learn mode
+
+The standalone Steps panel was removed. Step checking still runs — it fires
+silently when a student attaches an image in Learn mode, after the tutor has
+replied. If the image contains handwritten working, the bounding-box canvas
+appears below the reply (correct lines green, errors red). If
+`steps.length === 0` (no recognised working), nothing extra appears.
+
+Removed from `static/index.html`: `#btn-steps`, `#steps-panel`,
+`submitWorking()`. Added: `runStepChecker(attach)` and
+`appendWorkingResult(attach, data)`, called from `sendAnswer()` after the
+tutor bubble is rendered.
+
+### Check mode removed
+
+With step checking now inline and the tutor prompt already handling
+`[CORRECT]`/`[WRONG]`/`[OPEN]` signals, Check mode was redundant. Removed
+`#btn-check`, `#check-panel`, and `submitCheck()` from `index.html`.
+`setMode()` simplified — Learn is now the only mode.
+
+`#mode-toggle-wrap` is permanently hidden (`showChatView()` no longer removes
+its `hidden` class), so the mode toggle never appears in the header.
+
+### GCSE Maths curriculum from Physics and Maths Tutor (PMT)
+
+`physicsandmathstutor.com/maths-revision/` hosts topic-by-topic revision PDFs
+across all six GCSE Maths areas. Downloaded 88 PDFs into
+`curricula/gcse-maths/reference/`, plus an 88-file sidecar `.json` giving
+each a human-readable title.
+
+Topics: Number (11), Algebra (28), Ratio/Proportion (11), Geometry (23),
+Probability (8), Statistics (7).
+
+Two ingestion bugs hit along the way:
+
+**URL encoding.** PDF filenames contain spaces. Raw URLs fail with `URL can't
+contain control characters`. Fix: `urllib.parse.quote(path, safe="/")` before
+constructing the download URL.
+
+**Wrong ingest path.** `manifest.json` `reference_dir` is processed by
+`_collect_texts()`, which only reads `.txt` files — PDFs are invisible to it.
+Fix: set `papers_dir` to `curricula/gcse-maths/reference` instead; the PDF
+collector picks those up.
+
+Local ingest produced **951 chunks** in the `gcse_maths` ChromaDB collection.
+Deployed to ECS and re-triggered ingest on the EFS container via
+`/api/admin/ingest/gcse-maths`.
+
+**Ingest status caveat.** Gunicorn runs 2 workers; `_INGEST_STATUS` is an
+in-process dict. A `GET /api/admin/ingest/<cid>` call may hit a different
+worker than the `POST` that triggered ingest, showing stale state even when
+the EFS write succeeded. Verified success by testing the Papers endpoint
+directly rather than trusting the status dict.
+
+### RAG-based question generation (no Tavily required)
+
+`/api/papers` now has a fallback path: when `TAVILY_API_KEY` is absent, it
+calls `retrieve(topic, n_results=10, collection_name="gcse_maths")` and
+builds MCQs from the returned curriculum chunks instead of fetching web PDFs.
+
+### Question quality — four bugs
+
+**1. All questions failing verification.**
+PMT revision PDFs are diagram-heavy; extracted text is often garbled. Questions
+from garbled input can have answer keys the verifier legitimately rejects.
+Fixed by falling back to the unverified set when verifier rejects everything:
+`final = (verified if verified else questions)[:n_questions]`.
+
+**2. Meta-questions about document structure.**
+"Which GCSE Maths topic includes a worksheet titled 'Estimation and
+Approximation'?" is not a maths question. Fixed by adding explicit rules to
+`PAPER_GEN_PROMPT` with a BAD/GOOD example: BAD asks about worksheet titles
+or topic headings; GOOD asks about a mathematical concept or procedure.
+
+**3. Wrong answer key (√50 question).**
+Generated answer key said B) 7.0; correct answer is A) 7.1 (√50 ≈ 7.071,
+to 2 s.f.). Caught by user inspection. Fix: bumped `VERIFY_OVERSHOOT` from
+3 → 5 (more candidates for verifier to filter) and re-enabled verification
+with the unverified fallback instead of hard error.
+
+**4. Raw LaTeX in MCQ option buttons.**
+Buttons showed literal `\(5\sqrt{2}\)` text. `btn.textContent` treats
+everything as plain text; KaTeX delimiters are not processed. Fix:
+- `btn.innerHTML` with HTML-escaped text (ampersand, `<`, `>` escaped to
+  prevent injection if content ever comes from untrusted sources).
+- Letter stored in `btn.dataset.letter` — KaTeX rewrites `textContent`, so
+  reading `textContent[0]` to recover the letter breaks after rendering.
+- `renderMathInElement(optRow, { delimiters: [...], throwOnError: false })`
+  called on the option row after all buttons are appended.
+
+### ECS deployments this session
+
+| Rev | Change |
+|-----|--------|
+| 7   | Step checker integrated into Learn, Steps mode removed |
+| 8   | Check mode removed |
+| 9   | PMT curriculum baked into image (`reference/` included in build) |
+| 10  | RAG Papers fallback wired; `PAPER_GEN_PROMPT` meta-question rules added |
+| 11  | Verification disabled in RAG path (all questions were being rejected) |
+| 12  | BAD/GOOD example added to prompt |
+| 13  | Verification re-enabled with unverified fallback; `VERIFY_OVERSHOOT` 3→5 |
+| 14  | LaTeX in MCQ buttons fixed (`innerHTML` + `renderMathInElement`) |
+
+### Known issues
+
+- **Answer key accuracy** — verification filters but is not 100% reliable.
+  A stronger model or a separate verification model would help.
+- **PMT PDF text extraction** — many PDFs are scan-based or diagram-heavy;
+  pypdf extracts garbled text. Vision transcription of PDF pages would improve
+  chunk quality.
+- **Ingest on EFS must be re-triggered** after every new ECS task starts;
+  it does not run automatically on container start.
+- **AWS Bedrock** not integrated (competition requirement).
+- **Title still says "OLLM Tutor"** in `index.html` `<title>`.
+- **Live bounding boxes** not rendered in step checker UI (backend returns
+  boxes; frontend draws them only on step result, not as a canvas overlay).
+
+### Next
+
+1. AWS Bedrock provider in `core/llm/client.py`
+2. Fix `index.html` title to "EdKernel"
+3. Teacher progress UI
+4. COOL benchmark (Graviton)
+5. Manim video renderer, demo video, technical report

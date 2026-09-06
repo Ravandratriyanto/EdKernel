@@ -7,5 +7,5 @@
   "prompt_flavour": "GCSE Mathematics exam preparation",
   "collection": "gcse_maths",
   "reference_dir": "data/reference",
-  "papers_dir": "data/papers"
+  "papers_dir": "curricula/gcse-maths/reference"
 }
