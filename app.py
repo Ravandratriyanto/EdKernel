@@ -605,7 +605,10 @@ def api_reply():
                 "papers": papers,
             })
 
+    detected_question = data.get("detected_question", "")
     user_msg = {"role": "user", "content": user_input + hint_note(wrong_streak)}
+    if detected_question:
+        user_msg["content"] += f"\n\n[Question from the student's image: {detected_question}]"
     if attachment:
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
 
@@ -848,6 +851,30 @@ def api_check_working():
              error_index=result["error_index"],
              latency_ms=latency)
 
+    return jsonify(result)
+
+
+@app.route("/api/detect_question", methods=["POST"])
+def api_detect_question():
+    err = _check_llm_rate()
+    if err: return err
+    data         = request.json or {}
+    b64          = data.get("b64", "")
+    if not b64:
+        return jsonify({"error": "no image"}), 400
+    provider     = data.get("provider", "ollama")
+    model        = data.get("model", "gemma4")
+    host         = data.get("host", "http://localhost:11434")
+    api_key      = _key(data, "api_key", "API_KEY")
+    vision_model = data.get("vision_model", "")
+    from core.vision.image_handler import detect_question
+    try:
+        result = detect_question(b64, name="image.jpg",
+                                 provider=provider, model=model,
+                                 host=host, api_key=api_key,
+                                 vision_model=vision_model)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     return jsonify(result)
 
 
@@ -1182,12 +1209,18 @@ def api_papers():
     if not tavily_key:
         # RAG fallback: generate from ingested curriculum notes
         _, collection = _curriculum_params(data)
-        chunks = retrieve(topic, n_results=10, collection_name=collection)
+        chunks = retrieve(topic, n_results=10, collection_name=collection, with_sources=True)
         if not chunks:
             return jsonify({"error": "No curriculum content found for that topic. "
                                      "Add a Tavily key or ingest reference material first."}), 404
-        combined = "\n\n---\n\n".join(chunks)[:7000]
+        combined = "\n\n---\n\n".join(c["text"] for c in chunks)[:7000]
+        seen_titles: set[str] = set()
         sources = []
+        for c in chunks:
+            t = c["source"]
+            if t and t not in seen_titles:
+                seen_titles.add(t)
+                sources.append({"title": t, "url": _pmt_url(t)})
         papers = []
         prompt = PAPER_GEN_PROMPT.format(n=n_questions + VERIFY_OVERSHOOT, content=combined)
         llm_kwargs = {"model": model_name, "host": host,
@@ -1257,6 +1290,19 @@ def api_papers():
     })
 
 
+@app.route("/api/papers/correct", methods=["POST"])
+def api_papers_correct():
+    """Record a correct MCQ answer for the teacher progress dashboard."""
+    if not g.user:
+        return jsonify({"ok": False}), 401
+    data  = request.json
+    cid   = (data.get("curriculum_id") or "").strip()
+    topic = (data.get("topic") or "").strip()
+    if cid and topic:
+        users.record_progress(g.user["id"], cid, topic, correct=True)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/papers/hint", methods=["POST"])
 def api_papers_hint():
     data         = request.json
@@ -1269,6 +1315,13 @@ def api_papers_hint():
     model_name   = data.get("model", "gemma4")
     host         = data.get("host", "http://localhost:11434")
     api_key      = _key(data, "api_key", "API_KEY")
+
+    # Record wrong attempt for teacher progress (only on first wrong — streak>1 is the same question retried)
+    if wrong_streak == 1 and g.user:
+        cid   = (data.get("curriculum_id") or "").strip()
+        topic = (data.get("topic") or "").strip()
+        if cid and topic:
+            users.record_progress(g.user["id"], cid, topic, correct=False)
 
     opts_text = "\n".join(f"{o['letter']}) {o['text']}" for o in options)
     if wrong_streak == 1:
@@ -1290,6 +1343,21 @@ def api_papers_hint():
     response = chat(messages, model=model_name, host=host, provider=provider, api_key=api_key)
     response, _ = _tutor_reply(response)
     return jsonify({"response": response})
+
+def _pmt_url(source_title: str) -> str:
+    """Build a PMT revision page URL from a stored source title.
+
+    Titles are stored as "PMT GCSE Maths - <Topic Name>" during ingest.
+    Strips punctuation and converts to a hyphenated slug matching PMT's URL structure.
+    """
+    import re
+    parts = source_title.split(" - ", 1)
+    if len(parts) == 2:
+        clean = re.sub(r"[^\w\s]", "", parts[1].strip().lower())
+        slug = re.sub(r"\s+", "-", clean)
+        return f"https://www.physicsandmathstutor.com/maths-revision/gcse-maths/{slug}/"
+    return "https://www.physicsandmathstutor.com/maths-revision/gcse-maths/"
+
 
 def _search_papers(topic: str, tavily_key: str) -> list[dict]:
     """Ask Tavily for past papers on a topic. Raises on failure."""

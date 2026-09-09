@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EdKernel — How it works for teachers</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 24px 64px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .logo-mark {
+      width: 40px;
+      height: 40px;
+      background: #4f46e5;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: -0.05em;
+    }
+
+    .logo-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.03em;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #0f172a;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      font-size: 1rem;
+      color: #64748b;
+      max-width: 480px;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+      padding: 40px;
+      width: 100%;
+      max-width: 860px;
+      margin-bottom: 32px;
+    }
+
+    .card h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+
+    .legend {
+      width: 100%;
+      max-width: 860px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .legend-item {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      padding: 20px 24px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .legend-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .icon-setup  { background: #ede9fe; }
+    .icon-ai     { background: #dbeafe; }
+    .icon-student { background: #dcfce7; }
+    .icon-teacher { background: #fef9c3; }
+
+    .legend-item h3 {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+
+    .legend-item p {
+      font-size: 0.82rem;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    footer {
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">EK</div>
+    <span class="logo-name">EdKernel</span>
+  </div>
+  <h1>How EdKernel works for teachers</h1>
+  <p>A curriculum-agnostic AI tutoring platform. Teachers set it up once — the AI handles one-to-one tutoring at scale.</p>
+</header>
+
+<div class="card">
+  <h2>Teacher &amp; student journey</h2>
+  <div class="mermaid">
+flowchart TD
+    A(["`**Teacher signs up**`"]) --> B
+
+    B["`**Creates a class**
+    e.g. Year 11 Maths`"]
+
+    B --> C["`**Adds topics**
+    e.g. Algebra · Statistics · Geometry`"]
+
+    C --> D["`**Uploads materials**
+    past papers &amp; revision notes`"]
+
+    D --> E["`**AI reads &amp; indexes**
+    the materials automatically`"]
+
+    E --> F["`**Shares class link**
+    with students`"]
+
+    F --> G(["`**Students join
+    and start learning**`"])
+
+    G --> H["`**Student chats with AI tutor**
+    on any topic, anytime`"]
+
+    H --> I{Student uploads\nhandwritten working?}
+
+    I -- Yes --> J["`**AI checks each step**
+    highlights the first mistake`"]
+    J --> H
+
+    I -- No --> K["`**AI asks questions**
+    Socratic style`"]
+
+    K --> L{Got it?}
+
+    L -- Yes --> M(["`✓ **Topic mastered**`"])
+    L -- No --> N["`**AI gives a hint**
+    tries a different angle`"]
+    N --> K
+
+    M --> O(["`**Teacher sees progress**
+    who mastered what`"])
+
+    O --> P{Anyone\nstruggling?}
+    P -- Yes --> Q["`**Teacher uploads**
+    more practice material`"]
+    Q --> D
+    P -- All good --> R(["`Move to\nnext topic`"])
+
+    style A fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    style G fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style M fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style O fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style R fill:#f0fdf4,stroke:#86efac,color:#166534
+    style J fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style N fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style E fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-icon icon-setup">🏫</div>
+    <div>
+      <h3>One-time setup (15 min)</h3>
+      <p>Teacher creates the class, adds topic names, and uploads PDFs. The AI reads them automatically — no tagging or formatting needed.</p>
+    </div>
+  </div>
+  <div class="legend-item">
+    <div class="legend-icon icon-ai">🤖</div>
+    <div>
+      <h3>AI does the tutoring</h3>
+      <p>The AI asks Socratic questions, gives hints when stuck, and checks handwritten working step by step — so teachers aren't needed for every question.</p>
+    </div>
+  </div>
+  <div class="legend-item">
+    <div class="legend-icon icon-student">📈</div>
+    <div>
+      <h3>Students learn at their own pace</h3>
+      <p>Each student gets personalised hints based on their specific mistake. They can practise any time, on any device.</p>
+    </div>
+  </div>
+  <div class="legend-item">
+    <div class="legend-icon icon-teacher">📊</div>
+    <div>
+      <h3>Teacher stays in control</h3>
+      <p>The progress dashboard shows mastery per student per topic — so teachers spend their time where students actually need them.</p>
+    </div>
+  </div>
+</div>
+
+<footer>EdKernel · OpenCV AI Competition 2026</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#f1f5f9',
+      primaryTextColor: '#0f172a',
+      primaryBorderColor: '#cbd5e1',
+      lineColor: '#94a3b8',
+      secondaryColor: '#f8fafc',
+      tertiaryColor: '#f8fafc',
+      fontSize: '14px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    },
+    flowchart: {
+      curve: 'basis',
+      padding: 20,
+    },
+  });
+</script>
+
+</body>
+</html>

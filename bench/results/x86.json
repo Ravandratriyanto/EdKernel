@@ -1,0 +1,96 @@
+{
+  "system": {
+    "python": "3.14.7",
+    "opencv": "5.0.0",
+    "platform": "Linux-7.1.8-arch1-3-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "cpu": "x86_64",
+    "numpy": "2.5.2"
+  },
+  "results": [
+    {
+      "operation": "resize (900\u2192450)",
+      "mean_ms": 0.258,
+      "std_ms": 0.006,
+      "img_per_s": 3871.1,
+      "n_iters": 50
+    },
+    {
+      "operation": "cvtColor BGR\u2192Gray",
+      "mean_ms": 0.288,
+      "std_ms": 0.043,
+      "img_per_s": 3468.32,
+      "n_iters": 50
+    },
+    {
+      "operation": "bilateralFilter",
+      "mean_ms": 32.996,
+      "std_ms": 6.821,
+      "img_per_s": 30.31,
+      "n_iters": 50
+    },
+    {
+      "operation": "adaptiveThreshold",
+      "mean_ms": 8.317,
+      "std_ms": 2.337,
+      "img_per_s": 120.24,
+      "n_iters": 50
+    },
+    {
+      "operation": "Canny edge detect",
+      "mean_ms": 1.886,
+      "std_ms": 0.54,
+      "img_per_s": 530.11,
+      "n_iters": 50
+    },
+    {
+      "operation": "morphologyEx CLOSE",
+      "mean_ms": 0.796,
+      "std_ms": 0.167,
+      "img_per_s": 1256.48,
+      "n_iters": 50
+    },
+    {
+      "operation": "findContours",
+      "mean_ms": 1.774,
+      "std_ms": 0.218,
+      "img_per_s": 563.66,
+      "n_iters": 50
+    },
+    {
+      "operation": "HoughLinesP",
+      "mean_ms": 240.093,
+      "std_ms": 13.608,
+      "img_per_s": 4.17,
+      "n_iters": 50
+    },
+    {
+      "operation": "warpPerspective",
+      "mean_ms": 2.56,
+      "std_ms": 0.421,
+      "img_per_s": 390.63,
+      "n_iters": 50
+    },
+    {
+      "operation": "ink_mask (full)",
+      "mean_ms": 4.578,
+      "std_ms": 0.434,
+      "img_per_s": 218.43,
+      "n_iters": 50
+    },
+    {
+      "operation": "segment pipeline",
+      "mean_ms": 2.682,
+      "std_ms": 0.228,
+      "img_per_s": 372.86,
+      "n_iters": 20
+    },
+    {
+      "operation": "preprocess (full page)",
+      "mean_ms": 295.664,
+      "std_ms": 15.465,
+      "img_per_s": 3.38,
+      "n_iters": 50
+    }
+  ]
+}

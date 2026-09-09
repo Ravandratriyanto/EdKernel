@@ -7,6 +7,18 @@ first and fed into the normal learn/check flow — which every provider accepts.
 
 GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
 
+DETECT_PROMPT = (
+    "Look at this image. If it contains a printed or handwritten mathematical "
+    "question, problem, or exercise, transcribe it as plain text — "
+    "use LaTeX notation for any maths (e.g. \\(x^2\\), \\(\\frac{a}{b}\\)). "
+    "Include every part of the question: the stem, all sub-parts (a), (b)…, "
+    "and describe any diagram in one sentence. "
+    "If the image does NOT contain a clear question or problem "
+    "(e.g. it is handwritten calculation steps, a blank page, or an unrelated photo), "
+    "respond with exactly: NO_QUESTION\n"
+    "Output only the transcription or NO_QUESTION. No preamble, no explanation."
+)
+
 TRANSCRIBE_PROMPT = (
     "Transcribe the question in this image as plain text. "
     "Include every number, symbol, equation, and label exactly as written — "
@@ -49,19 +61,40 @@ def drop_reasoning(text: str) -> str:
         return ""
     return text.strip()
 
+def detect_question(b64: str, name: str = "image.png", provider: str = "ollama",
+                    model: str = "gemma4", host: str = "http://localhost:11434",
+                    api_key: str = "", vision_model: str = "") -> dict:
+    """Return {"found": bool, "question": str} from an image.
+
+    Returns found=False for handwritten working, blank pages, or anything that
+    is not a clear question or problem statement.
+    """
+    if provider == "groq":
+        raw = _groq_vision(DETECT_PROMPT, b64, name, vision_model or GROQ_VISION_MODEL, api_key)
+    else:
+        from ollama import Client as OllamaClient
+        client = OllamaClient(host=host)
+        messages = [{"role": "user", "content": DETECT_PROMPT, "images": [b64]}]
+        raw = drop_reasoning(client.chat(model=model, messages=messages).message.content)
+    raw = (raw or "").strip()
+    if not raw or raw.upper().startswith("NO_QUESTION") or len(raw) < 8:
+        return {"found": False, "question": ""}
+    return {"found": True, "question": raw}
+
+
 def transcribe(b64: str, name: str = "image.png", provider: str = "ollama",
                model: str = "gemma4", host: str = "http://localhost:11434",
                api_key: str = "", vision_model: str = "") -> str:
     """Return a text transcription of the question in a base64-encoded image."""
     if provider == "groq":
-        return _groq_transcribe(b64, name, vision_model or GROQ_VISION_MODEL, api_key)
+        return _groq_vision(TRANSCRIBE_PROMPT, b64, name, vision_model or GROQ_VISION_MODEL, api_key)
 
     from ollama import Client as OllamaClient
     client = OllamaClient(host=host)
     messages = [{"role": "user", "content": TRANSCRIBE_PROMPT, "images": [b64]}]
     return drop_reasoning(client.chat(model=model, messages=messages).message.content)
 
-def _groq_transcribe(b64: str, name: str, vision_model: str, api_key: str) -> str:
+def _groq_vision(prompt: str, b64: str, name: str, vision_model: str, api_key: str) -> str:
     from groq import Groq
     client = Groq(api_key=api_key)
     response = client.chat.completions.create(
@@ -69,7 +102,7 @@ def _groq_transcribe(b64: str, name: str, vision_model: str, api_key: str) -> st
         messages=[{
             "role": "user",
             "content": [
-                {"type": "text", "text": TRANSCRIBE_PROMPT},
+                {"type": "text", "text": prompt},
                 {"type": "image_url",
                  "image_url": {"url": f"data:{_mime_for(name)};base64,{b64}"}},
             ],

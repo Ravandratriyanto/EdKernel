@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OLLM Tutor</title>
+  <title>EdKernel</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -256,6 +256,27 @@
     }
     .attach-strip button:hover { color: #ef4444; }
 
+    .detect-banner {
+      margin: 4px 0 6px;
+      padding: 8px 12px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .detect-banner.scanning { background: #f9fafb; border-color: #e5e7eb; }
+    .detect-banner .detect-label {
+      font-weight: 600;
+      font-size: 0.73rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #3b82f6;
+    }
+    .detect-banner.scanning .detect-label { color: #9ca3af; }
+    .detect-banner .detect-text { color: #1e3a8a; white-space: pre-wrap; }
     .input-row { display: flex; gap: 10px; align-items: flex-end; }
 
     .input-row input, .input-row textarea {
@@ -347,9 +368,7 @@
     button.send-btn:hover    { background: #4338ca; }
     button.send-btn:disabled { background: #9ca3af; cursor: not-allowed; }
 
-    /* ---- session history sidebar ---- */
-    /* min-height:0 on the flex parents is what keeps #chat-area scrollable —
-       without it a flex child refuses to shrink below its content height. */
+    
     #body-row { flex: 1; display: flex; min-height: 0; }
 
     #sidebar {
@@ -495,7 +514,175 @@
       transition: background 0.15s;
     }
     #btn-open-tutor:hover { background: #4338ca; }
-
+    #service-tiles {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .svc-tile {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      padding: 16px 12px 14px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, transform 0.12s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .svc-tile:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+    }
+    .svc-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+    .svc-name { font-size: 0.82rem; font-weight: 600; color: white; }
+    .svc-desc { font-size: 0.7rem; color: rgba(255,255,255,0.5); }
+    /* ── Quiz: SAT Bluebook style ── */
+    #quiz-panel {
+      flex: 1; display: flex; flex-direction: column;
+      background: white; min-height: 0; overflow: hidden;
+    }
+    .qb-top {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      align-items: center; padding: 16px 28px 12px;
+    }
+    .qb-title { font-size: 1rem; font-weight: 700; color: #1a1a2e; }
+    .qb-top-center { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .qb-timer { font-size: 1.35rem; font-weight: 700; color: #1a1a2e; font-variant-numeric: tabular-nums; }
+    .qb-top-right { text-align: right; }
+    .quiz-tab-warn {
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+      color: #dc2626; background: #fef2f2; border: 1px solid #fecaca;
+      padding: 4px 10px; border-radius: 6px;
+    }
+    .qb-rule {
+      border-top: 2px dashed #d1d5db;
+      margin: 0 28px;
+    }
+    .qb-body {
+      flex: 1; display: flex; min-height: 0; overflow: hidden;
+    }
+    .qb-pane { flex: 1; overflow-y: auto; padding: 28px 32px; }
+    .qb-divider { width: 1px; background: #e5e7eb; flex-shrink: 0; }
+    #quiz-question-box {
+      font-size: 1rem; line-height: 1.7; color: #1a1a2e;
+    }
+    .qb-upload-hint { margin: 24px 0 10px; font-size: 0.78rem; color: #9ca3af; }
+    .qb-upload-btn {
+      background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px;
+      padding: 9px 16px; font-size: 0.85rem; color: #374151; cursor: pointer;
+    }
+    .qb-upload-btn:hover { background: #e5e7eb; }
+    #quiz-upload-preview {
+      max-width: 100%; border-radius: 10px; margin-top: 14px;
+      display: none; border: 1px solid #e5e7eb;
+    }
+    .qb-qnum-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+      border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;
+    }
+    .qb-qnum {
+      background: #1a1a2e; color: white; font-weight: 700; font-size: 0.85rem;
+      width: 24px; height: 24px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .qb-mark { font-size: 0.85rem; color: #6b7280; }
+    .qb-prompt { font-size: 0.98rem; color: #1a1a2e; margin-bottom: 18px; line-height: 1.5; }
+    #quiz-options { display: flex; flex-direction: column; gap: 12px; }
+    .quiz-opt {
+      display: flex; align-items: center; gap: 14px;
+      background: white; border: 1.5px solid #d1d5db; border-radius: 10px;
+      padding: 14px 18px; cursor: pointer; font-size: 0.95rem;
+      text-align: left; color: #1a1a2e;
+      transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+    }
+    .quiz-opt:hover { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5; }
+    .quiz-opt .qb-letter {
+      flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+      border: 1.5px solid #9ca3af; color: #374151;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.82rem; font-weight: 600;
+    }
+    .quiz-opt.correct { border-color: #16a34a; background: #f0fdf4; }
+    .quiz-opt.correct .qb-letter { border-color: #16a34a; background: #16a34a; color: white; }
+    .quiz-opt.wrong { border-color: #dc2626; background: #fef2f2; }
+    .quiz-opt.wrong .qb-letter { border-color: #dc2626; background: #dc2626; color: white; }
+    #quiz-feedback {
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px;
+      padding: 14px 16px; font-size: 0.9rem; line-height: 1.5;
+      color: #1a1a2e; margin-top: 18px; display: none;
+    }
+    .qb-footer {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      align-items: center; padding: 14px 28px; background: #f8f9fb;
+    }
+    .qb-progress {
+      background: #1a1a2e; color: white; font-weight: 600; font-size: 0.85rem;
+      padding: 8px 18px; border-radius: 8px; justify-self: center;
+    }
+    .qb-footer-right { justify-self: end; }
+    .qb-next {
+      background: #4f46e5; color: white; border: none; border-radius: 20px;
+      padding: 10px 28px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .qb-next:hover { background: #4338ca; }
+    /* quiz option — neutral selected state (no live right/wrong) */
+    .quiz-opt.selected { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5; background: #f5f3ff; }
+    .quiz-opt.selected .qb-letter { border-color: #4f46e5; background: #4f46e5; color: white; }
+    /* results screen */
+    #quiz-results { flex: 1; overflow-y: auto; padding: 32px; background: #f0f2f5; }
+    .qb-results-inner { max-width: 760px; margin: 0 auto; }
+    .qb-score {
+      font-size: 1.6rem; font-weight: 800; color: #1a1a2e;
+      text-align: center; margin-bottom: 6px;
+    }
+    .qb-score .qb-score-sub { display: block; font-size: 0.85rem; font-weight: 500; color: #6b7280; margin-top: 4px; }
+    .qb-review-item {
+      background: white; border: 1px solid #e5e7eb; border-radius: 12px;
+      padding: 18px 20px; margin: 14px 0;
+    }
+    .qb-review-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .qb-review-badge {
+      flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; font-weight: 700; color: white;
+    }
+    .qb-review-badge.ok  { background: #16a34a; }
+    .qb-review-badge.bad { background: #dc2626; }
+    .qb-review-q { font-weight: 600; color: #1a1a2e; font-size: 0.95rem; }
+    .qb-review-line { font-size: 0.88rem; margin: 4px 0; color: #374151; }
+    .qb-review-line .ok  { color: #16a34a; font-weight: 600; }
+    .qb-review-line .bad { color: #dc2626; font-weight: 600; }
+    .qb-working {
+      margin-top: 10px; padding: 12px 14px; background: #f9fafb;
+      border-left: 3px solid #4f46e5; border-radius: 6px;
+      font-size: 0.88rem; line-height: 1.6; color: #374151;
+    }
+    .qb-working-label { font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4f46e5; margin-bottom: 4px; }
+    .qb-results-actions { text-align: center; margin: 24px 0 8px; }
+    .qb-ai-btn {
+      background: #1a1a2e; color: white; border: none; border-radius: 20px;
+      padding: 11px 28px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .qb-ai-btn:hover { background: #2d2d4a; }
+    .qb-ai-btn:disabled { opacity: 0.5; cursor: default; }
+    #quiz-ai-feedback {
+      background: white; border: 1px solid #e5e7eb; border-radius: 12px;
+      padding: 18px 20px; margin-top: 16px; font-size: 0.9rem; line-height: 1.6;
+      color: #1a1a2e; display: none;
+    }
     #canvas-tabs {
       display: flex; gap: 0;
       background: white;
@@ -503,6 +690,8 @@
       flex-shrink: 0;
       padding: 0 32px;
     }
+
+
 
     .canvas-tab {
       border: none; background: none;
@@ -891,7 +1080,7 @@
 </div>
 
 <header>
-  <h1>OLLM Tutor</h1>
+  <h1>EdKernel</h1>
   <button id="btn-back" class="hidden" onclick="backToCanvas()">&#8592; Class</button>
   <span id="header-class-name" class="hidden"></span>
   <div id="mode-toggle-wrap" class="mode-toggle hidden">
@@ -918,12 +1107,27 @@
   <div id="canvas-banner">
     <h2 id="canvas-title"></h2>
     <div class="banner-sub" id="canvas-sub"></div>
-    <div class="banner-actions">
-      <button id="btn-open-tutor" onclick="enterTutor()">Open AI Tutor</button>
-      <button id="btn-practice" onclick="enterPractice()"
-              style="background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.25);border-radius:8px;padding:9px 18px;font-size:0.88rem;font-weight:500;cursor:pointer">
-        Practice questions
-      </button>
+    <div id="service-tiles">
+      <div class="svc-tile" onclick="enterService('learn')">
+        <div class="svc-icon" style="background:rgba(99,102,241,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>
+        <div class="svc-name">Learn</div>
+        <div class="svc-desc">Chat with AI tutor</div>
+      </div>
+      <div class="svc-tile" onclick="enterService('papers')">
+        <div class="svc-icon" style="background:rgba(8,145,178,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></div>
+        <div class="svc-name">Papers</div>
+        <div class="svc-desc">Past paper MCQs</div>
+      </div>
+      <div class="svc-tile" onclick="enterService('quiz')">
+        <div class="svc-icon" style="background:rgba(234,179,8,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+        <div class="svc-name">Quiz</div>
+        <div class="svc-desc">Timed answers</div>
+      </div>
+      <div class="svc-tile" onclick="enterService('upload')">
+        <div class="svc-icon" style="background:rgba(34,197,94,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+        <div class="svc-name">Upload</div>
+        <div class="svc-desc">Check your working</div>
+      </div>
     </div>
   </div>
 
@@ -1021,13 +1225,14 @@
 
 <div class="settings-bar">
   <div class="provider-toggle">
-    <button id="btn-ollama" class="active" onclick="setProvider('ollama')">Ollama</button>
-    <button id="btn-groq"   onclick="setProvider('groq')">Groq</button>
+    <button id="btn-ollama"  class="active" onclick="setProvider('ollama')">Ollama</button>
+    <button id="btn-groq"    onclick="setProvider('groq')">Groq</button>
+    <button id="btn-bedrock" onclick="setProvider('bedrock')">Bedrock</button>
   </div>
   <label>Model</label>
   <input id="input-model" value="gemma4" oninput="savePrefs()" />
   <span id="host-group">
-    <label>Host</label>
+    <label id="host-label">Host</label>
     <input id="input-host" value="http://localhost:11434" oninput="savePrefs()" />
   </span>
   <span id="key-group" class="hidden">
@@ -1047,6 +1252,7 @@
 <div id="learn-panel">
   <div id="topic-row">
     <div id="learn-attach-strip" class="attach-strip hidden"></div>
+    <div id="learn-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
       <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('learn')">📎</button>
       <input id="input-topic" placeholder="Enter a topic to learn (e.g. photosynthesis)" onkeydown="if(event.key==='Enter') startLearn()" />
@@ -1056,6 +1262,7 @@
   </div>
   <div id="answer-row" class="hidden">
     <div id="answer-attach-strip" class="attach-strip hidden"></div>
+    <div id="answer-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
       <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')">📎</button>
       <button class="icon-btn" title="Generate graph" onclick="requestGraph()">📊</button>
@@ -1067,8 +1274,65 @@
 
 
 
-</div><!-- /main-col -->
-</div><!-- /body-row -->
+</div>
+<div id="quiz-panel" class="hidden">
+  <!-- top bar -->
+  <div class="qb-top">
+    <div class="qb-top-left">
+      <div class="qb-title" id="quiz-topic-label"></div>
+    </div>
+    <div class="qb-top-center">
+      <div class="qb-timer" id="quiz-timer">00:00</div>
+      <span class="quiz-tab-warn hidden" id="quiz-tab-warn">TAB SWITCH DETECTED (<span id="quiz-tab-count">0</span>)</span>
+    </div>
+    <div class="qb-top-right"></div>
+  </div>
+  <div class="qb-rule"></div>
+
+  <!-- two-pane body -->
+  <div class="qb-body">
+    <div class="qb-pane qb-left">
+      <div id="quiz-question-box">Loading question…</div>
+      <div class="qb-upload-hint">— or upload a photo of your answer —</div>
+      <button class="qb-upload-btn" onclick="document.getElementById('quiz-file-input').click()">Upload a photo</button>
+      <input type="file" id="quiz-file-input" accept=".png,.jpg,.jpeg,.webp" class="hidden" onchange="handleQuizImage(event)">
+      <img id="quiz-upload-preview" alt="Your answer">
+    </div>
+    <div class="qb-divider"></div>
+    <div class="qb-pane qb-right">
+      <div class="qb-qnum-bar">
+        <span class="qb-qnum" id="quiz-qnum">1</span>
+        <span class="qb-mark">Mark for Review</span>
+      </div>
+      <div class="qb-prompt">Which choice best answers the question?</div>
+      <div id="quiz-options"></div>
+      <div id="quiz-feedback"></div>
+    </div>
+  </div>
+  <div class="qb-rule"></div>
+
+  <!-- footer -->
+  <div class="qb-footer">
+    <div class="qb-footer-left"></div>
+    <div class="qb-progress" id="quiz-progress">Question 1 of 1</div>
+    <div class="qb-footer-right">
+      <button class="qb-next" id="quiz-next" onclick="nextQuizQuestion()">Next</button>
+    </div>
+  </div>
+
+  <!-- results / review screen -->
+  <div id="quiz-results" class="hidden">
+    <div class="qb-results-inner">
+      <div class="qb-score" id="quiz-score"></div>
+      <div id="quiz-review"></div>
+      <div class="qb-results-actions">
+        <button class="qb-ai-btn" id="quiz-ai-btn" onclick="analyzeQuiz()">Get AI feedback</button>
+      </div>
+      <div id="quiz-ai-feedback"></div>
+    </div>
+  </div>
+</div>
+</div>
 
 <script>
   let mode = 'learn';
@@ -1079,7 +1343,7 @@
   let provider = 'ollama';
   let wrongStreak = 0;
   let paperTimer = null;
-  let sessionId = (crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))();
+  let sessionId = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now());
   let currentTopic = '';
   let currentSessionOpen = null;
   let currentCurriculumId = '';
@@ -1118,10 +1382,25 @@
 
   function setProvider(p) {
     provider = p;
-    document.getElementById('btn-ollama').classList.toggle('active', p === 'ollama');
-    document.getElementById('btn-groq').classList.toggle('active', p === 'groq');
-    document.getElementById('host-group').classList.toggle('hidden', p !== 'ollama');
-    document.getElementById('key-group').classList.toggle('hidden', p !== 'groq');
+    document.getElementById('btn-ollama').classList.toggle('active',  p === 'ollama');
+    document.getElementById('btn-groq').classList.toggle('active',    p === 'groq');
+    document.getElementById('btn-bedrock').classList.toggle('active', p === 'bedrock');
+    // Groq uses an API key and no host. Bedrock uses a region (reuses #host-group).
+    // Ollama uses a host URL and no key.
+    document.getElementById('host-group').classList.toggle('hidden', p === 'groq');
+    document.getElementById('key-group').classList.toggle('hidden',  p !== 'groq');
+    const hostLabel = document.getElementById('host-label');
+    const hostInput = document.getElementById('input-host');
+    if (p === 'bedrock') {
+      hostLabel.textContent = 'Region';
+      hostInput.value = 'us-east-1';
+      hostInput.placeholder = 'us-east-1';
+    } else {
+      hostLabel.textContent = 'Host';
+      hostInput.placeholder = 'http://localhost:11434';
+      if (p === 'ollama') hostInput.value = hostInput.value.startsWith('http')
+        ? hostInput.value : 'http://localhost:11434';
+    }
     /* llama-3.3-70b-versatile was decommissioned on 2026-08-17 and now 404s
        with model_not_found. Do not put a Llama model back here — the account
        has none. Note qwen/qwen3.6-27b is NOT a safe choice either: it reasons
@@ -1129,7 +1408,8 @@
        blocks would reach the student and _SIGNAL_RE would stop finding
        verdicts. */
     document.getElementById('input-model').value =
-      p === 'groq' ? 'openai/gpt-oss-120b' : 'gemma4';
+        p === 'groq'    ? 'openai/gpt-oss-120b'      :
+        p === 'bedrock' ? 'amazon.nova-lite-v1:0'     : 'gemma4';
     savePrefs();
   }
 
@@ -1140,7 +1420,7 @@
     messages = [];
     wrongStreak = 0;
     paperMode = false; paperQuestions = []; paperIndex = 0;
-    sessionId = (crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))();   // a new lesson is a new session
+    sessionId = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now());   // a new lesson is a new session
     clearAttachment();
     resetLearnUI();
   }
@@ -1193,6 +1473,7 @@
     if (data.type === 'image') attachment.previewUrl = URL.createObjectURL(file);
 
     renderAttachStrip(target);
+    if (data.type === 'image') detectQuestion(target);
   }
 
   /* ---- paste an image straight from the clipboard ---- */
@@ -1248,6 +1529,10 @@
   function clearAttachment() {
     attachment = null;
     ['learn-attach-strip','answer-attach-strip','check-attach-strip','steps-attach-strip'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
+    });
+    ['learn-detect-banner','answer-detect-banner'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
     });
@@ -1554,7 +1839,7 @@
     const topic = document.getElementById('input-topic').value.trim();
     if (!topic || busy) return;
     currentTopic = topic;
-    sessionId = (crypto.randomUUID ?? (() => Math.random().toString(36).slice(2) + Date.now()))();   // each lesson is its own session
+    sessionId = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now());   // each lesson is its own session
     currentSessionOpen = sessionId;
     busy = true;
     wrongStreak = 0;
@@ -1603,7 +1888,7 @@
   /* ---- learn: reply ---- */
   async function sendAnswer() {
     const input = document.getElementById('input-answer').value.trim();
-    if (!input || busy) return;
+    if ((!input && !attachment) || busy) return;
     busy = true;
     document.getElementById('btn-send').disabled = true;
     document.getElementById('input-answer').value = '';
@@ -1620,6 +1905,7 @@
         body: JSON.stringify({
           messages, input, ...basePayload(),
           attachment: attach,
+          detected_question: attach?.detectedQuestion || '',
           wrong_streak: wrongStreak,
           topic: currentTopic,
           tavily_key: tavilyKey(),
@@ -1661,6 +1947,45 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAnswer(); }
   }
 
+  async function detectQuestion(target) {
+    if (!attachment || attachment.type !== 'image') return;
+    const bannerId = target === 'answer' ? 'answer-detect-banner' : 'learn-detect-banner';
+    const banner = document.getElementById(bannerId);
+    if (!banner) return;
+    banner.className = 'detect-banner scanning';
+    banner.innerHTML = '<span class="detect-label">Scanning for question…</span>';
+    banner.classList.remove('hidden');
+    try {
+      const snap = attachment;   // capture in case user clears before fetch returns
+      const res = await fetch('/api/detect_question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b64: snap.b64, ...basePayload(),
+                               vision_model: snap.vision_model || '' }),
+      });
+      const data = await res.json();
+      if (attachment !== snap) return;   // user cleared or replaced while we were fetching
+      if (data.found && data.question) {
+        snap.detectedQuestion = data.question;
+        banner.className = 'detect-banner';
+        const safe = data.question.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        banner.innerHTML = `<span class="detect-label">Question detected</span><span class="detect-text">${safe}</span>`;
+        renderMathInElement(banner, {
+          delimiters: [
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true  },
+            { left: '$',   right: '$',   display: false  },
+          ],
+          throwOnError: false,
+        });
+      } else {
+        banner.classList.add('hidden');
+      }
+    } catch (_) {
+      banner.classList.add('hidden');
+    }
+  }
+
   async function runStepChecker(attach) {
     try {
       const res = await fetch('/api/check_working', {
@@ -1678,6 +2003,50 @@
     const { steps, boxes, image_size, error_index, explanation } = data;
     if (!steps || steps.length === 0) return;
 
+    const area = document.getElementById('chat-area');
+
+    // Build a proper tutor bubble-row (matches appendBubble structure)
+    const row = document.createElement('div');
+    row.className = 'bubble-row tutor';
+    const av = document.createElement('div');
+    av.className = 'avatar tutor-av';
+    av.textContent = 'T';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    // Annotated canvas goes first, inside the bubble
+    if (boxes && boxes.length && image_size && attach.previewUrl) {
+      const imgEl = new Image();
+      imgEl.onload = () => {
+        const cvs = document.createElement('canvas');
+        cvs.width  = imgEl.naturalWidth;
+        cvs.height = imgEl.naturalHeight;
+        const ctx  = cvs.getContext('2d');
+        ctx.drawImage(imgEl, 0, 0);
+        const sx   = imgEl.naturalWidth  / image_size[1];
+        const sy   = imgEl.naturalHeight / image_size[0];
+        const lw   = Math.max(2, Math.round(imgEl.naturalWidth / 300));
+        const fs   = Math.max(12, Math.round(imgEl.naturalWidth / 28));
+        ctx.font   = `bold ${fs}px sans-serif`;
+        ctx.textBaseline = 'top';
+        boxes.forEach(([x, y, w, h], i) => {
+          const isErr = i === error_index;
+          const colour = isErr ? '#ef4444' : '#16a34a';
+          ctx.strokeStyle = colour;
+          ctx.lineWidth   = lw;
+          ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
+          // Line number badge in the top-left corner of each box
+          ctx.fillStyle = colour;
+          ctx.fillText(String(i + 1), x * sx + lw + 2, y * sy + lw + 2);
+        });
+        cvs.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin-bottom:10px';
+        bubble.insertBefore(cvs, bubble.firstChild);
+        area.scrollTop = 9e9;
+      };
+      imgEl.src = attach.previewUrl;
+    }
+
+    // Step list
     const items = steps.map((s, i) => {
       const isErr = i === error_index;
       return `<li class="${isErr ? 'step-error' : ''}">`
@@ -1693,34 +2062,12 @@
     } else if (explanation) {
       html += `<div class="step-explanation">${explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
     }
+    bubble.insertAdjacentHTML('beforeend', html);
 
-    const bubble = document.createElement('div');
-    bubble.className = 'message tutor';
-    bubble.innerHTML = `<div class="bubble">${html}</div>`;
-    document.getElementById('chat-area').appendChild(bubble);
-    document.getElementById('chat-area').scrollTop = 9e9;
-
-    if (boxes && image_size && attach.previewUrl) {
-      const imgEl = new Image();
-      imgEl.onload = () => {
-        const cvs = document.createElement('canvas');
-        cvs.width = imgEl.naturalWidth;
-        cvs.height = imgEl.naturalHeight;
-        const ctx = cvs.getContext('2d');
-        ctx.drawImage(imgEl, 0, 0);
-        const sx = imgEl.naturalWidth  / image_size[1];
-        const sy = imgEl.naturalHeight / image_size[0];
-        boxes.forEach(([x, y, w, h], i) => {
-          ctx.strokeStyle = (i === error_index) ? '#ef4444' : '#16a34a';
-          ctx.lineWidth = Math.max(2, Math.round(imgEl.naturalWidth / 300));
-          ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
-        });
-        cvs.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin:8px auto 0';
-        document.getElementById('chat-area').appendChild(cvs);
-        document.getElementById('chat-area').scrollTop = 9e9;
-      };
-      imgEl.src = attach.previewUrl;
-    }
+    row.appendChild(av);
+    row.appendChild(bubble);
+    area.appendChild(row);
+    area.scrollTop = 9e9;
   }
   
 
@@ -1992,6 +2339,10 @@
       paperIndex++;
       const msg = paperIndex < paperQuestions.length ? 'Correct! Here is the next one.' : 'Correct!';
       appendBubble('tutor', msg);
+      fetch('/api/papers/correct', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: currentTopic, ...basePayload() }),
+      });
       busy = false;
       showPaperQuestion();
     } else {
@@ -2007,6 +2358,7 @@
             chosen:       letter,
             correct:      q.answer,
             wrong_streak: wrongStreak,
+            topic:        currentTopic,
             ...basePayload(),
           }),
         });
@@ -2185,6 +2537,9 @@
 
   function showChatView() {
     _hideAllViews();
+    document.getElementById('main-col').classList.remove('hidden');
+    document.getElementById('quiz-panel').classList.add('hidden');
+    stopQuizWatch();
     document.getElementById('body-row').classList.remove('hidden');
     document.getElementById('btn-back').classList.remove('hidden');
     document.getElementById('header-class-name').classList.remove('hidden');
@@ -2438,6 +2793,22 @@
     showChatView();
   }
 
+  function enterService(type) {
+    if (type === 'learn') {
+      enterTutor();
+    } else if (type === 'papers') {
+      enterTutor();
+      document.getElementById('input-topic').value =
+        document.getElementById('canvas-title').textContent;
+      startPapers();
+    } else if (type === 'upload') {
+      enterTutor();
+      openFilePicker('learn');
+    } else if (type === 'quiz') {
+      startQuiz();
+    }
+  }
+
   function enterPractice() {
     const className = document.getElementById('canvas-title').textContent;
     setMode('learn');
@@ -2446,10 +2817,369 @@
     document.getElementById('input-topic').value =
       `Quiz me on ${className} using the question bank`;
     startLearn();
+
+  }
+  let quizTabSwitches = 0;
+  let quizWatching = false;
+  let quizQuestions = [];
+  let quizAnswers = [];
+  let quizIndex = 0;
+  let quizTimerInt = null;
+  let quizElapsed = 0;
+
+  // Premade quizzes keyed by class name — instant, no LLM needed.
+  const PREMADE_QUIZZES = {
+    'GCSE Mathematics': [
+      { text: 'Simplify \\(3(x-2)+4(2x+5)\\).',
+        options: [ {letter:'A',text:'\\(11x+14\\)'}, {letter:'B',text:'\\(11x+7\\)'},
+                   {letter:'C',text:'\\(7x+14\\)'}, {letter:'D',text:'\\(11x-14\\)'} ],
+        answer: 'A',
+        working: 'Expand each bracket: \\(3(x-2)=3x-6\\) and \\(4(2x+5)=8x+20\\). Add: \\(3x+8x=11x\\) and \\(-6+20=14\\), giving \\(11x+14\\).' },
+      { text: 'Solve \\(2x+7=19\\).',
+        options: [ {letter:'A',text:'\\(x=6\\)'}, {letter:'B',text:'\\(x=13\\)'},
+                   {letter:'C',text:'\\(x=12\\)'}, {letter:'D',text:'\\(x=5\\)'} ],
+        answer: 'A',
+        working: 'Subtract 7 from both sides: \\(2x=12\\). Divide by 2: \\(x=6\\).' },
+      { text: 'What is \\(15\\%\\) of \\(240\\)?',
+        options: [ {letter:'A',text:'\\(36\\)'}, {letter:'B',text:'\\(24\\)'},
+                   {letter:'C',text:'\\(40\\)'}, {letter:'D',text:'\\(30\\)'} ],
+        answer: 'A',
+        working: '\\(15\\% = 0.15\\). So \\(0.15 \\times 240 = 36\\). (Or \\(10\\%=24\\), \\(5\\%=12\\), total \\(36\\).)' },
+      { text: 'Factorise \\(x^2+5x+6\\).',
+        options: [ {letter:'A',text:'\\((x+2)(x+3)\\)'}, {letter:'B',text:'\\((x+1)(x+6)\\)'},
+                   {letter:'C',text:'\\((x-2)(x-3)\\)'}, {letter:'D',text:'\\((x+5)(x+1)\\)'} ],
+        answer: 'A',
+        working: 'Find two numbers that multiply to \\(6\\) and add to \\(5\\): that is \\(2\\) and \\(3\\). So \\(x^2+5x+6=(x+2)(x+3)\\).' },
+      { text: 'A circle has radius \\(5\\) cm. What is its area?',
+        options: [ {letter:'A',text:'\\(25\\pi\\) cm²'}, {letter:'B',text:'\\(10\\pi\\) cm²'},
+                   {letter:'C',text:'\\(5\\pi\\) cm²'}, {letter:'D',text:'\\(100\\pi\\) cm²'} ],
+        answer: 'A',
+        working: 'Area \\(= \\pi r^2 = \\pi \\times 5^2 = 25\\pi\\) cm².' },
+    ],
+  };
+
+  function _bumpQuizSwitch() {
+    quizTabSwitches++;
+    document.getElementById('quiz-tab-count').textContent = quizTabSwitches;
+    document.getElementById('quiz-tab-warn').classList.remove('hidden');
+    if (currentCurriculumId) {
+      fetch('/api/quiz/tab-switch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: currentTopic, count: quizTabSwitches, ...basePayload() }),
+      }).catch(() => {});
+    }
+  }
+  function _onQuizHidden() { if (document.hidden) _bumpQuizSwitch(); }
+
+  function startQuizWatch() {
+    if (quizWatching) return;
+    quizWatching = true;
+    document.addEventListener('visibilitychange', _onQuizHidden);
+  }
+  function stopQuizWatch() {
+    if (!quizWatching) return;
+    quizWatching = false;
+    document.removeEventListener('visibilitychange', _onQuizHidden);
+    stopQuizTimer();
   }
 
+  function updateQuizTimer() {
+    const m = Math.floor(quizElapsed / 60);
+    const s = quizElapsed % 60;
+    document.getElementById('quiz-timer').textContent =
+      String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+  function startQuizTimer() {
+    stopQuizTimer();
+    quizElapsed = 0;
+    updateQuizTimer();
+    quizTimerInt = setInterval(() => { quizElapsed++; updateQuizTimer(); }, 1000);
+  }
+  function stopQuizTimer() {
+    if (quizTimerInt) { clearInterval(quizTimerInt); quizTimerInt = null; }
+  }
+
+  async function startQuiz() {
+    const className = document.getElementById('canvas-title').textContent;
+    currentTopic = className;
+    quizTabSwitches = 0;
+    quizQuestions = [];
+    quizAnswers = [];
+    quizIndex = 0;
+
+    _hideAllViews();
+    document.getElementById('body-row').classList.remove('hidden');
+    document.getElementById('main-col').classList.add('hidden');
+    document.getElementById('quiz-panel').classList.remove('hidden');
+    document.getElementById('btn-back').classList.remove('hidden');
+    document.getElementById('header-class-name').classList.remove('hidden');
+    document.getElementById('header-class-name').textContent = className;
+    document.getElementById('btn-sidebar').classList.add('hidden');
+    document.getElementById('btn-questions').classList.add('hidden');
+
+    // reset views: show quiz body/footer, hide results
+    document.querySelector('.qb-body').style.display = '';
+    document.querySelector('.qb-footer').style.display = '';
+    document.getElementById('quiz-results').classList.add('hidden');
+
+    document.getElementById('quiz-tab-count').textContent = '0';
+    document.getElementById('quiz-tab-warn').classList.add('hidden');
+    document.getElementById('quiz-topic-label').textContent = className;
+    document.getElementById('quiz-question-box').textContent = 'Loading questions…';
+    document.getElementById('quiz-options').innerHTML = '';
+    document.getElementById('quiz-feedback').style.display = 'none';
+    document.getElementById('quiz-upload-preview').style.display = 'none';
+    document.getElementById('quiz-timer').textContent = '00:00';
+
+    startQuizWatch();
+
+    // Premade quiz — instant, no LLM needed.
+    if (PREMADE_QUIZZES[className]) {
+      quizQuestions = PREMADE_QUIZZES[className];
+      quizIndex = 0;
+      startQuizTimer();
+      showQuizQuestion();
+      return;
+    }
+
+    // Otherwise generate from curriculum via RAG.
+    try {
+      const res = await fetch('/api/papers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: className, tavily_key: tavilyKey(), n_questions: 5, ...basePayload() }),
+      });
+      const data = await res.json();
+      if (data.error) { document.getElementById('quiz-question-box').textContent = data.error; return; }
+      quizQuestions = parsePaperQuestions(data.questions || '');
+      if (!quizQuestions.length) { document.getElementById('quiz-question-box').textContent = 'Could not generate questions. Try again.'; return; }
+      quizIndex = 0;
+      startQuizTimer();
+      showQuizQuestion();
+    } catch (e) {
+      document.getElementById('quiz-question-box').textContent = 'Error loading questions: ' + e.message;
+    }
+  }
+
+  function renderQuizMath(el, text) {
+    el.textContent = normaliseMath(text);
+    renderMathInElement(el, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$',  right: '$',  display: false },
+      ]
+    });
+    restoreDollars(el);
+  }
+
+  function showQuizQuestion() {
+    const q = quizQuestions[quizIndex];
+    document.querySelector('.qb-prompt').style.display = '';
+    document.getElementById('quiz-next').style.display = '';
+    document.getElementById('quiz-qnum').textContent = quizIndex + 1;
+    document.getElementById('quiz-progress').textContent =
+      'Question ' + (quizIndex + 1) + ' of ' + quizQuestions.length;
+    document.getElementById('quiz-next').textContent =
+      quizIndex < quizQuestions.length - 1 ? 'Next' : 'Finish';
+    document.getElementById('quiz-feedback').style.display = 'none';
+
+    renderQuizMath(document.getElementById('quiz-question-box'), q.text);
+
+    const opts = document.getElementById('quiz-options');
+    opts.innerHTML = '';
+    q.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'quiz-opt';
+      btn.dataset.letter = opt.letter;
+      if (quizAnswers[quizIndex] === opt.letter) btn.classList.add('selected');
+      const circle = document.createElement('span');
+      circle.className = 'qb-letter';
+      circle.textContent = opt.letter;
+      const txt = document.createElement('span');
+      txt.className = 'qb-opt-text';
+      btn.appendChild(circle);
+      btn.appendChild(txt);
+      btn.onclick = () => selectQuizOption(btn);
+      opts.appendChild(btn);
+      renderQuizMath(txt, opt.text);
+    });
+  }
+
+  function nextQuizQuestion() {
+    if (quizIndex < quizQuestions.length - 1) {
+      quizIndex++;
+      showQuizQuestion();
+    } else {
+      finishQuiz();
+    }
+  }
+
+  // During the quiz we only record the choice — no right/wrong shown yet.
+  function selectQuizOption(btn) {
+    const opts = document.getElementById('quiz-options');
+    [...opts.querySelectorAll('.quiz-opt')].forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    quizAnswers[quizIndex] = btn.dataset.letter;
+  }
+
+  function finishQuiz() {
+    stopQuizTimer();
+    document.querySelector('.qb-body').style.display = 'none';
+    document.querySelector('.qb-footer').style.display = 'none';
+    document.getElementById('quiz-results').classList.remove('hidden');
+
+    let correctCount = 0;
+    quizQuestions.forEach((q, i) => { if (quizAnswers[i] === q.answer) correctCount++; });
+    const total = quizQuestions.length;
+
+    const score = document.getElementById('quiz-score');
+    score.innerHTML = correctCount + ' / ' + total +
+      '<span class="qb-score-sub">Finished in ' + document.getElementById('quiz-timer').textContent +
+      (quizTabSwitches ? ' · ' + quizTabSwitches + ' tab switch' + (quizTabSwitches > 1 ? 'es' : '') : '') +
+      '</span>';
+
+    const review = document.getElementById('quiz-review');
+    review.innerHTML = '';
+    quizQuestions.forEach((q, i) => {
+      const mine = quizAnswers[i];
+      const ok = mine === q.answer;
+      const myText = mine ? optionText(q, mine) : '(no answer)';
+      const ansText = optionText(q, q.answer);
+
+      const item = document.createElement('div');
+      item.className = 'qb-review-item';
+
+      const head = document.createElement('div');
+      head.className = 'qb-review-head';
+      const badge = document.createElement('span');
+      badge.className = 'qb-review-badge ' + (ok ? 'ok' : 'bad');
+      badge.textContent = ok ? '✓' : '✗';
+      const qEl = document.createElement('span');
+      qEl.className = 'qb-review-q';
+      head.appendChild(badge);
+      head.appendChild(qEl);
+      item.appendChild(head);
+      renderQuizMath(qEl, (i + 1) + '. ' + q.text);
+
+      const yourLine = document.createElement('div');
+      yourLine.className = 'qb-review-line';
+      yourLine.innerHTML = 'Your answer: <span class="' + (ok ? 'ok' : 'bad') + '">' +
+        (mine || '—') + '</span> ';
+      const yourSpan = document.createElement('span');
+      item.appendChild(yourLine);
+      renderQuizMath(yourSpan, myText);
+      yourLine.appendChild(yourSpan);
+
+      if (!ok) {
+        const corrLine = document.createElement('div');
+        corrLine.className = 'qb-review-line';
+        corrLine.innerHTML = 'Correct answer: <span class="ok">' + q.answer + '</span> ';
+        const corrSpan = document.createElement('span');
+        item.appendChild(corrLine);
+        renderQuizMath(corrSpan, ansText);
+        corrLine.appendChild(corrSpan);
+      }
+
+      if (q.working) {
+        const work = document.createElement('div');
+        work.className = 'qb-working';
+        const label = document.createElement('div');
+        label.className = 'qb-working-label';
+        label.textContent = 'Working';
+        const body = document.createElement('div');
+        work.appendChild(label);
+        work.appendChild(body);
+        item.appendChild(work);
+        renderQuizMath(body, q.working);
+      }
+
+      review.appendChild(item);
+    });
+
+    // record progress: one correct-hit per right answer
+    if (currentCurriculumId) {
+      quizQuestions.forEach((q, i) => {
+        if (quizAnswers[i] === q.answer) {
+          fetch('/api/papers/correct', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: currentTopic, ...basePayload() }),
+          }).catch(() => {});
+        }
+      });
+    }
+  }
+
+  function optionText(q, letter) {
+    const o = q.options.find(o => o.letter === letter);
+    return o ? o.text : '';
+  }
+
+  async function analyzeQuiz() {
+    const btn = document.getElementById('quiz-ai-btn');
+    const out = document.getElementById('quiz-ai-feedback');
+    btn.disabled = true;
+    btn.textContent = 'Analysing…';
+    out.style.display = 'block';
+    out.textContent = 'Asking the tutor to review your quiz…';
+
+    // Build a plain-text summary of the attempt for the model.
+    const lines = quizQuestions.map((q, i) => {
+      const mine = quizAnswers[i] || 'blank';
+      return `Q${i + 1}: ${q.text}\n  student answered: ${mine}\n  correct answer: ${q.answer}`;
+    }).join('\n');
+    const correctCount = quizQuestions.filter((q, i) => quizAnswers[i] === q.answer).length;
+    const prompt =
+      `A student just finished a ${quizQuestions.length}-question quiz on "${currentTopic}" ` +
+      `and scored ${correctCount}/${quizQuestions.length}.\n\n${lines}\n\n` +
+      `Give short, encouraging feedback: what they did well, which topics to review, and one concrete next step. Do not be harsh.`;
+
+    try {
+      const res = await fetch('/api/start', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: prompt, ...basePayload() }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        out.textContent = 'AI feedback unavailable right now (' + data.error + '). Your worked solutions are above.';
+      } else {
+        renderQuizMath(out, data.response || data.reply || 'No feedback returned.');
+      }
+    } catch (e) {
+      out.textContent = 'AI feedback unavailable right now. Your worked solutions are above.';
+    }
+    btn.textContent = 'Get AI feedback';
+    btn.disabled = false;
+  }
+
+  async function handleQuizImage(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const preview = document.getElementById('quiz-upload-preview');
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+    const fb = document.getElementById('quiz-feedback');
+    fb.style.display = 'block';
+    fb.textContent = 'Reading your answer…';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const up = await fetch('/api/upload', { method: 'POST', body: fd });
+      const upData = await up.json();
+      if (upData.error) { fb.textContent = upData.error; return; }
+      const res = await fetch('/api/detect_question', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b64: upData.b64, ...basePayload() }),
+      });
+      const data = await res.json();
+      fb.innerHTML = (data.found && data.question)
+        ? '<strong>Detected:</strong> ' + data.question
+        : 'Could not read the image clearly. Try a clearer, well-lit photo.';
+    } catch (err) {
+      fb.textContent = 'Error reading image: ' + err.message;
+    }
+  }
   function backToCanvas() {
     if (busy) return;
+    stopQuizWatch();
     currentSessionOpen = null;
     _hideAllViews();
     document.getElementById('canvas-view').classList.remove('hidden');
