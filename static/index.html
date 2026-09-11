@@ -1351,6 +1351,7 @@
   let paperMode = false;
   let paperQuestions = [];
   let paperIndex = 0;
+  let paperAttemptId = '';
 
   /* ---- persistent settings (localStorage) ---- */
   const PREFS_KEY = 'ollm_prefs';
@@ -1419,7 +1420,7 @@
     clearChat();
     messages = [];
     wrongStreak = 0;
-    paperMode = false; paperQuestions = []; paperIndex = 0;
+    paperMode = false; paperQuestions = []; paperIndex = 0; paperAttemptId = '';
     sessionId = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now());   // a new lesson is a new session
     clearAttachment();
     resetLearnUI();
@@ -1778,7 +1779,7 @@
       clearChat();
       clearAttachment();
       wrongStreak = 0;
-      paperMode = false; paperQuestions = []; paperIndex = 0;
+      paperMode = false; paperQuestions = []; paperIndex = 0; paperAttemptId = '';
 
       sessionId          = data.session_id;
       currentSessionOpen = data.session_id;
@@ -2339,14 +2340,27 @@
       paperIndex++;
       const msg = paperIndex < paperQuestions.length ? 'Correct! Here is the next one.' : 'Correct!';
       appendBubble('tutor', msg);
-      fetch('/api/papers/correct', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: currentTopic, ...basePayload() }),
-      });
+      // paperIndex was just incremented, so it is the 1-based id of the
+      // question that was answered. The server re-checks the letter against its
+      // own key before anything reaches the progress table.
+      if (paperAttemptId) {
+        fetch('/api/quiz/answer', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attempt_id: paperAttemptId, qid: 'q' + paperIndex, choice: letter }),
+        }).catch(() => {});
+      }
       busy = false;
       showPaperQuestion();
     } else {
       wrongStreak++;
+      // Wrong answers count too — the first mark for a question is the one
+      // that lands, so a retry cannot turn a miss into a clean record.
+      if (paperAttemptId) {
+        fetch('/api/quiz/answer', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attempt_id: paperAttemptId, qid: 'q' + (paperIndex + 1), choice: letter }),
+        }).catch(() => {});
+      }
       appendThinking();
       try {
         const res  = await fetch('/api/papers/hint', {
@@ -2436,6 +2450,7 @@
       showPapers(data.papers, data.grounded, data.dropped);
       showSources(data.sources);
       paperQuestions = parsePaperQuestions(data.questions);
+      paperAttemptId = data.attempt_id || '';
 
       if (!paperQuestions.length) {
         appendBubble('tutor', 'Could not parse questions from the search results. Try a different topic.');
@@ -2823,49 +2838,24 @@
   let quizWatching = false;
   let quizQuestions = [];
   let quizAnswers = [];
+  let quizAttemptId = '';
+  let quizReview = [];
   let quizIndex = 0;
   let quizTimerInt = null;
   let quizElapsed = 0;
 
-  // Premade quizzes keyed by class name — instant, no LLM needed.
-  const PREMADE_QUIZZES = {
-    'GCSE Mathematics': [
-      { text: 'Simplify \\(3(x-2)+4(2x+5)\\).',
-        options: [ {letter:'A',text:'\\(11x+14\\)'}, {letter:'B',text:'\\(11x+7\\)'},
-                   {letter:'C',text:'\\(7x+14\\)'}, {letter:'D',text:'\\(11x-14\\)'} ],
-        answer: 'A',
-        working: 'Expand each bracket: \\(3(x-2)=3x-6\\) and \\(4(2x+5)=8x+20\\). Add: \\(3x+8x=11x\\) and \\(-6+20=14\\), giving \\(11x+14\\).' },
-      { text: 'Solve \\(2x+7=19\\).',
-        options: [ {letter:'A',text:'\\(x=6\\)'}, {letter:'B',text:'\\(x=13\\)'},
-                   {letter:'C',text:'\\(x=12\\)'}, {letter:'D',text:'\\(x=5\\)'} ],
-        answer: 'A',
-        working: 'Subtract 7 from both sides: \\(2x=12\\). Divide by 2: \\(x=6\\).' },
-      { text: 'What is \\(15\\%\\) of \\(240\\)?',
-        options: [ {letter:'A',text:'\\(36\\)'}, {letter:'B',text:'\\(24\\)'},
-                   {letter:'C',text:'\\(40\\)'}, {letter:'D',text:'\\(30\\)'} ],
-        answer: 'A',
-        working: '\\(15\\% = 0.15\\). So \\(0.15 \\times 240 = 36\\). (Or \\(10\\%=24\\), \\(5\\%=12\\), total \\(36\\).)' },
-      { text: 'Factorise \\(x^2+5x+6\\).',
-        options: [ {letter:'A',text:'\\((x+2)(x+3)\\)'}, {letter:'B',text:'\\((x+1)(x+6)\\)'},
-                   {letter:'C',text:'\\((x-2)(x-3)\\)'}, {letter:'D',text:'\\((x+5)(x+1)\\)'} ],
-        answer: 'A',
-        working: 'Find two numbers that multiply to \\(6\\) and add to \\(5\\): that is \\(2\\) and \\(3\\). So \\(x^2+5x+6=(x+2)(x+3)\\).' },
-      { text: 'A circle has radius \\(5\\) cm. What is its area?',
-        options: [ {letter:'A',text:'\\(25\\pi\\) cm²'}, {letter:'B',text:'\\(10\\pi\\) cm²'},
-                   {letter:'C',text:'\\(5\\pi\\) cm²'}, {letter:'D',text:'\\(100\\pi\\) cm²'} ],
-        answer: 'A',
-        working: 'Area \\(= \\pi r^2 = \\pi \\times 5^2 = 25\\pi\\) cm².' },
-    ],
-  };
+  // The premade bank used to live here as a JS object, answers and all — so
+  // devtools showed the key, and every one of the five answers was 'A'. It now
+  // lives in curricula/<id>/quizzes.json and is served without the answers.
 
   function _bumpQuizSwitch() {
     quizTabSwitches++;
     document.getElementById('quiz-tab-count').textContent = quizTabSwitches;
     document.getElementById('quiz-tab-warn').classList.remove('hidden');
-    if (currentCurriculumId) {
+    if (quizAttemptId) {
       fetch('/api/quiz/tab-switch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: currentTopic, count: quizTabSwitches, ...basePayload() }),
+        body: JSON.stringify({ attempt_id: quizAttemptId }),
       }).catch(() => {});
     }
   }
@@ -2905,6 +2895,8 @@
     quizTabSwitches = 0;
     quizQuestions = [];
     quizAnswers = [];
+    quizReview = [];
+    quizAttemptId = '';
     quizIndex = 0;
 
     _hideAllViews();
@@ -2933,25 +2925,26 @@
 
     startQuizWatch();
 
-    // Premade quiz — instant, no LLM needed.
-    if (PREMADE_QUIZZES[className]) {
-      quizQuestions = PREMADE_QUIZZES[className];
-      quizIndex = 0;
-      startQuizTimer();
-      showQuizQuestion();
-      return;
-    }
-
-    // Otherwise generate from curriculum via RAG.
+    // The server opens an attempt and sends the questions with the answer key
+    // stripped out. Nothing in this browser can decide what counts as correct.
     try {
-      const res = await fetch('/api/papers', {
+      const res = await fetch('/api/quiz/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: className, tavily_key: tavilyKey(), n_questions: 5, ...basePayload() }),
+        body: JSON.stringify({ topic: className, n_questions: 5, ...basePayload() }),
       });
       const data = await res.json();
-      if (data.error) { document.getElementById('quiz-question-box').textContent = data.error; return; }
-      quizQuestions = parsePaperQuestions(data.questions || '');
-      if (!quizQuestions.length) { document.getElementById('quiz-question-box').textContent = 'Could not generate questions. Try again.'; return; }
+      if (!res.ok || data.error) {
+        document.getElementById('quiz-question-box').textContent =
+          data.error || 'Could not start the quiz.';
+        return;
+      }
+      quizAttemptId = data.attempt_id || '';
+      quizQuestions = data.questions || [];
+      if (!quizQuestions.length) {
+        document.getElementById('quiz-question-box').textContent =
+          'No questions available for this class yet.';
+        return;
+      }
       quizIndex = 0;
       startQuizTimer();
       showQuizQuestion();
@@ -3021,29 +3014,51 @@
     quizAnswers[quizIndex] = btn.dataset.letter;
   }
 
-  function finishQuiz() {
+  async function finishQuiz() {
     stopQuizTimer();
     document.querySelector('.qb-body').style.display = 'none';
     document.querySelector('.qb-footer').style.display = 'none';
     document.getElementById('quiz-results').classList.remove('hidden');
 
-    let correctCount = 0;
-    quizQuestions.forEach((q, i) => { if (quizAnswers[i] === q.answer) correctCount++; });
-    const total = quizQuestions.length;
-
-    const score = document.getElementById('quiz-score');
-    score.innerHTML = correctCount + ' / ' + total +
-      '<span class="qb-score-sub">Finished in ' + document.getElementById('quiz-timer').textContent +
-      (quizTabSwitches ? ' · ' + quizTabSwitches + ' tab switch' + (quizTabSwitches > 1 ? 'es' : '') : '') +
-      '</span>';
-
+    const score  = document.getElementById('quiz-score');
     const review = document.getElementById('quiz-review');
     review.innerHTML = '';
-    quizQuestions.forEach((q, i) => {
-      const mine = quizAnswers[i];
-      const ok = mine === q.answer;
-      const myText = mine ? optionText(q, mine) : '(no answer)';
-      const ansText = optionText(q, q.answer);
+    score.textContent = 'Marking…';
+
+    // Send the letters, get back the marking. The key never came down here, so
+    // this is also where the worked solutions arrive for the first time.
+    const answers = {};
+    quizQuestions.forEach((q, i) => { if (quizAnswers[i]) answers[q.id] = quizAnswers[i]; });
+
+    let data;
+    try {
+      const res = await fetch('/api/quiz/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attempt_id: quizAttemptId, answers }),
+      });
+      data = await res.json();
+    } catch (e) {
+      score.textContent = 'Not marked';
+      review.textContent = 'Could not reach the server to mark this quiz: ' + e.message;
+      return;
+    }
+    if (!data || data.error) {
+      score.textContent = 'Not marked';
+      review.textContent = (data && data.error) || 'The server did not mark this attempt.';
+      return;
+    }
+
+    quizReview = data.review || [];
+    const switches = data.tab_switches || 0;
+    score.innerHTML = data.score + ' / ' + data.total +
+      '<span class="qb-score-sub">Finished in ' + document.getElementById('quiz-timer').textContent +
+      (switches ? ' · ' + switches + ' tab switch' + (switches > 1 ? 'es' : '') : '') +
+      '</span>';
+
+    quizReview.forEach((r, i) => {
+      const ok      = r.correct;
+      const myText  = r.chosen ? optionText(r, r.chosen) : '(no answer)';
+      const ansText = optionText(r, r.correct_answer);
 
       const item = document.createElement('div');
       item.className = 'qb-review-item';
@@ -3058,12 +3073,12 @@
       head.appendChild(badge);
       head.appendChild(qEl);
       item.appendChild(head);
-      renderQuizMath(qEl, (i + 1) + '. ' + q.text);
+      renderQuizMath(qEl, (i + 1) + '. ' + r.text);
 
       const yourLine = document.createElement('div');
       yourLine.className = 'qb-review-line';
       yourLine.innerHTML = 'Your answer: <span class="' + (ok ? 'ok' : 'bad') + '">' +
-        (mine || '—') + '</span> ';
+        (r.chosen || '—') + '</span> ';
       const yourSpan = document.createElement('span');
       item.appendChild(yourLine);
       renderQuizMath(yourSpan, myText);
@@ -3072,14 +3087,14 @@
       if (!ok) {
         const corrLine = document.createElement('div');
         corrLine.className = 'qb-review-line';
-        corrLine.innerHTML = 'Correct answer: <span class="ok">' + q.answer + '</span> ';
+        corrLine.innerHTML = 'Correct answer: <span class="ok">' + r.correct_answer + '</span> ';
         const corrSpan = document.createElement('span');
         item.appendChild(corrLine);
         renderQuizMath(corrSpan, ansText);
         corrLine.appendChild(corrSpan);
       }
 
-      if (q.working) {
+      if (r.working) {
         const work = document.createElement('div');
         work.className = 'qb-working';
         const label = document.createElement('div');
@@ -3089,23 +3104,11 @@
         work.appendChild(label);
         work.appendChild(body);
         item.appendChild(work);
-        renderQuizMath(body, q.working);
+        renderQuizMath(body, r.working);
       }
 
       review.appendChild(item);
     });
-
-    // record progress: one correct-hit per right answer
-    if (currentCurriculumId) {
-      quizQuestions.forEach((q, i) => {
-        if (quizAnswers[i] === q.answer) {
-          fetch('/api/papers/correct', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: currentTopic, ...basePayload() }),
-          }).catch(() => {});
-        }
-      });
-    }
   }
 
   function optionText(q, letter) {
@@ -3121,15 +3124,20 @@
     out.style.display = 'block';
     out.textContent = 'Asking the tutor to review your quiz…';
 
-    // Build a plain-text summary of the attempt for the model.
-    const lines = quizQuestions.map((q, i) => {
-      const mine = quizAnswers[i] || 'blank';
-      return `Q${i + 1}: ${q.text}\n  student answered: ${mine}\n  correct answer: ${q.answer}`;
-    }).join('\n');
-    const correctCount = quizQuestions.filter((q, i) => quizAnswers[i] === q.answer).length;
+    // Built from the server's marking, not from anything this page decided.
+    if (!quizReview.length) {
+      out.textContent = 'Finish the quiz first — there is nothing marked to review yet.';
+      btn.textContent = 'Get AI feedback';
+      btn.disabled = false;
+      return;
+    }
+    const lines = quizReview.map((r, i) =>
+      `Q${i + 1}: ${r.text}\n  student answered: ${r.chosen || 'blank'}\n  correct answer: ${r.correct_answer}`
+    ).join('\n');
+    const correctCount = quizReview.filter(r => r.correct).length;
     const prompt =
-      `A student just finished a ${quizQuestions.length}-question quiz on "${currentTopic}" ` +
-      `and scored ${correctCount}/${quizQuestions.length}.\n\n${lines}\n\n` +
+      `A student just finished a ${quizReview.length}-question quiz on "${currentTopic}" ` +
+      `and scored ${correctCount}/${quizReview.length}.\n\n${lines}\n\n` +
       `Give short, encouraging feedback: what they did well, which topics to review, and one concrete next step. Do not be harsh.`;
 
     try {

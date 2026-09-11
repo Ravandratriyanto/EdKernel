@@ -15,19 +15,32 @@ They share `core/llm/`, `core/rag/`, `core/vision/`. Tutor prompts have drifted 
 ## Architecture
 
 ```
-app.py (Flask, /v1/ Blueprint, Bearer auth)
+app.py (Flask, 58 routes + /v1/ Blueprint via api_v1.py, Bearer auth)
   └─ core/
+       ├─ tutor.py         – start() / reply() — the Socratic loop
+       ├─ check.py         – run() — one-shot answer check
        ├─ questions.py     – PDF → question list (pypdf + fitz/vision fallback)
        ├─ prompts.py       – TUTOR_SYSTEM_PROMPT, HINT_LADDER, CHECK_SIGNAL, strip_signal()
        ├─ rag/
        │    ├─ ingest.py   – build ChromaDB collections from curricula/
        │    └─ retrieve.py – top-k chunk retrieval
-       ├─ vision/
-       │    └─ image_handler.py – base64 image → transcription via vision LLM
+       ├─ vision/          – the OpenCV 5 pipeline
+       │    ├─ preprocess.py   – find_page → rectify → deskew → binarise
+       │    ├─ segment.py      – ink mask → line boxes → crops
+       │    ├─ step_checker.py – check_working() → steps, boxes, error_index
+       │    └─ image_handler.py – transcribe() / detect_question() via vision LLM
+       ├─ video/           – frame extraction + question_from_video()
        └─ llm/             – provider adapters (Groq, Ollama, OpenAI-compat)
-users.py     – SQLite auth + sessions + api_keys + progress tables
+api_v1.py    – stateless /v1/ REST Blueprint (Bearer token, 20 calls/min per key)
+users.py     – SQLite auth + sessions + api_keys + progress + quiz_attempts
+quizbank.py  – per-curriculum quiz banks (curricula/<id>/quizzes.json, keys server-side)
+curricula.py – manifest loader   settings.py – feature flags (settings.json)
+sessionlog.py – JSONL lesson log  ratelimit.py – login + LLM rate limits
+bench/       – COOL Graviton benchmark + architecture diagram generator
+evals/       – check eval, hint-ladder eval, regression run
+flowcharts.html – mermaid diagrams of every subsystem (keep in step with the code)
 static/
-  index.html   – student SPA
+  index.html   – student SPA (service tiles, tutor, quiz, flashcards)
   teacher.html – teacher upload + ingest status + topic management
   admin.html   – user management + curriculum management
 ```
@@ -36,6 +49,8 @@ static/
 - `core/` is pure Python — no Flask, no SQLite, no HTTP imports
 - `_SIGNAL_RE` anchored to end-of-string — `[CORRECT]`/`[WRONG]` must be last in any tutor reply
 - `drop_reasoning()` strips `<think>` blocks from reasoning models before any processing
+- Quiz answer keys never leave the server before submission — questions go out
+  through `_public_questions()`, marking happens in `/api/quiz/submit`
 
 ## Environment / secrets
 
@@ -53,7 +68,7 @@ git config core.hooksPath hooks
 
 ## Git
 
-Work on `master` and push there — that is the branch this repo uses (`main` exists on GitHub but `master` is the working branch).
+Work on `main` and push there — local `master` was renamed to `main` in session 21 and tracks `origin/main`. (`master` still exists on GitHub but is stale.)
 Commit and push **only when asked**. Write devlog entries when asked, matching the existing structure including an honest "Known issues" section.
 
 ## How the user likes to work
@@ -75,6 +90,32 @@ Report what actually happened, including failures. Do not round a partial result
 ## Current Groq model
 
 `llama-3.3-70b-versatile` was deprecated. Current default: `openai/gpt-oss-120b` (OpenAI-compat endpoint via Groq). Check `https://console.groq.com/docs/models` if hitting model errors — the catalogue changes.
+
+## Features built (as of session 27)
+
+- **Server-marked quizzes (`quiz_attempts` table)**: `POST /api/quiz/start`
+  opens an attempt holding the questions *with* their keys and returns them
+  key-stripped. `POST /api/quiz/submit` compares each letter against the stored
+  row, records progress for **right and wrong**, and returns the review with the
+  keys and worked solutions. `POST /api/quiz/answer` marks a single question
+  (in-chat papers flow); `POST /api/quiz/tab-switch` persists the counter;
+  `GET /api/teacher/curricula/<cid>/attempts` feeds the dashboard. Attempts are
+  scoped by user id, so one student cannot touch another's. Marking is once per
+  question — a resubmit re-renders the review and writes nothing.
+  Replaces `/api/papers/correct`, which took mastery on the client's word.
+- **Quiz bank server-side**: `quizbank.py` reads `curricula/<id>/quizzes.json`.
+  `PREMADE_QUIZZES` is gone from `index.html` — its keys were visible in
+  devtools, and all five answers were `A`.
+- **Dev flags are admin-only**: `/dev`, `GET` and `PUT /api/dev/settings` left
+  `_OPEN_ENDPOINTS`. Anyone who could reach the app could previously
+  `PUT {"auth_required": false}` and be served as admin.
+- **`/v1/` rate limited and actually reachable**: 20 calls/min per key owner,
+  enforced inside `require_auth` so no new route can skip it. Separately,
+  `_load_user` now lets `request.blueprint == "v1"` past the cookie gate — every
+  Bearer caller used to 401 before the blueprint ran, so the API was dead
+  whenever `auth_required` was true.
+- **Flowcharts current**: `flowcharts.html` has 21 diagrams including the
+  OpenCV 5 pipeline, the quiz attempt flow, progress, and AWS deployment.
 
 ## Features built (as of session 26)
 
@@ -115,33 +156,50 @@ Report what actually happened, including failures. Do not round a partial result
 - **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
 - **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
 
-## Pending (as of session 26)
+## Pending (as of session 27)
 
 - **AWS Bedrock provider** in `core/llm/client.py` — blocked on account
   verification hold (`ValidationException: Operation not allowed`, case
   178878401900360). Fargate hold cleared session 26; Bedrock still open.
-- **`/api/quiz/tab-switch` endpoint** — client posts to it but it does not
-  exist; the `.catch(() => {})` swallows the 404. Tab-switch counts show to the
-  student but are not persisted.
-- **Quiz records correct answers only** — `finishQuiz()` posts one
-  `/api/papers/correct` per right answer; wrong answers not logged for the
-  teacher dashboard.
-- **Admin/teacher "generate or add quiz questions"** — per-topic quiz bank so
-  quizzes aren't limited to the hardcoded `PREMADE_QUIZZES` or live RAG.
+- **Quiz bank has no editing UI** — `curricula/<cid>/quizzes.json` is read by
+  `quizbank.py` and only `gcse-maths` has one. Teachers cannot add or generate
+  quiz questions from the panel yet; the file has to be edited by hand.
+- **The in-chat papers flow still ships answer keys to the browser.** Marking
+  goes through `/api/quiz/answer` now, so progress is server-derived, but
+  `/api/papers` still returns `[ANSWER: X]` in its wire format, so a student
+  reading the network tab can see the key. Quiz mode does not.
 - **Replace HoughLinesP deskew** with a contour-based rotation estimate (COOL
   benchmark showed it is the pipeline bottleneck, 6.6× worse on Graviton).
 - **Quiz upload grading** — `handleQuizImage()` OCRs the photo but does not
   grade a handwritten/doodled answer against the key.
-- **Fix `index.html` title** from "OLLM Tutor" to "EdKernel"
 - **Live bounding boxes** in step checker UI (backend returns boxes; frontend does not draw overlay on the canvas)
 - **Tavily web search fallback** — knowledge-cutoff guardrail is currently a prompt workaround; Tavily key is already in env
 - **Manim video renderer** — LLM writes Manim Python → renders MP4 → served in chat
 - **5-minute demo video** (required for competition submission)
 - **Ingest auto-trigger on container start** — currently must be re-run manually after each ECS task replacement
 - Frontend error toast for `/api/reply` 500s (spinner hangs silently on model error)
+- **`_fetch_pdf` follows redirects** — `_allowed_paper_host()` only checks the
+  original URL, so an allowlisted domain can redirect the server anywhere. Blind
+  (the body must start with `%PDF`), but `allow_redirects=False` is a one-liner.
+- **No CSRF token** on cookie-authenticated state-changing routes; `samesite="Lax"`
+  is partial cover only.
+- **Curricula have no owner** — `/api/teacher/...` is role-gated but any teacher
+  can edit any curriculum. A data-model decision, not a missing check.
+- **`/dev` serves `static/dev.html`, which does not exist** — the route 404s (admin-only since session 27); the flags it edits still work through `settings.json` directly
 
 ## Things that keep biting
 
+- The answer key must never reach the browser before an attempt is submitted.
+  Quiz questions go out through `_public_questions()`, which strips `answer` and
+  `working`; correctness is decided in `/api/quiz/submit` by comparing against
+  the `quiz_attempts` row. Anything that sends a key down to the client puts
+  progress back under the student's control.
+- `users.create_user()` promotes the **first account in the database to admin**
+  regardless of the role argument. Test fixtures that create a "student" first
+  get an admin and silently pass role checks.
+- `@app.errorhandler(Exception)` used to swallow `HTTPException`, so every 404
+  came back as a 500 "Something went wrong on our end". It now re-raises HTTP
+  errors with their real status — do not remove that branch.
 - `pypdf` loses parentheses and ligatures — `g(x)` can extract as `gx^h`. Always use vision fallback for maths-heavy PDFs.
 - `_SIGNAL_RE` is anchored to end-of-string — `[CORRECT]`/`[WRONG]` must be the absolute last thing in a tutor reply.
 - Stray SQL at the bottom of `users.py` has appeared three times — someone pasted raw SQL outside any function. Always check the file ends cleanly.

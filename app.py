@@ -19,6 +19,7 @@ import numpy as np
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 from pypdf import PdfReader
 from core.llm.client import generate, chat
 from core.rag.retrieve import retrieve
@@ -28,6 +29,7 @@ from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 import pdftext
 import users
+import quizbank
 import settings as _settings
 from api_v1 import v1
 from ratelimit import RateLimiter, SlidingWindowLimiter
@@ -51,6 +53,11 @@ users.purge_expired()
 
 @app.errorhandler(Exception)
 def _unhandled_exception(e):
+    # A 404 or a 405 is not a crash. Without this, werkzeug's HTTPException fell
+    # through to the 500 below, so every missing route answered "Something went
+    # wrong on our end" — which is a lie, and it hides typo'd URLs.
+    if isinstance(e, HTTPException):
+        return jsonify({"error": e.description}), e.code
     app.logger.exception(e)
     if isinstance(e, ConnectionError):
         return jsonify({"error": "Could not reach the model. Is Ollama running?"}), 503
@@ -115,9 +122,12 @@ def _login_keys(username: str) -> tuple:
 
 
 
+# Endpoints reachable without a session. The three HTML panels are shells:
+# every API call they make is role-checked, so serving the markup costs
+# nothing. The /dev flag routes used to sit here too, which meant anyone
+# who could reach the app could PUT auth_required=false and become admin.
 _OPEN_ENDPOINTS = {"index", "static", "api_register", "api_login",
-                   "api_logout", "api_me", "admin_panel", "teacher_panel",
-                   "dev_panel", "api_dev_get_settings", "api_dev_put_settings"}
+                   "api_logout", "api_me", "admin_panel", "teacher_panel"}
 
 
 _DEV_USER = {"id": 1, "username": "dev", "role": "admin"}
@@ -131,6 +141,11 @@ def _load_user():
         g.user = _DEV_USER
         return None
     g.user = users.user_for_token(request.cookies.get(SESSION_COOKIE, ""))
+    if request.blueprint == "v1":
+        # /v1/ carries its own Bearer auth (api_v1.require_auth) and never sees
+        # a cookie. Without this, the check below 401s every third-party caller
+        # before the blueprint runs, which killed the whole API under auth.
+        return None
     if request.endpoint in _OPEN_ENDPOINTS:
         return None
     if g.user is None:
@@ -1190,6 +1205,208 @@ def _verify_questions(questions: list[dict], **llm) -> tuple[list[dict], int]:
     return kept, len(questions) - len(kept)
 
 
+def _rag_questions(topic: str, data: dict, n_questions: int):
+    """Generate verified MCQs from a curriculum's own ChromaDB collection.
+
+    Returns (questions, sources, dropped, error). `error` is a ready-made
+    (response, status) tuple when nothing usable came back, and None otherwise.
+    Shared by /api/papers and /api/quiz/start so there is one generator, not two.
+    """
+    _, collection = _curriculum_params(data)
+    chunks = retrieve(topic, n_results=10, collection_name=collection, with_sources=True)
+    if not chunks:
+        return [], [], 0, (jsonify({"error": "No curriculum content found for that topic. "
+                                            "Add a Tavily key or ingest reference material first."}), 404)
+    combined = "\n\n---\n\n".join(c["text"] for c in chunks)[:7000]
+    seen_titles: set[str] = set()
+    sources = []
+    for c in chunks:
+        t = c["source"]
+        if t and t not in seen_titles:
+            seen_titles.add(t)
+            sources.append({"title": t, "url": _pmt_url(t)})
+
+    llm_kwargs = {"model": data.get("model", "gemma4"),
+                  "host": data.get("host", "http://localhost:11434"),
+                  "provider": data.get("provider", "ollama"),
+                  "api_key": _key(data, "api_key", "API_KEY")}
+    prompt = PAPER_GEN_PROMPT.format(n=n_questions + VERIFY_OVERSHOOT, content=combined)
+    try:
+        raw = chat([{"role": "user", "content": prompt}], **llm_kwargs)
+    except Exception as e:
+        return [], sources, 0, (jsonify({"error": f"Question generation failed: {e}"}), 500)
+
+    questions = _parse_questions(raw)
+    verified, dropped = _verify_questions(questions, **llm_kwargs)
+    # fall back to unverified if the verifier rejected everything
+    final = (verified if verified else questions)[:n_questions]
+    if not final:
+        return [], sources, dropped, (jsonify({"error": "Could not generate questions for that topic. "
+                                                       "Try a more specific topic."}), 502)
+    return final, sources, dropped, None
+
+
+def _attempt_questions(raw_questions: list) -> list[dict]:
+    """Normalise bank questions and generated ones into one attempt shape.
+
+    The bank stores options as {"letter", "text"}; _parse_questions returns
+    (letter, body) tuples. Both land here as the same dict so the marker below
+    never has to care where a question came from.
+    """
+    out = []
+    for i, q in enumerate(raw_questions, 1):
+        options = []
+        for opt in q.get("options") or []:
+            if isinstance(opt, dict):
+                options.append({"letter": (opt.get("letter") or "").upper(),
+                                "text": opt.get("text", "")})
+            else:
+                letter, body = opt
+                options.append({"letter": letter.upper(), "text": body})
+        out.append({
+            "id":      str(q.get("id") or f"q{i}"),
+            "text":    q.get("text", ""),
+            "options": options,
+            "answer":  (q.get("answer") or "").upper(),
+            "working": q.get("working", ""),
+        })
+    return out
+
+
+def _public_questions(questions: list[dict]) -> list[dict]:
+    """The same questions with the key and the worked solution removed.
+
+    This is the whole point of the attempt: what the browser holds can no longer
+    be used to decide what gets written to `progress`.
+    """
+    return [{"id": q["id"], "text": q["text"], "options": q["options"]}
+            for q in questions]
+
+
+def _attempt_or_404(data: dict):
+    """Load the caller's own attempt, or a 404 tuple. Scoped by user id, so one
+    student cannot touch another's attempt by guessing an id."""
+    attempt = users.get_attempt((data.get("attempt_id") or "").strip(), g.user["id"])
+    if attempt is None:
+        return None, (jsonify({"error": "Unknown attempt"}), 404)
+    return attempt, None
+
+
+@app.route("/api/quiz/start", methods=["POST"])
+def api_quiz_start():
+    """Open a quiz attempt. Questions go out without their answers."""
+    data  = request.json or {}
+    cid   = (data.get("curriculum_id") or "").strip()
+    topic = (data.get("topic") or "").strip() or cid
+    n     = max(1, min(int(data.get("n_questions", 5)), 20))
+    if not cid:
+        return jsonify({"error": "No curriculum given"}), 400
+
+    source    = "bank"
+    questions = _attempt_questions(quizbank.pick(cid, n))
+    if not questions:
+        # No bank for this class yet — generate from its ingested notes. Only
+        # this branch costs a model call, so only this branch is rate limited.
+        err = _check_llm_rate()
+        if err:
+            return err
+        generated, _sources, _dropped, gen_err = _rag_questions(topic, data, n)
+        if gen_err:
+            return gen_err
+        questions = _attempt_questions(generated)
+        source    = "generated"
+
+    if not questions:
+        return jsonify({"error": "No quiz questions available for this class yet."}), 404
+
+    attempt_id = users.create_attempt(g.user["id"], cid, topic, questions)
+    return jsonify({"attempt_id": attempt_id,
+                    "source": source,
+                    "questions": _public_questions(questions)})
+
+
+@app.route("/api/quiz/answer", methods=["POST"])
+def api_quiz_answer():
+    """Mark one answer server-side and record it. Used by the in-chat papers
+    flow, which marks as it goes; quiz mode marks everything at submit."""
+    data = request.json or {}
+    attempt, err = _attempt_or_404(data)
+    if err:
+        return err
+
+    qid    = (data.get("qid") or "").strip()
+    choice = (data.get("choice") or "").strip().upper()
+    question = next((q for q in attempt["questions"] if q["id"] == qid), None)
+    if question is None:
+        return jsonify({"error": "Unknown question"}), 404
+
+    correct = choice == question["answer"]
+    if qid not in attempt["marked"]:
+        # Once per question. Clicking twice must not inflate the attempt count.
+        users.record_progress(g.user["id"], attempt["curriculum"], attempt["topic"], correct)
+    users.record_answer(attempt["id"], g.user["id"], qid, choice, correct)
+
+    return jsonify({"correct": correct,
+                    "correct_answer": question["answer"],
+                    "working": question.get("working", "")})
+
+
+@app.route("/api/quiz/tab-switch", methods=["POST"])
+def api_quiz_tab_switch():
+    """Count one tab switch against the attempt. The client used to post this to
+    a route that did not exist, and the 404 was swallowed."""
+    data = request.json or {}
+    attempt, err = _attempt_or_404(data)
+    if err:
+        return err
+    return jsonify({"ok": True,
+                    "tab_switches": users.bump_tab_switch(attempt["id"], g.user["id"])})
+
+
+@app.route("/api/quiz/submit", methods=["POST"])
+def api_quiz_submit():
+    """Mark the whole attempt, write progress for right AND wrong answers, and
+    return the review the browser could not build for itself."""
+    data = request.json or {}
+    attempt, err = _attempt_or_404(data)
+    if err:
+        return err
+
+    sent     = {str(k): str(v).upper() for k, v in (data.get("answers") or {}).items()}
+    resubmit = attempt["submitted_at"] is not None
+    score    = 0
+    review   = []
+
+    for question in attempt["questions"]:
+        qid    = question["id"]
+        chosen = sent.get(qid) or attempt["answers"].get(qid, "")
+        ok     = bool(chosen) and chosen == question["answer"]
+        if ok:
+            score += 1
+        # A resubmit re-renders the review but never writes progress again.
+        if not resubmit and qid not in attempt["marked"]:
+            users.record_progress(g.user["id"], attempt["curriculum"], attempt["topic"], ok)
+            users.record_answer(attempt["id"], g.user["id"], qid, chosen, ok)
+        review.append({
+            "id":             qid,
+            "text":           question["text"],
+            "options":        question["options"],
+            "chosen":         chosen,
+            "correct_answer": question["answer"],
+            "correct":        ok,
+            "working":        question.get("working", ""),
+        })
+
+    if not resubmit:
+        users.finish_attempt(attempt["id"], g.user["id"], score)
+
+    return jsonify({"score": score,
+                    "total": len(attempt["questions"]),
+                    "tab_switches": attempt["tab_switches"],
+                    "resubmitted": resubmit,
+                    "review": review})
+
+
 @app.route("/api/papers", methods=["POST"])
 def api_papers():
     err = _check_llm_rate()
@@ -1208,40 +1425,16 @@ def api_papers():
 
     if not tavily_key:
         # RAG fallback: generate from ingested curriculum notes
-        _, collection = _curriculum_params(data)
-        chunks = retrieve(topic, n_results=10, collection_name=collection, with_sources=True)
-        if not chunks:
-            return jsonify({"error": "No curriculum content found for that topic. "
-                                     "Add a Tavily key or ingest reference material first."}), 404
-        combined = "\n\n---\n\n".join(c["text"] for c in chunks)[:7000]
-        seen_titles: set[str] = set()
-        sources = []
-        for c in chunks:
-            t = c["source"]
-            if t and t not in seen_titles:
-                seen_titles.add(t)
-                sources.append({"title": t, "url": _pmt_url(t)})
-        papers = []
-        prompt = PAPER_GEN_PROMPT.format(n=n_questions + VERIFY_OVERSHOOT, content=combined)
-        llm_kwargs = {"model": model_name, "host": host,
-                      "provider": provider, "api_key": api_key}
-        try:
-            raw = chat([{"role": "user", "content": prompt}], **llm_kwargs)
-        except Exception as e:
-            return jsonify({"error": f"Question generation failed: {e}"}), 500
-        questions = _parse_questions(raw)
-        verified, dropped = _verify_questions(questions, **llm_kwargs)
-        # fall back to unverified if verifier rejected everything
-        final = (verified if verified else questions)[:n_questions]
-        if not final:
-            return jsonify({"error": "Could not generate questions for that topic. "
-                                     "Try a more specific topic."}), 502
+        final, sources, dropped, gen_err = _rag_questions(topic, data, n_questions)
+        if gen_err:
+            return gen_err
         return jsonify({
             "questions": _format_questions(final),
             "sources": sources,
-            "papers": papers,
+            "papers": [],
             "grounded": True,
             "dropped": dropped,
+            "attempt_id": _open_paper_attempt(data, topic, final),
         })
 
     try:
@@ -1287,20 +1480,26 @@ def api_papers():
         "papers": papers,
         "grounded": bool(paper_texts),
         "dropped": dropped,
+        "attempt_id": _open_paper_attempt(data, topic, verified),
     })
 
 
-@app.route("/api/papers/correct", methods=["POST"])
-def api_papers_correct():
-    """Record a correct MCQ answer for the teacher progress dashboard."""
-    if not g.user:
-        return jsonify({"ok": False}), 401
-    data  = request.json
-    cid   = (data.get("curriculum_id") or "").strip()
-    topic = (data.get("topic") or "").strip()
-    if cid and topic:
-        users.record_progress(g.user["id"], cid, topic, correct=True)
-    return jsonify({"ok": True})
+def _open_paper_attempt(data: dict, topic: str, questions: list[dict]) -> str:
+    """Open an attempt for a set of generated paper questions, so the in-chat
+    practice flow can be marked server-side too. Empty string if there is no
+    curriculum to record against."""
+    cid = (data.get("curriculum_id") or "").strip()
+    if not cid or not questions:
+        return ""
+    return users.create_attempt(g.user["id"], cid, topic or cid,
+                                _attempt_questions(questions))
+
+
+# /api/papers/correct is gone on purpose. It wrote mastery from a client saying
+# "that one was right", with no question id and no key to check it against, so
+# any student could POST their way to a full green topic list. Correctness now
+# comes from /api/quiz/answer and /api/quiz/submit, which compare the submitted
+# letter against the key stored in quiz_attempts.
 
 
 @app.route("/api/papers/hint", methods=["POST"])
@@ -1674,6 +1873,14 @@ def api_get_progress(cid):
     if g.user is None:
         return jsonify({"error": "Not logged in"}), 401
     return jsonify(users.get_progress(g.user["id"], cid))
+
+
+@app.route("/api/teacher/curricula/<cid>/attempts")
+def api_teacher_attempts(cid):
+    err = _teacher_or_admin()
+    if err:
+        return err
+    return jsonify(users.list_attempts(cid))
 
 
 @app.route("/api/teacher/curricula/<cid>/progress")
@@ -2251,16 +2458,28 @@ def api_admin_revoke_key(key_id: int):
 
 @app.route("/dev")
 def dev_panel():
+    err = _admin_only()
+    if err:
+        return err
     return send_from_directory("static", "dev.html")
 
 
 @app.route("/api/dev/settings")
 def api_dev_get_settings():
+    err = _admin_only()
+    if err:
+        return err
     return jsonify(_settings.load())
 
 
 @app.route("/api/dev/settings", methods=["PUT"])
 def api_dev_put_settings():
+    # Admin only. With auth_required false or DEV_BYPASS_AUTH set, every
+    # caller is already _DEV_USER (role admin), so local dev is unaffected;
+    # in production flipping a flag now costs an admin login.
+    err = _admin_only()
+    if err:
+        return err
     saved = _settings.save(request.get_json(force=True) or {})
     return jsonify(saved)
 

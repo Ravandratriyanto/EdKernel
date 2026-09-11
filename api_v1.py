@@ -10,12 +10,25 @@ import tempfile
 from flask import Blueprint, request, jsonify
 
 import users
+import settings as _settings
+from ratelimit import SlidingWindowLimiter
 import core.check
 import core.tutor
 import core.questions
 import core.vision.step_checker
 
 v1 = Blueprint("v1", __name__, url_prefix="/v1")
+
+# A leaked key used to have no ceiling at all: every /v1/ route below calls
+# into core/, and most of those call an LLM, so an unthrottled key is
+# unbounded spend on our account. Separate instance from app.py's
+# _llm_limiter — importing that would be a circular import, and a browser
+# session and an API key are separate budgets anyway.
+#
+# In memory and per process, so with N gunicorn workers the real ceiling is
+# N x max_calls. That is a throttle, not a quota; a shared store is what
+# metering would need.
+_v1_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
 
 
 def _llm_kwargs() -> dict:
@@ -46,13 +59,33 @@ def _bearer_user():
     return users.user_for_api_key(auth[7:])
 
 
+def _over_limit(user_id: int):
+    """A 429 response if this key owner is over the ceiling, else None."""
+    if not _settings.load()["rate_limiting"]:
+        return None
+    wait = _v1_limiter.check_and_record(f"apikey-owner:{user_id}")
+    if not wait:
+        return None
+    resp = jsonify({"error": "Too many requests. Slow down and try again shortly."})
+    resp.headers["Retry-After"] = str(wait)
+    return resp, 429
+
+
 def require_auth(f):
-    """Decorator: 401 if no valid Bearer token."""
+    """Decorator: 401 without a valid Bearer token, 429 over the rate limit.
+
+    The limit is checked here rather than on each route so a new /v1/
+    endpoint cannot be added without one. Key management counts against the
+    same bucket on purpose — minting keys in a loop is abuse too.
+    """
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         user = _bearer_user()
         if user is None:
             return jsonify({"error": "Invalid or missing API key"}), 401
+        limited = _over_limit(user["id"])
+        if limited is not None:
+            return limited
         request.api_user = user
         return f(*args, **kwargs)
     return wrapper

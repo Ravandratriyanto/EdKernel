@@ -3821,3 +3821,216 @@ invocation", white screen. Rewritten to
 3. Replace HoughLinesP deskew with contour-based rotation
 4. AWS Bedrock provider once the hold clears
 5. Demo video + finish technical report polish
+
+## Session 27 — 2026-09-11
+
+Started as a documentation pass — `flowcharts.html` had not been touched since
+2026-09-03 and was two sessions behind. Ended up closing an exploit in the
+progress tracker that was open to any logged-in student, plus two security
+holes and three bugs found on the way. Every fix in this entry was run through
+the real Flask stack before it was called done.
+
+### Flowcharts brought up to date
+
+`flowcharts.html` still described the codebase as of the `core/` restructure:
+no OpenCV pipeline, no quiz mode, no progress tracking, no AWS. Four new
+diagrams added and five updated.
+
+- **OpenCV 5 Pipeline** — read out of `core/vision/` rather than from memory:
+  `imread` → `find_page` (cvtColor, bilateralFilter, Canny, morphologyEx,
+  findContours, approxPolyDP) → `rectify` → `deskew` → `binarise` → `segment`
+  → per-line crops → transcribe → `check_working`. The HoughLinesP bottleneck
+  is drawn in with the COOL numbers next to it.
+- **Student Home & Quiz**, **Progress Tracking**, **AWS Deployment** — the
+  three subsystems built in sessions 25 and 26.
+- Route map went from 48 to 58 (it was already wrong at 48 before this session
+  added four).
+
+The nav had drifted out of document order and the architecture diagram still
+said "48 routes" in a node label. Both fixed. Lint over the file checks every
+mermaid block parses as `graph`/`flowchart`, has balanced quotes and brackets,
+and that every nav anchor resolves to a section id.
+
+### A security review came back with 11 findings
+
+A review of the current architecture came back with 11 items. Rather than
+carry them as phantom risk, each was checked against the actual handlers.
+**Three were wrong or overstated**, which is worth recording — reasoning from a
+diagram is not the same as reading the code:
+
+- **`/v1/keys` IDOR — not real.** `keys_list` and `keys_revoke` both pass
+  `request.api_user["id"]`, and `users.revoke_api_key` scopes the SQL with
+  `AND owner_id = ?`. A forged key id deletes zero rows.
+- **`/api/graph` sympify RCE — not real.** There is no `eval` or `sympify` on
+  user input. Generated matplotlib code goes through `_check_graph_code()`: an
+  AST allowlist, rejection of any name or attribute starting with `_` (which
+  closes `().__class__.__subclasses__()`), a banned-name set, and `exec` with
+  20 explicit builtins. That was hardened in session 5.
+- **SSRF on paper import — half real.** `_fetch_pdf` leaves
+  `allow_redirects` at its default `True` and only checks the host on the
+  original URL, so an allowlisted domain can redirect the server anywhere. But
+  the body must start with `%PDF` or it is discarded, so it is blind: the
+  request happens, the response does not come back. Lower severity than
+  reported, still worth `allow_redirects=False`.
+- **Teacher-to-teacher IDOR — real, but not a missing check.** Every
+  `/api/teacher/...` route does call `_teacher_or_admin()`. What is missing is
+  any concept of *ownership*: no manifest has an owner or teachers field. So it
+  is a data-model decision, not a patch.
+
+### `PUT /api/dev/settings` was open to anyone
+
+`dev_panel`, `api_dev_get_settings` and `api_dev_put_settings` were all in
+`_OPEN_ENDPOINTS`, so `before_request` returned before any login check. Anyone
+who could reach the ALB could `PUT {"auth_required": false}` and be served as
+`_DEV_USER` — role admin — from that moment on. The `/dev` HTML page 404s
+(`static/dev.html` does not exist), but the API route never needed it.
+
+All three now call `_admin_only()`. Local dev is untouched: with
+`auth_required: false` or `DEV_BYPASS_AUTH` set, every caller is already
+`_DEV_USER` with role admin, so the panel still works. In production, flipping
+a flag now costs an admin login.
+
+### `/v1/` had no rate limit — and had never worked under auth
+
+The missing rate limit was real: `ratelimit.py` guarded only the login route,
+and `_check_llm_rate` is an `app.py` helper no `/v1/` route called. A leaked
+key had unbounded model spend.
+
+Writing the test for it turned up something bigger. **The entire `/v1/` API was
+dead whenever `auth_required` was true.** `_load_user` runs on every request,
+`v1.*` endpoints were never in `_OPEN_ENDPOINTS`, so every Bearer caller got a
+401 before `require_auth` ever ran. Confirmed against `git show HEAD:app.py` —
+pre-existing, not introduced here. It only ever "worked" in dev-bypass mode,
+where no key is needed at all, which is exactly why nobody noticed the missing
+rate limit.
+
+`_load_user` now lets `request.blueprint == "v1"` through to the blueprint's
+own Bearer auth. `api_v1.py` never touches `g.user`, so nothing else changes.
+
+The limit itself is a `SlidingWindowLimiter(max_calls=20, window_seconds=60)`
+keyed on the key's owner, checked **inside `require_auth`** rather than per
+route — a new `/v1/` endpoint cannot be added without one. Key management
+counts against the same bucket, because minting keys in a loop is abuse too.
+Caveats worth knowing: in memory and per process, so with 2 gunicorn workers
+the real ceiling is about 40/min, and it is a separate limiter instance from
+the cookie path's (importing `app.py`'s would be a circular import).
+
+### The progress tracker took mastery on trust
+
+`POST /api/papers/correct` read `curriculum_id` and `topic` from the request
+and called `record_progress(..., correct=True)`. No question id, no answer, no
+key to check against — `correct=True` was hardcoded. Any logged-in student
+could open devtools and POST their way to a full green topic list. Worse than
+a broken feature: an exploitable one, and it undermined the progress tracking
+built in session 25.
+
+The fix could not be a one-liner, because **the answer key lived in the
+browser** in both quiz paths — `PREMADE_QUIZZES` was a JS literal in
+`index.html`, and `/api/papers` ships `[ANSWER: X]` in its wire format so the
+client can mark. Removing `correct=True` would have left nothing able to decide
+correctness.
+
+So the key moved server-side, behind an attempt:
+
+- **`quiz_attempts` table** in `users.py` — id, user, curriculum, topic, the
+  questions *with* their keys as JSON, answers, which questions have been
+  marked, started/submitted, score, total, tab switches. SQLite rather than an
+  in-process dict on purpose: a dict is the `_INGEST_STATUS` trap again, and
+  EFS-backed SQLite survives a task replacement.
+- **`POST /api/quiz/start`** opens the attempt and returns the questions
+  through `_public_questions()`, which strips `answer` and `working`.
+- **`POST /api/quiz/submit`** compares each submitted letter against the stored
+  row, writes `record_progress` for **right and wrong**, and returns the review
+  — which is where the keys and the worked solutions reach the browser for the
+  first time.
+- **`POST /api/quiz/answer`** marks one question, for the in-chat papers flow
+  which marks as it goes.
+- **`POST /api/quiz/tab-switch`** increments the counter on the attempt. The
+  client has been posting to this route since session 26; it did not exist, and
+  the `.catch(() => {})` swallowed the 404.
+- **`GET /api/teacher/curricula/<cid>/attempts`** lists submitted attempts with
+  scores and tab-switch counts, so the dashboard has real data.
+
+`/api/papers/correct` is deleted. `_rag_questions()` was lifted out of
+`api_papers` so the quiz and the papers flow share one generator rather than
+two copies.
+
+**The premade bank moved to `curricula/gcse-maths/quizzes.json`**, read by a
+new `quizbank.py`. Deliberately not folded into `questions.json`: that file is
+injected into the tutor's system prompt with its answers, which is right for a
+tutor and wrong for a quiz — anything in there is one prompt-injection away
+from the student.
+
+Marking once per question is enforced by the `marked` map, so clicking twice,
+or resubmitting, cannot inflate the attempt count.
+
+### Three things found while doing it
+
+- **Every premade quiz answer was `A`.** All five of them. A student picking A
+  five times scored 5/5 without reading a question. Redistributed to B, C, D,
+  A, B when the bank moved server-side, and the test now asserts the keys are
+  not all one letter.
+- **Every 404 was reported as a 500.** `@app.errorhandler(Exception)` caught
+  werkzeug's `HTTPException` too, so a missing route answered *"Something went
+  wrong on our end. My bad gng"*. Found because the "is the route gone?" test
+  got a 500 instead of a 404. HTTP errors now pass through with their real
+  status.
+- **`users.create_user()` promotes the first account in the database to
+  admin** regardless of the role argument. The first test run had a "student"
+  who could read the teacher dashboard — the code was right and the fixture was
+  wrong. Both of these are now in CLAUDE.md.
+
+### Verified
+
+Two scripts, both driving the real app through `app.test_client()` against a
+throwaway `users.db` in a temp dir, with `settings.save` stubbed so the working
+`settings.json` is never written:
+
+- **16/16** on the dev-flags and `/v1/` fixes: anonymous PUT 401, student PUT
+  403, admin PUT 200, `/api/login` and `/admin` still open, `/v1/ping` open,
+  bad key 401, 20 calls pass and the 21st returns 429 with `Retry-After`,
+  cookie sessions unaffected by the `/v1/` throttle.
+- **34/34** on the quiz attempts: no `answer` or `working` anywhere in the
+  start payload, `/api/papers/correct` 404s, another student gets 404 on your
+  attempt, tab switches persist, submitting all-A scores **1/5 instead of
+  5/5**, progress records 5 attempts and 3 correct, a resubmit changes neither,
+  re-answering does not re-count, teacher sees the attempts and a student gets
+  403.
+
+Frontend was checked by extracting the `<script>` block and running
+`node --check` on it — the habit exists because this file has no build step.
+
+### Known issues
+
+- **The in-chat papers flow still ships answer keys to the browser.** Marking
+  goes through `/api/quiz/answer` now, so progress is server-derived, but
+  `/api/papers` still returns `[ANSWER: X]` in its wire format. A student
+  watching the network tab can read the key there. Quiz mode cannot. Closing it
+  means changing the wire format and `parsePaperQuestions` together.
+- **The quiz bank has no editing UI.** `curricula/<cid>/quizzes.json` has to be
+  edited by hand, and only `gcse-maths` has one. Every other class falls back to
+  RAG generation, which needs a reachable LLM.
+- **None of this was exercised against a live model.** The bank path needs no
+  LLM, which is what made a clean test possible, but the RAG fallback in
+  `/api/quiz/start` has only been read, not run. Ollama is down and Bedrock is
+  still held.
+- **The `/v1/` limiter is per process.** Two gunicorn workers means the real
+  ceiling is roughly double. A shared store is what metering would need.
+- `_fetch_pdf` still follows redirects (blind SSRF, described above). One-line
+  fix, not taken this session.
+- Teacher-to-teacher curriculum access is still role-only, by design decision
+  rather than by patch.
+- No CSRF token on cookie-authenticated state-changing routes. `samesite="Lax"`
+  is partial cover, not full.
+- Nothing here is committed.
+
+### Next
+
+1. Commit this work, then `allow_redirects=False` on `_fetch_pdf`
+2. Strip `[ANSWER: X]` out of the `/api/papers` wire format and mark that flow
+   entirely through `/api/quiz/answer`
+3. Teacher UI for the quiz bank — add, edit, and generate per-topic questions
+4. Decide the ownership model for curricula, or write down that single-tenant
+   is the assumption
+5. Replace HoughLinesP deskew with contour-based rotation
+6. Demo video

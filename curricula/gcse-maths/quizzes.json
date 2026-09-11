@@ -1,0 +1,62 @@
+[
+  {
+    "id": "gm1",
+    "text": "Simplify \\(3(x-2)+4(2x+5)\\).",
+    "options": [
+      { "letter": "A", "text": "\\(11x+7\\)" },
+      { "letter": "B", "text": "\\(11x+14\\)" },
+      { "letter": "C", "text": "\\(7x+14\\)" },
+      { "letter": "D", "text": "\\(11x-14\\)" }
+    ],
+    "answer": "B",
+    "working": "Expand each bracket: \\(3(x-2)=3x-6\\) and \\(4(2x+5)=8x+20\\). Add: \\(3x+8x=11x\\) and \\(-6+20=14\\), giving \\(11x+14\\)."
+  },
+  {
+    "id": "gm2",
+    "text": "Solve \\(2x+7=19\\).",
+    "options": [
+      { "letter": "A", "text": "\\(x=13\\)" },
+      { "letter": "B", "text": "\\(x=12\\)" },
+      { "letter": "C", "text": "\\(x=6\\)" },
+      { "letter": "D", "text": "\\(x=5\\)" }
+    ],
+    "answer": "C",
+    "working": "Subtract 7 from both sides: \\(2x=12\\). Divide by 2: \\(x=6\\)."
+  },
+  {
+    "id": "gm3",
+    "text": "What is \\(15\\%\\) of \\(240\\)?",
+    "options": [
+      { "letter": "A", "text": "\\(24\\)" },
+      { "letter": "B", "text": "\\(40\\)" },
+      { "letter": "C", "text": "\\(30\\)" },
+      { "letter": "D", "text": "\\(36\\)" }
+    ],
+    "answer": "D",
+    "working": "\\(15\\% = 0.15\\). So \\(0.15 \\times 240 = 36\\). (Or \\(10\\%=24\\), \\(5\\%=12\\), total \\(36\\).)"
+  },
+  {
+    "id": "gm4",
+    "text": "Factorise \\(x^2+5x+6\\).",
+    "options": [
+      { "letter": "A", "text": "\\((x+2)(x+3)\\)" },
+      { "letter": "B", "text": "\\((x+1)(x+6)\\)" },
+      { "letter": "C", "text": "\\((x-2)(x-3)\\)" },
+      { "letter": "D", "text": "\\((x+5)(x+1)\\)" }
+    ],
+    "answer": "A",
+    "working": "Find two numbers that multiply to \\(6\\) and add to \\(5\\): that is \\(2\\) and \\(3\\). So \\(x^2+5x+6=(x+2)(x+3)\\)."
+  },
+  {
+    "id": "gm5",
+    "text": "A circle has radius \\(5\\) cm. What is its area?",
+    "options": [
+      { "letter": "A", "text": "\\(10\\pi\\) cm²" },
+      { "letter": "B", "text": "\\(25\\pi\\) cm²" },
+      { "letter": "C", "text": "\\(5\\pi\\) cm²" },
+      { "letter": "D", "text": "\\(100\\pi\\) cm²" }
+    ],
+    "answer": "B",
+    "working": "Area \\(= \\pi r^2 = \\pi \\times 5^2 = 25\\pi\\) cm²."
+  }
+]

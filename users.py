@@ -1,4 +1,5 @@
 import hashlib
+import json
 import secrets
 import sqlite3
 import time
@@ -71,6 +72,26 @@ def init() -> None:
                     PRIMARY KEY (user_id, curriculum, topic_id)
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS quiz_attempts (
+                    id           TEXT PRIMARY KEY,
+                    user_id      INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                    curriculum   TEXT NOT NULL,
+                    topic        TEXT NOT NULL,
+                    questions    TEXT NOT NULL,
+                    answers      TEXT NOT NULL DEFAULT '{}',
+                    marked       TEXT NOT NULL DEFAULT '{}',
+                    started_at   INTEGER NOT NULL,
+                    submitted_at INTEGER,
+                    score        INTEGER,
+                    total        INTEGER NOT NULL,
+                    tab_switches INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_attempts_user "
+                "ON quiz_attempts (user_id, started_at)"
+            )
             # Migration: add role column to existing databases
             try:
                 conn.execute(
@@ -345,6 +366,136 @@ def record_progress(user_id: int, curriculum: str, topic_id: str, correct: bool)
             """, (user_id, curriculum, topic_id, inc, now, inc, now))
     finally:
         conn.close()
+
+
+# ── Quiz attempts ─────────────────────────────────────────────────────────────
+#
+# The answer key lives here and nowhere else. The browser is sent questions with
+# the key stripped, and correctness is decided by comparing a submitted letter
+# against this row — never by the client saying "I was right".
+
+
+def create_attempt(user_id: int, curriculum: str, topic: str,
+                   questions: list[dict]) -> str:
+    """Store a quiz attempt (questions WITH their keys) and return its id."""
+    attempt_id = secrets.token_hex(16)
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO quiz_attempts "
+                "(id, user_id, curriculum, topic, questions, started_at, total) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (attempt_id, user_id, curriculum, topic,
+                 json.dumps(questions), int(time.time()), len(questions)),
+            )
+    finally:
+        conn.close()
+    return attempt_id
+
+
+def get_attempt(attempt_id: str, user_id: int) -> dict | None:
+    """One attempt, scoped to its owner. A different user gets None, not a row."""
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM quiz_attempts WHERE id = ? AND user_id = ?",
+            (attempt_id, user_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    out = dict(row)
+    out["questions"] = json.loads(out["questions"])
+    out["answers"]   = json.loads(out["answers"])
+    out["marked"]    = json.loads(out["marked"])
+    return out
+
+
+def record_answer(attempt_id: str, user_id: int, qid: str, choice: str,
+                  correct: bool) -> None:
+    """Save one answer on the attempt and remember that it has been marked.
+
+    `marked` exists so progress is written once per question — a student who
+    clicks the same option twice, or resubmits, must not inflate their attempts
+    count.
+    """
+    conn = _connect()
+    try:
+        with conn:
+            row = conn.execute(
+                "SELECT answers, marked FROM quiz_attempts WHERE id = ? AND user_id = ?",
+                (attempt_id, user_id),
+            ).fetchone()
+            if row is None:
+                return
+            answers = json.loads(row["answers"])
+            marked  = json.loads(row["marked"])
+            answers[qid] = choice
+            marked[qid]  = bool(correct)
+            conn.execute(
+                "UPDATE quiz_attempts SET answers = ?, marked = ? WHERE id = ? AND user_id = ?",
+                (json.dumps(answers), json.dumps(marked), attempt_id, user_id),
+            )
+    finally:
+        conn.close()
+
+
+def already_marked(attempt_id: str, user_id: int, qid: str) -> bool:
+    """True if this question has already been counted towards progress."""
+    attempt = get_attempt(attempt_id, user_id)
+    return bool(attempt and qid in attempt["marked"])
+
+
+def bump_tab_switch(attempt_id: str, user_id: int) -> int:
+    """Increment the attempt's tab-switch counter and return the new total."""
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE quiz_attempts SET tab_switches = tab_switches + 1 "
+                "WHERE id = ? AND user_id = ?",
+                (attempt_id, user_id),
+            )
+            row = conn.execute(
+                "SELECT tab_switches FROM quiz_attempts WHERE id = ? AND user_id = ?",
+                (attempt_id, user_id),
+            ).fetchone()
+    finally:
+        conn.close()
+    return row["tab_switches"] if row else 0
+
+
+def finish_attempt(attempt_id: str, user_id: int, score: int) -> None:
+    """Stamp the attempt as submitted. Ignored if it already was."""
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE quiz_attempts SET submitted_at = ?, score = ? "
+                "WHERE id = ? AND user_id = ? AND submitted_at IS NULL",
+                (int(time.time()), score, attempt_id, user_id),
+            )
+    finally:
+        conn.close()
+
+
+def list_attempts(curriculum: str) -> list[dict]:
+    """Submitted attempts for a curriculum — for the teacher dashboard."""
+    conn = _connect()
+    try:
+        rows = conn.execute("""
+            SELECT a.id, u.username, a.topic, a.score, a.total,
+                   a.tab_switches, a.started_at, a.submitted_at
+            FROM quiz_attempts a
+            JOIN users u ON u.id = a.user_id
+            WHERE a.curriculum = ? AND a.submitted_at IS NOT NULL
+            ORDER BY a.submitted_at DESC
+        """, (curriculum,)).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
 
 
 def get_progress(user_id: int, curriculum: str) -> list[dict]:

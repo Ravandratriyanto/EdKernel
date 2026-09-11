@@ -102,17 +102,21 @@
 
 <header>
   <h1>EdKernel — Codebase Flowcharts</h1>
-  <p>One diagram per concern · Updated 2026-08-29 · core/ restructure + /v1/ API</p>
+  <p>One diagram per concern · Updated 2026-09-11 · OpenCV 5 pipeline · server-marked quizzes · progress · AWS Fargate</p>
 </header>
 
 <nav>
   <a href="#arch">System Architecture</a>
   <a href="#core-pkg">core/ Package</a>
+  <a href="#opencv">OpenCV 5 Pipeline</a>
   <a href="#user-flows">User Flows</a>
+  <a href="#student-home">Student Home &amp; Quiz</a>
+  <a href="#progress">Progress Tracking</a>
   <a href="#curricula">Curricula &amp; Question Bank</a>
   <a href="#paper-import">Past Paper Import</a>
   <a href="#app-routes">app.py Routes</a>
   <a href="#v1-api">api_v1.py (/v1/)</a>
+  <a href="#deploy">AWS Deployment</a>
   <a href="#llm-client">core/llm/client.py</a>
   <a href="#prompts">core/prompts.py</a>
   <a href="#rag-ingest">core/rag/ingest.py</a>
@@ -137,7 +141,7 @@
   <div class="chart-area">
     <div class="mermaid">
 graph TD
-    STUDENT["Student\nindex.html\n3-view UI"]
+    STUDENT["Student\nindex.html\nservice tiles / tutor / quiz"]
     TEACHER["Teacher\nteacher.html"]
     ADMIN["Admin\nadmin.html"]
     DEV["Dev panel\ndev.html"]
@@ -151,10 +155,10 @@ graph TD
     CLI --> CORE
     THIRD -->|"Bearer token\nHTTP"| V1
 
-    APP["app.py\nFlask — 48 routes"]
+    APP["app.py\nFlask — 58 routes"]
     V1["api_v1.py\nBlueprint /v1/\n6 endpoint groups"]
 
-    APP --> AUTH["users.py\nAuth + sessions\n+ API keys"]
+    APP --> AUTH["users.py\nauth / sessions\napi keys / progress"]
     APP --> RL["ratelimit.py"]
     APP --> SET["settings.py\nFeature flags"]
     APP --> CUR["curricula.py\nManifest loader"]
@@ -169,7 +173,8 @@ graph TD
     CORE --> LLM["core/llm/client.py\nOllama / Groq"]
     CORE --> RAG["core/rag/retrieve.py\nVector search"]
     CORE --> PROM["core/prompts.py\nShared prompts"]
-    CORE --> VIS["core/vision/\nImage + step check"]
+    CORE --> VIS["core/vision/\nOpenCV 5 pipeline\ntranscribe + step check"]
+    CORE --> QST["core/questions.py\nPDF to questions\npypdf + fitz vision fallback"]
 
     CUR --> CDIR[("curricula/\nmanifest · topics\nquestions · reference/\npapers/")]
 
@@ -178,7 +183,10 @@ graph TD
     INGEST --> CDIR
 
     LLM --> OLL["Ollama\nlocalhost:11434"]
-    LLM --> GROQ["Groq API\ncloud LPU"]
+    LLM --> GROQ["Groq API\nopenai/gpt-oss-120b"]
+
+    AUTH --> UDB[("users.db\nSQLite at DB_DIR\nusers / sessions\napi_keys / progress")]
+    APP -.->|"docker to ECR"| FARG["AWS ECS Fargate + ALB\nEFS holds users.db\nand ChromaDB"]
 
     EVALS["evals/\nrun · regress · learn"] -.->|test calls| CORE
 
@@ -189,6 +197,9 @@ graph TD
     style CDIR  fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
     style GROQ  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style OLL   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style UDB   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style FARG  fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
+    style QST   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     </div>
   </div>
 </div>
@@ -220,7 +231,7 @@ flowchart TD
         end
 
         subgraph VIS["core/vision/"]
-            IH["image_handler.py\ntranscribe() — image → text\ndrop_reasoning() — strip think blocks"]
+            IH["image_handler.py\ntranscribe() — image → text\ndetect_question() — photo → question\ndrop_reasoning() — strip think blocks"]
             SC["step_checker.py\ncheck_working() — find first wrong step\nOpenCV segment + transcribe each line"]
             PP2["preprocess.py\nOpenCV binarise + rectify"]
             SEG["segment.py\nhorizontal line segmentation"]
@@ -234,7 +245,7 @@ flowchart TD
         subgraph TASKS["core/ — task modules"]
             CK["check.py\nrun(question, answer, context, **llm)\n→ feedback + correct bool"]
             TU["tutor.py\nstart(topic, context, question_bank, **llm)\nreply(messages, student_message, **llm)\n→ reply + correct + messages"]
-            QQ["questions.py\nextract_from_paper(pdf_bytes, **llm)\n→ list of question dicts"]
+            QQ["questions.py\nextract_from_paper(pdf_bytes, **llm)\npypdf, then fitz page raster\n+ vision transcription fallback\n→ list of question dicts"]
         end
     end
 
@@ -263,23 +274,61 @@ flowchart TD
   </div>
 </div>
 
+
+<!-- ======================= OPENCV PIPELINE ======================= -->
+<div class="section color-vision" id="opencv">
+  <div class="section-header">
+    <h2>OpenCV 5 Pipeline — photo of working → first wrong step</h2>
+    <span class="badge badge-vision">VISION</span>
+  </div>
+  <div class="section-desc">The perception half of the agentic loop, and the part the competition judges on. A phone photo is rectified, deskewed, binarised and cut into one crop per working line before any model is called. The LLM never sees the raw photo — it sees one line at a time. Fires automatically when a student attaches an image in Learn mode.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    IMG["Student photo\nbase64 → POST /api/check_working"] --> READ["cv2.imread\ntemp file from base64"]
+    READ --> FIND["find_page()\ncvtColor → bilateralFilter\nCanny → morphologyEx\nfindContours + approxPolyDP"]
+    FIND -->|"4-corner page found"| RECT["rectify()\ngetPerspectiveTransform\nwarpPerspective"]
+    FIND -->|"no page found"| ASIS["use the frame as-is"]
+    RECT --> DESK["deskew()\nskew_angle() → _hough_estimate\nHoughLinesP + warpAffine"]
+    ASIS --> DESK
+    DESK --> BIN["binarise()\nadaptiveThreshold\nGaussian, inverted"]
+    BIN --> SEG["segment()\nink_mask → _smear\nMORPH_CLOSE + dilate\nfindContours → boundingRect\n_merge_rows"]
+    SEG --> CROP["crops()\none image per working line\nplus box coordinates"]
+    CROP --> TRANS["image_handler.transcribe()\nvision LLM, one call per line\ndrop_reasoning strips think blocks"]
+    TRANS --> EVAL["step_checker.check_working()\nLLM judges the line sequence\nfinds the FIRST wrong step"]
+    EVAL --> OUT["steps + boxes + error_index\n+ explanation"]
+    OUT --> UI["index.html runStepChecker()\ncanvas overlay\ngreen = correct, red = error line"]
+
+    BOTTLE["COOL benchmark: HoughLinesP is\nthe bottleneck on both architectures\n240 ms x86 vs 1587 ms Graviton\nplanned swap: contour-based rotation\nreusing the findContours output"]
+    DESK -.-> BOTTLE
+
+    style OUT    fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style EVAL   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style TRANS  fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style BOTTLE fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════ USER FLOWS ═══════════════════════ -->
 <div class="section color-arch" id="user-flows">
   <div class="section-header">
     <h2>User Flows — What each role sees</h2>
     <span class="badge badge-arch">OVERVIEW</span>
   </div>
-  <div class="section-desc">Three roles, three front-ends. Feature flags in settings.json (toggled via /dev) control auth and stub data at runtime without a deploy. Admin panel now includes API key management.</div>
+  <div class="section-desc">Three roles, three front-ends. The student lands on a service-tile grid after picking a class — Learn, Papers, Upload, Quiz — not on the tutor directly. Feature flags in settings.json (toggled via /dev) control auth and stub data at runtime without a deploy.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
     subgraph STUDENT_FLOW["Student — index.html"]
-        S1["Classes grid\nlist of curricula"] --> S2["Class canvas\nbanner + tabs"]
-        S2 --> S3A["Classwork tab\ntopics + reference files"]
-        S2 --> S3B["Questions tab\nview + add questions"]
-        S2 --> S4["Open AI Tutor button\nchat view"]
-        S4 --> S5["AI tutor\nSocratic lesson\nquestion bank injected\ninto system prompt"]
-        S4 --> S6["Practice button\nauto-starts quiz\npre-fills topic"]
+        S1["Classes grid\nlist of curricula"] --> S2["Class canvas\nservice tiles + tabs\nURL /?c=&lt;id&gt;"]
+        S2 --> S3A["Classwork tab\ntopics + mastery dots\n+ Continue banner"]
+        S2 --> S3B["Questions tab\nbrowse or flashcards\nspaced repetition"]
+        S2 --> S4["Service tiles\nenterService(type)"]
+        S4 --> S5["Learn — Socratic tutor\nquestion bank injected\nimage attach fires step checker"]
+        S4 --> S6["Papers — tutor + topic\nstartPapers()"]
+        S4 --> S7["Upload — handwriting photo\nOpenCV step check"]
+        S4 --> S8["Quiz — Bluebook panel\nno live marking\nscore + review on finish"]
     end
 
     subgraph TEACHER_FLOW["Teacher — teacher.html"]
@@ -312,9 +361,90 @@ flowchart TD
     end
 
     style S5  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style S8  fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
     style T5  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
     style A1  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style V1  fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================= STUDENT HOME + QUIZ ======================= -->
+<div class="section color-arch" id="student-home">
+  <div class="section-header">
+    <h2>Student Home &amp; Quiz Mode</h2>
+    <span class="badge badge-arch">OVERVIEW</span>
+  </div>
+  <div class="section-desc">Picking a class opens a Gojek-style service-tile grid, not the tutor. Quiz mode copies the Digital SAT Bluebook layout and deliberately shows no live right/wrong — teacher feedback was that live marking spikes exam nerves. The answer key never reaches the browser: the server opens an attempt, sends key-stripped questions, and marks the whole thing at submit.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    CLASSES["Classes grid\nGET /api/curricula"] --> CANVAS["Class canvas\nopenClass() pushState /?c=ID"]
+    CANVAS --> TILES{"enterService(type)"}
+
+    TILES -->|learn| LEARN["Tutor chat\nPOST /api/start then /api/reply\nimage attach fires runStepChecker()"]
+    TILES -->|papers| PAPERS["Tutor + prefilled topic\nstartPapers() → POST /api/papers"]
+    TILES -->|upload| UPL["File picker\nPOST /api/upload\n→ OpenCV step check"]
+    TILES -->|quiz| QZ["startQuiz()"]
+
+    QZ --> START["POST /api/quiz/start"]
+    START --> SRC{"quizbank.load(cid)\nhas a bank?"}
+    SRC -->|yes| BANK["curricula/cid/quizzes.json\nserver-side only\ninstant, no LLM"]
+    SRC -->|no| RAGQ["_rag_questions()\nRAG MCQ generation\nrate limited, needs an LLM"]
+
+    BANK --> ATT[("quiz_attempts row\nquestions WITH the key\nstarted_at, total")]
+    RAGQ --> ATT
+    ATT --> SENT["response: attempt_id +\nquestions with answer\nand working STRIPPED"]
+
+    SENT --> PANEL["quiz-panel — Bluebook layout\nproblem left, choices right\ncount-up timer\nQuestion X of Y, Next/Finish"]
+    PANEL --> PICK["select A/B/C/D\nrecords the letter only\nNO live right/wrong"]
+    PICK --> PANEL
+
+    PANEL --> FIN["finishQuiz()\nPOST /api/quiz/submit\n{attempt_id, answers}"]
+    FIN --> MARK["server compares each letter\nagainst the stored key"]
+    MARK --> PROG["record_progress() per question\nRIGHT and WRONG\nonce each, resubmit is a no-op"]
+    MARK --> RESULT["score + time + tab switches\nreview with the key\nand the worked solution"]
+    RESULT --> AI["analyzeQuiz()\nbuilt from the server review\nPOST /api/start"]
+
+    WATCH["startQuizWatch()\nvisibilitychange only\nwindow blur false-fired on DevTools"] --> BADGE["TAB SWITCH DETECTED (n)"]
+    BADGE -->|"POST /api/quiz/tab-switch"| ATT
+
+    style PANEL  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style PICK   fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
+    style ATT    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style MARK   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style SENT   fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ======================= PROGRESS ======================= -->
+<div class="section color-auth" id="progress">
+  <div class="section-header">
+    <h2>Progress Tracking — mastery per topic</h2>
+    <span class="badge badge-auth">AUTH</span>
+  </div>
+  <div class="section-desc">A fourth SQLite table in users.py, written only from a server-side comparison against the stored answer key. Mastery is correct/attempts, rendered as a coloured dot on the topic list and used to pick the Continue recommendation. Right and wrong both count, once per question per attempt.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    ANS["Answer submitted\nquiz finish or papers flow"] --> POST["POST /api/quiz/submit\nor /api/quiz/answer\n{attempt_id, qid, letter}"]
+    POST --> CMP["server reads the key from\nquiz_attempts and compares\nclient cannot assert correctness"]
+    CMP --> REC2["users.record_progress()\nUPSERT attempts, correct, last_seen"]
+    REC2 --> TBL[("progress table\nuser_id / curriculum / topic_id\nattempts / correct / last_seen")]
+
+    TBL --> GET1["GET /api/progress/:cid\nusers.get_progress()"]
+    TBL --> GET2["GET /api/teacher/curricula/:cid/progress\nusers.get_all_progress()"]
+    ATT2[("quiz_attempts\nscore, total, tab_switches\nsubmitted_at")] --> GET3["GET /api/teacher/curricula/:cid/attempts\nusers.list_attempts()"]
+    GET3 --> TDASH
+
+    GET1 --> DOTS["Mastery dots on topic list\n0.8 or more = green\nabove 0 = yellow\nuntouched = grey"]
+    GET1 --> CONT["Continue banner\nrecommended next topic"]
+    GET2 --> TDASH["Teacher dashboard\nclass-wide view"]
+
+    style TBL   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style DOTS  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     </div>
   </div>
 </div>
@@ -412,7 +542,7 @@ flowchart TD
 <!-- ═══════════════════════ APP.PY ROUTES ═══════════════════════ -->
 <div class="section color-core" id="app-routes">
   <div class="section-header">
-    <h2>app.py — Route map (48 routes + /v1/ Blueprint)</h2>
+    <h2>app.py — Route map (58 routes + /v1/ Blueprint)</h2>
     <span class="badge badge-core">CORE</span>
   </div>
   <div class="section-desc">Routes are grouped by role. Auth check runs in before_request — g.user is set from the session cookie. Open endpoints skip auth. DEV_BYPASS_AUTH or settings.auth_required=false grants everyone admin. /v1/ is a separate Blueprint with Bearer token auth.</div>
@@ -426,17 +556,21 @@ flowchart TD
 
     ROLE --> AUTH_R["Auth\nPOST /api/register\nPOST /api/login\nPOST /api/logout\nGET  /api/me"]
 
-    ROLE --> TUTOR_R["Tutor core\nPOST /api/start — begin lesson\nPOST /api/reply — continue\nPOST /api/check — answer check\nPOST /api/check_working — step check\nPOST /api/upload — file attach\nPOST /api/graph — matplotlib\nPOST /api/papers — MCQ from papers\nPOST /api/papers/hint — hint\nGET  /api/papers/download/id"]
+    ROLE --> TUTOR_R["Tutor core\nPOST /api/start — begin lesson\nPOST /api/reply — continue\nPOST /api/check — answer check\nPOST /api/check_working — step check\nPOST /api/upload — file attach\nPOST /api/graph — matplotlib\nPOST /api/detect_question — photo to question\nPOST /api/papers — MCQ from papers or RAG\nPOST /api/papers/hint — hint\nGET  /api/papers/download/id"]
 
     ROLE --> SESSION_R["Sessions\nGET /api/sessions\nGET /api/sessions/id"]
 
+    ROLE --> QUIZ_R["Quiz attempts — server marks\nPOST /api/quiz/start — key-stripped questions\nPOST /api/quiz/answer — mark one\nPOST /api/quiz/tab-switch — count\nPOST /api/quiz/submit — mark + review"]
+
+    ROLE --> PROG_R["Progress\nGET /api/progress/cid — student dots\nGET /api/teacher/curricula/cid/progress\nGET /api/teacher/curricula/cid/attempts"]
+
     ROLE --> STUDENT_R["Student curricula\nGET  /api/curricula\nGET  /api/curricula/cid/info\nGET  /api/curricula/cid/questions\nPOST /api/curricula/cid/questions\nGET  /api/curricula/cid/materials\nGET  /api/curricula/cid/materials/file"]
 
-    ROLE --> TEACHER_R["Teacher\nGET    /teacher\nGET    /api/teacher/curricula\nGET    /api/teacher/curricula/cid\nPUT    /api/teacher/curricula/cid/topics\nPOST   /api/teacher/curricula/cid/upload\nGET    /api/teacher/curricula/cid/files\nDELETE /api/teacher/curricula/cid/files/f\nGET    /api/teacher/curricula/cid/questions\nPOST   /api/teacher/curricula/cid/questions\nDELETE /api/teacher/curricula/cid/questions/qid\nPOST   /api/teacher/curricula/cid/ingest"]
+    ROLE --> TEACHER_R["Teacher\nGET    /teacher\nGET    /api/teacher/curricula\nGET    /api/teacher/curricula/cid\nPUT    /api/teacher/curricula/cid/topics\nPOST   /api/teacher/curricula/cid/upload\nGET    /api/teacher/curricula/cid/files\nDELETE /api/teacher/curricula/cid/files/f\nGET    /api/teacher/curricula/cid/questions\nPOST   /api/teacher/curricula/cid/questions\nDELETE /api/teacher/curricula/cid/questions/qid\nGET    /api/teacher/curricula/cid/ingest — status\nPOST   /api/teacher/curricula/cid/ingest — start\nGET    /api/teacher/curricula/cid/progress"]
 
-    ROLE --> ADMIN_R["Admin\nGET    /admin\nGET    /api/admin/curricula\nGET    /api/admin/curricula/cid\nPUT    /api/admin/curricula/cid\nPOST   /api/admin/curricula\nPOST   /api/admin/curricula/cid/ingest\nPOST   /api/admin/curricula/cid/import-paper-questions\nGET    /api/admin/users\nPUT    /api/admin/users/uid/role\nGET    /api/admin/api-keys\nPOST   /api/admin/api-keys\nDELETE /api/admin/api-keys/kid"]
+    ROLE --> ADMIN_R["Admin\nGET    /admin\nGET    /api/admin/curricula\nGET    /api/admin/curricula/cid\nPUT    /api/admin/curricula/cid\nPOST   /api/admin/curricula\nGET    /api/admin/curricula/cid/ingest — status\nPOST   /api/admin/curricula/cid/ingest — start\nPOST   /api/admin/curricula/cid/auto-research\nPOST   /api/admin/curricula/cid/import-paper-questions\nGET    /api/admin/users\nPUT    /api/admin/users/uid/role\nGET    /api/admin/api-keys\nPOST   /api/admin/api-keys\nDELETE /api/admin/api-keys/kid"]
 
-    ROLE --> DEV_R["Dev panel (no auth)\nGET /dev\nGET /api/dev/settings\nPUT /api/dev/settings"]
+    ROLE --> DEV_R["Dev flags — ADMIN ONLY\nGET /dev (dev.html is still missing)\nGET /api/dev/settings\nPUT /api/dev/settings\nwas open to anyone until session 27"]
 
     V1_R["api_v1.py Blueprint /v1/\nBearer token auth (separate from cookie)\nGET  /v1/ping\nPOST /v1/check\nPOST /v1/tutor/start\nPOST /v1/tutor/reply\nPOST /v1/questions/extract\nPOST /v1/check-working\nGET  /v1/keys\nPOST /v1/keys\nDELETE /v1/keys/kid"]
 
@@ -445,6 +579,8 @@ flowchart TD
     style TEACHER_R fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
     style ADMIN_R   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style DEV_R     fill:#2a2a2a,stroke:#888,color:#e8e8e8
+    style PROG_R    fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
+    style QUIZ_R    fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style R401      fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
     style V1_R      fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
     </div>
@@ -457,11 +593,12 @@ flowchart TD
     <h2>api_v1.py — Stateless REST API (/v1/)</h2>
     <span class="badge badge-api">API</span>
   </div>
-  <div class="section-desc">Flask Blueprint registered at /v1/. No cookies, no sessions, no HTML. Callers own their full message history (OpenAI pattern). Auth via Authorization: Bearer token — SHA-256 stored in api_keys table, plaintext never saved. Each route calls directly into core/.</div>
+  <div class="section-desc">Flask Blueprint registered at /v1/. No cookies, no sessions, no HTML. Callers own their full message history (OpenAI pattern). Auth via Authorization: Bearer token — SHA-256 stored in api_keys table, plaintext never saved. require_auth also enforces a 20-call/minute ceiling per key owner, so a leaked key cannot run up unbounded model spend. app.py's before_request lets the blueprint past the cookie gate — without that, every Bearer caller got a 401.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
-    REQ2["HTTP request\nAuthorization: Bearer token"] --> AUTH["require_auth decorator\nSHA-256 token → user_for_api_key()\n401 if unknown"]
+    REQ2["HTTP request\nAuthorization: Bearer token"] --> GATE["app.before_request\nblueprint == v1 → skip cookie check"]
+    GATE --> AUTH["require_auth decorator\nSHA-256 token → user_for_api_key()\n401 if unknown\n429 over 20 calls/min per owner"]
 
     AUTH --> PING["GET /v1/ping\nno auth — health check"]
 
@@ -486,6 +623,43 @@ flowchart TD
     style TSTART fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style TREPLY fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style CW     fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================= AWS DEPLOYMENT ======================= -->
+<div class="section color-arch" id="deploy">
+  <div class="section-header">
+    <h2>Deployment — AWS ECS Fargate</h2>
+    <span class="badge badge-arch">OVERVIEW</span>
+  </div>
+  <div class="section-desc">Docker image to ECR, ECS Fargate behind an ALB, EFS for the two things that must survive a task replacement: users.db and ChromaDB. Gunicorn runs 2 workers, which is why any in-process dict (the ingest status) is unreliable across requests.</div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    BUILD["docker build -t edkernel .\nthe trailing dot matters"] --> ECRR["Amazon ECR\nimage repository"]
+    ECRR --> TASKDEF["ECS task definition\nrevision 14\nDB_DIR + CHROMA_DIR env"]
+    TASKDEF --> FARGATE2["ECS Fargate service\ngunicorn 2 workers x 4 threads\nap-southeast-1"]
+    BROWSER["Student / teacher browser"] --> ALB["Application Load Balancer\nedkernel-alb-1135643304"]
+    ALB --> FARGATE2
+
+    FARGATE2 --> EFS1[("EFS → /app/.logs\nusers.db + sessions.jsonl")]
+    FARGATE2 --> EFS2[("EFS → /app/data/chroma\nChromaDB collections")]
+    FARGATE2 --> GROQ3["Groq API\nopenai/gpt-oss-120b"]
+    FARGATE2 -.->|"blocked: account hold"| BEDROCK["AWS Bedrock provider\nValidationException\nnot integrated yet"]
+
+    WARN1["_INGEST_STATUS is a per-process dict\na GET can hit a different worker\nthan the POST that started ingest\nverify the feature, not the status"]
+    WARN2["Ingest does not auto-run on boot\nmust be re-triggered after\nevery task replacement"]
+    FARGATE2 -.-> WARN1
+    EFS2 -.-> WARN2
+
+    style FARGATE2 fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style EFS1     fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style EFS2     fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style BEDROCK  fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style WARN1    fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
+    style WARN2    fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
     </div>
   </div>
 </div>
