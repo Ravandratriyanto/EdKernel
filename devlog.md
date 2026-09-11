@@ -4034,3 +4034,27 @@ Frontend was checked by extracting the `<script>` block and running
    is the assumption
 5. Replace HoughLinesP deskew with contour-based rotation
 6. Demo video
+
+### Merge from the parallel machine's branch
+
+Session 27 ran on two machines at once. This entry (above) is the desktop's
+work: server-marked quizzes, `quizbank.py`/`quizzes.json`, the dev-flag
+lockdown, `/v1/` rate limiting. The laptop had a separate, overlapping branch —
+client-side quiz, `PREMADE_QUIZZES`, a `_DEV_ENV` variant of the dev-flag fix —
+plus three pieces this branch did not have. Rather than merge two quiz systems,
+took this branch as the base and re-applied only the three unique pieces:
+
+- **Annotated vision output** — `_annotate()` in `core/vision/step_checker.py`;
+  `check_working()` now returns `annotated` (base64 JPEG, error line boxed red).
+  `appendWorkingResult()` shows it, fixing the old client overlay's box-drift
+  after warp/deskew (kept as fallback).
+- **Error-triggered practice** — `POST /api/practice_from_error`
+  (`PRACTICE_FROM_ERROR_PROMPT`) + a "Practice this mistake" button that loads
+  targeted MCQs into the inline papers flow.
+- **Vision eval harness** — `evals/vision.py` + `evals/vision_cases.jsonl`
+  (still needs real sample photos for a number).
+
+The laptop's duplicate quiz + security work was dropped in favour of this
+branch's more complete versions (server-side keys, records right AND wrong).
+Verified after re-apply: `/api/practice_from_error` registers, no undefined
+names, JS parses.

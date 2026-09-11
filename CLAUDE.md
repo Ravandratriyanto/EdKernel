@@ -116,6 +116,19 @@ Report what actually happened, including failures. Do not round a partial result
   whenever `auth_required` was true.
 - **Flowcharts current**: `flowcharts.html` has 21 diagrams including the
   OpenCV 5 pipeline, the quiz attempt flow, progress, and AWS deployment.
+- **Annotated vision output** (from the parallel machine's branch): `check_working()`
+  returns `annotated` — a base64 JPEG of the cleaned page with each line boxed
+  (error red, others green, numbered) via `_annotate()` in `step_checker.py`.
+  Frontend shows it directly; drawing on the preprocessed image means boxes line
+  up even after warp/deskew (old client-side overlay kept as fallback).
+- **Error-triggered practice**: when the step checker finds an error, a
+  "Practice this mistake" button calls `POST /api/practice_from_error`
+  (`PRACTICE_FROM_ERROR_PROMPT`, reuses `_parse_questions`/`_format_questions`),
+  loading MCQs into the inline papers flow. Closes the vision → tutor →
+  curriculum loop. Needs a reachable LLM.
+- **Vision eval harness**: `evals/vision.py` + `evals/vision_cases.jsonl`. Metric
+  is exact match on `error_index`. **No sample photos yet** — no accuracy number
+  until `evals/vision_samples/` is populated.
 
 ## Features built (as of session 26)
 

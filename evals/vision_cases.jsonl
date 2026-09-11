@@ -1,0 +1,3 @@
+{"id": "v1", "image": "evals/vision_samples/v1.jpg", "error_index": 2, "note": "sign error on line 3"}
+{"id": "v2", "image": "evals/vision_samples/v2.jpg", "error_index": null, "note": "all steps correct"}
+{"id": "v3", "image": "evals/vision_samples/v3.jpg", "error_index": 1, "note": "dropped term expanding brackets"}

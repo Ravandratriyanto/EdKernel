@@ -1058,6 +1058,58 @@ PAPER_GEN_PROMPT = (
     "Content:\n{content}"
 )
 
+PRACTICE_FROM_ERROR_PROMPT = (
+    "A student made a mistake in their maths working.\n\n"
+    "The line they got wrong: {step}\n"
+    "What went wrong: {explanation}\n\n"
+    "Write {n} multiple-choice questions that give focused practice on exactly "
+    "this kind of mistake, at the same topic and difficulty, so the student "
+    "learns to avoid it.\n\n"
+    "Use this EXACT format — no deviations:\n\n"
+    "Q1. Question text here\n"
+    "A) First option\n"
+    "B) Second option\n"
+    "C) Third option\n"
+    "D) Fourth option\n"
+    "[ANSWER: B]\n\n"
+    "Rules:\n"
+    "- Number questions Q1, Q2, Q3 etc.\n"
+    "- Always exactly 4 options: A B C D\n"
+    "- Always end each question with [ANSWER: X] on its own line\n"
+    "- One correct answer, three plausible distractors\n"
+    "- Every question must test the mathematical skill the student got wrong.\n"
+    "- Blank line between questions.\n"
+)
+
+
+@app.route("/api/practice_from_error", methods=["POST"])
+def api_practice_from_error():
+    """Generate targeted practice MCQs from a step error the vision checker found."""
+    err = _check_llm_rate()
+    if err: return err
+    data        = request.json or {}
+    step        = (data.get("step") or "").strip()
+    explanation = (data.get("explanation") or "").strip()
+    n           = int(data.get("n_questions", 3))
+    provider    = data.get("provider", "ollama")
+    model       = data.get("model", "gemma4")
+    host        = data.get("host", "http://localhost:11434")
+    api_key     = _key(data, "api_key", "API_KEY")
+    if not explanation:
+        return jsonify({"error": "no error to practise"}), 400
+    prompt = PRACTICE_FROM_ERROR_PROMPT.format(
+        n=n, step=step or "(their working)", explanation=explanation)
+    try:
+        raw = generate(prompt, model=model, host=host,
+                       provider=provider, api_key=api_key)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    questions = _parse_questions(str(raw))
+    if not questions:
+        return jsonify({"error": "could not generate practice questions"}), 502
+    return jsonify({"questions": _format_questions(questions)})
+
+
 def _allowed_paper_host(url: str) -> bool:
     """True only for the revision sites in PAPER_DOMAINS.
 

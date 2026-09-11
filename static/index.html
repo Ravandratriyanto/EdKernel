@@ -2001,7 +2001,7 @@
   }
 
   function appendWorkingResult(attach, data) {
-    const { steps, boxes, image_size, error_index, explanation } = data;
+    const { steps, boxes, image_size, error_index, explanation, annotated } = data;
     if (!steps || steps.length === 0) return;
 
     const area = document.getElementById('chat-area');
@@ -2015,8 +2015,16 @@
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
-    // Annotated canvas goes first, inside the bubble
-    if (boxes && boxes.length && image_size && attach.previewUrl) {
+    // Annotated image from the backend (boxes drawn on the preprocessed page,
+    // so they line up even after a perspective warp or deskew). Goes first.
+    if (annotated) {
+      const img = document.createElement('img');
+      img.src = 'data:image/jpeg;base64,' + annotated;
+      img.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin-bottom:10px';
+      bubble.insertBefore(img, bubble.firstChild);
+    } else if (boxes && boxes.length && image_size && attach.previewUrl) {
+      // Fallback: draw the overlay client-side on the original photo. Only
+      // accurate when preprocess did no warp/rotation.
       const imgEl = new Image();
       imgEl.onload = () => {
         const cvs = document.createElement('canvas');
@@ -2036,7 +2044,6 @@
           ctx.strokeStyle = colour;
           ctx.lineWidth   = lw;
           ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
-          // Line number badge in the top-left corner of each box
           ctx.fillStyle = colour;
           ctx.fillText(String(i + 1), x * sx + lw + 2, y * sy + lw + 2);
         });
@@ -2065,10 +2072,45 @@
     }
     bubble.insertAdjacentHTML('beforeend', html);
 
+    // Error-triggered practice: offer targeted questions on the mistake
+    if (error_index !== null && explanation) {
+      const btn = document.createElement('button');
+      btn.className = 'send-btn';
+      btn.textContent = 'Practice this mistake';
+      btn.style.cssText = 'margin-top:10px';
+      btn.onclick = () => {
+        btn.disabled = true;
+        btn.textContent = 'Making practice questions…';
+        practiseError(steps[error_index], explanation);
+      };
+      bubble.appendChild(btn);
+    }
+
     row.appendChild(av);
     row.appendChild(bubble);
     area.appendChild(row);
     area.scrollTop = 9e9;
+  }
+
+  async function practiseError(step, explanation) {
+    try {
+      const res = await fetch('/api/practice_from_error', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step, explanation, n_questions: 3, ...basePayload() }),
+      });
+      const data = await res.json();
+      if (data.error) { appendBubble('tutor', 'Could not make practice questions: ' + data.error); return; }
+      const qs = parsePaperQuestions(data.questions || '');
+      if (!qs.length) { appendBubble('tutor', 'Could not make practice questions.'); return; }
+      appendBubble('tutor', 'Here are some questions to practise that exact mistake:');
+      paperMode = true;
+      paperQuestions = qs;
+      paperIndex = 0;
+      wrongStreak = 0;
+      showPaperQuestion();
+    } catch (e) {
+      appendBubble('tutor', 'Could not make practice questions: ' + e.message);
+    }
   }
   
 
