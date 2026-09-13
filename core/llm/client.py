@@ -44,34 +44,37 @@ def _ollama_usage(r) -> dict:
 
 
 def generate(prompt: str, model: str = "gemma4", host: str = "http://localhost:11434",
-             provider: str = "ollama", api_key: str = "") -> LLMText:
+             provider: str = "ollama", api_key: str = "", temperature: float = 0.0) -> LLMText:
     if provider == "groq":
-        return _groq_chat([{"role": "user", "content": prompt}], model, api_key)
+        return _groq_chat([{"role": "user", "content": prompt}], model, api_key, temperature)
     if provider == "bedrock":
         return _bedrock_chat([{"role": "user", "content": prompt}], model,
-                             region=host if not host.startswith("http") else "us-east-1")
+                             region=host if not host.startswith("http") else "us-east-1",
+                             temperature=temperature)
     client = OllamaClient(host=host)
-    r = client.generate(model=model, prompt=prompt)
+    r = client.generate(model=model, prompt=prompt, options={"temperature": temperature})
     return LLMText(r.response, _ollama_usage(r))
 
 
 def chat(messages: list[dict], model: str = "gemma4", host: str = "http://localhost:11434",
-         provider: str = "ollama", api_key: str = "") -> LLMText:
+         provider: str = "ollama", api_key: str = "", temperature: float = 0.0) -> LLMText:
     if provider == "groq":
-        return _groq_chat(messages, model, api_key)
+        return _groq_chat(messages, model, api_key, temperature)
     if provider == "bedrock":
         return _bedrock_chat(messages, model,
-                             region=host if not host.startswith("http") else "us-east-1")
+                             region=host if not host.startswith("http") else "us-east-1",
+                             temperature=temperature)
     client = OllamaClient(host=host)
-    r = client.chat(model=model, messages=messages)
+    r = client.chat(model=model, messages=messages, options={"temperature": temperature})
     return LLMText(r.message.content, _ollama_usage(r))
 
 
-def _groq_chat(messages: list[dict], model: str, api_key: str) -> LLMText:
+def _groq_chat(messages: list[dict], model: str, api_key: str,
+               temperature: float = 0.0) -> LLMText:
     from groq import Groq
     clean = [{"role": m["role"], "content": m["content"]} for m in messages]
     client = Groq(api_key=api_key)
-    r = client.chat.completions.create(model=model, messages=clean)
+    r = client.chat.completions.create(model=model, messages=clean, temperature=temperature)
     u = getattr(r, "usage", None)
     return LLMText(r.choices[0].message.content,
                    {"prompt": getattr(u, "prompt_tokens", 0) or 0,
@@ -79,7 +82,7 @@ def _groq_chat(messages: list[dict], model: str, api_key: str) -> LLMText:
 
 
 def _bedrock_chat(messages: list[dict], model: str,
-                  region: str = "us-east-1") -> LLMText:
+                  region: str = "us-east-1", temperature: float = 0.0) -> LLMText:
     """Call Amazon Bedrock via the Converse API.
 
     Credentials come from the environment (AWS_ACCESS_KEY_ID /
@@ -110,7 +113,8 @@ def _bedrock_chat(messages: list[dict], model: str,
                 "content": [{"text": text or " "}],  # Bedrock rejects empty strings
             })
 
-    kwargs: dict = {"modelId": model, "messages": turn_messages}
+    kwargs: dict = {"modelId": model, "messages": turn_messages,
+                    "inferenceConfig": {"temperature": temperature}}
     if system_blocks:
         kwargs["system"] = system_blocks
 

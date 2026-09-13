@@ -7,7 +7,8 @@ MIN_BOX_W = 30
 MAX_HEIGHT_MULT = 3.0
 EDGE_MARGIN = 4
 ROW_OVERLAP = 0.5
-
+MIN_INK_FRAC = 0.12   # noise/shadow streaks top out ~0.07; real text lines are 0.25+
+MIN_ASPECT = 1.5
 def _smear(ink, kw):
     
     sm = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((1, kw), np.uint8))
@@ -44,8 +45,13 @@ def segment(binary, kernel_frac=KERNEL_FRAC):
     contours, _ = cv2.findContours(_smear(ink, kw), cv2.RETR_EXTERNAL,
                                    cv2.CHAIN_APPROX_SIMPLE)
     boxes = [cv2.boundingRect(c) for c in contours]
-
-    # Filter out page/gutter edges
+    kept = []
+    for (x, y, w, h) in boxes:
+        patch = ink[y:y + h, x:x + w]
+        density = float(np.count_nonzero(patch)) / float(w * h)
+        if density >= MIN_INK_FRAC and (w / h) >= MIN_ASPECT:
+            kept.append((x, y, w, h))
+    boxes = kept
     boxes = [(x, y, w, h) for (x, y, w, h) in boxes
              if x > EDGE_MARGIN and y > EDGE_MARGIN
              and x + w < W - EDGE_MARGIN and y + h < H - EDGE_MARGIN]
