@@ -106,6 +106,10 @@ def _groq_vision(prompt: str, b64: str, name: str, vision_model: str, api_key: s
         # Groq free tier caps output at 1000 tokens/min; a line of working needs
         # far less. Also keeps a single call under the per-minute limit.
         max_tokens=512,
+        # Pin temperature so transcription is reproducible — otherwise the same
+        # image reads cleanly one run and fragmented the next, and a noisy read
+        # poisons the downstream step check.
+        temperature=0,
         messages=[{
             "role": "user",
             "content": [

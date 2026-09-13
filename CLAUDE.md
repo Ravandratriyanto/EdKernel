@@ -202,6 +202,20 @@ Report what actually happened, including failures. Do not round a partial result
 
 ## Things that keep biting
 
+- **Don't tune vision thresholds on synthetic images.** `MIN_INK_FRAC` in
+  `segment.py` was set to 0.12 from a `cv2.putText` synthetic test (text density
+  0.25+), which then dropped **real** handwriting — real pen strokes are only
+  ~0.08-0.11 density. It's now 0.05. A single density threshold can't separate
+  synthetic noise (0.07) from real handwriting (0.09); keep it low so real
+  working lines are never dropped. Always validate vision changes on a real
+  photo, not just `putText`.
+- **Pin `temperature=0` on the vision call too.** `_groq_vision` was
+  non-deterministic — the same image read cleanly one run and fragmented the
+  next, poisoning the step check. All LLM calls (chat AND vision) now pin temp 0.
+- Real cluttered/angled photos: `find_page` returns None (no clean page quad),
+  so `preprocess` only deskews and keyboard/desk clutter stays in frame. The
+  step-checker is sound on flat single-problem shots; robustness on real messy
+  pages needs page isolation + problem grouping (not yet built).
 - The answer key must never reach the browser before an attempt is submitted.
   Quiz questions go out through `_public_questions()`, which strips `answer` and
   `working`; correctness is decided in `/api/quiz/submit` by comparing against

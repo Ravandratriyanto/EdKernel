@@ -7,7 +7,10 @@ MIN_BOX_W = 30
 MAX_HEIGHT_MULT = 3.0
 EDGE_MARGIN = 4
 ROW_OVERLAP = 0.5
-MIN_INK_FRAC = 0.12   # noise/shadow streaks top out ~0.07; real text lines are 0.25+
+MIN_INK_FRAC = 0.05   # real pen handwriting is ~0.08-0.11; sparse shadow speckle
+                      # is ~0.02-0.03. Keep this BELOW real handwriting — dropping a
+                      # real working line is worse than letting some noise through.
+                      # (0.12 was over-tuned to synthetic putText text at 0.25+.)
 MIN_ASPECT = 1.5
 def _smear(ink, kw):
     

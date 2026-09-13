@@ -4058,3 +4058,90 @@ The laptop's duplicate quiz + security work was dropped in favour of this
 branch's more complete versions (server-side keys, records right AND wrong).
 Verified after re-apply: `/api/practice_from_error` registers, no undefined
 names, JS parses.
+
+## Session 28 — 2026-09-13
+
+Eval-integrity pass, vision robustness, and a real product gap named.
+
+### Shipped
+- **Temperature pinned** (`core/llm/client.py`): threaded `temperature` (default
+  0.0) through generate/chat and all three providers. Verified deterministic
+  (same "random" prompt → identical output twice). Eval numbers are now
+  reproducible.
+- **Hint-ladder number settled**: ran `evals/learn` deterministically on groq
+  `openai/gpt-oss-120b` → real score is **3/5**. The old CLAUDE.md "10/10" was
+  wrong; the proposal's "1/5" is stale. Two failures leak the answer before the
+  final rung (photosynthesis → "chloroplast" at rung 2; percentage → "25%").
+  CLAUDE.md corrected.
+- **Segmentation noise filter** (`core/vision/segment.py`): ink-density
+  (`MIN_INK_FRAC`) + aspect plausibility filter drops shadow/logo/doodle boxes.
+  **Calibration gotcha:** first set to 0.12 from a *synthetic* `putText` test
+  (text density 0.25+), which then dropped **real** handwriting — real pen
+  strokes are only ~0.08-0.11 density. Corrected to **0.05** (above sparse
+  shadow speckle ~0.02-0.03, below real handwriting). Lesson: a single density
+  threshold can't cleanly separate on both synthetic and real; keep it low so a
+  real working line is never dropped, and let page-isolation/grouping handle the
+  denser clutter (keyboard, edges).
+- **Vision transcription pinned** (`core/vision/image_handler._groq_vision`):
+  added `temperature=0`. It was non-deterministic — the same image read cleanly
+  one run and fragmented the next, and a fragmented read poisoned the step
+  check. Now reproducible.
+- Also this session (earlier commits): vision `reasoning_effort="none"` +
+  `max_tokens=512` (qwen was 1 token over the free-tier cap and reasons out the
+  whole budget), retry/backoff on transient Groq 429/503, quiz upload rewired to
+  `check_working` with a provider selector, and the `report.md` Sustainability &
+  Scalability section (~3–5× less energy/water, zero owned GPU fleet).
+
+### Next feature: problem segmentation (multi-problem pages)
+
+The pipeline currently treats a whole photo as ONE chain of working. But real
+students submit exactly what you'd expect — a full page with 4–5 problems, a
+doodle in the corner, shot at an angle. On such a page the step-checker chains
+across problem boundaries ("does Q2 line 1 follow from Q1's last line?") and
+produces nonsense. Requiring one-cropped-problem-per-photo offloads the hard
+part onto the student — not real-world impact.
+
+The fix is a step the pipeline doesn't have yet: **group line-boxes into
+problems before checking.**
+1. After `segment()`, cluster the line boxes into problem groups — the `1) 2) 3)`
+   markers are a strong signal, as are large vertical gaps between clusters.
+2. Run `check_working` **per group**, independently.
+3. Return per-problem results ("Q3, line 2 is wrong").
+
+This directly serves the real-world-impact score (20%) and is honest OpenCV
+depth (grouping by gap/marker). Sequencing: measure the step-checker's core
+accuracy on clean single-problem crops first (get the number), THEN build
+grouping so it survives a real page. Not either/or.
+
+### Vision eval data — partially collected
+
+Wrote `evals/vision_samples_worksheet.md` — 16 problems (6 correct, 10 with a
+known error) to copy onto paper, one problem per photo. Student wrote Q1–9 but
+put 4–5 per page across two photos (saved in
+`evals/vision_samples/raw_papers/paper1.jpg`, `paper2.jpg`), and some have
+repeated/crossed-out lines. So they need re-shooting one-per-photo (or cropping)
+before the eval gives a clean `error_index`. No accuracy number yet.
+
+### Known issues / open
+
+- **Vision eval still has no number** — needs single-problem photos + a
+  segmentation-preview pass to label `error_index` correctly.
+- **Real-photo robustness** (from testing paper1): on a cluttered, angled phone
+  photo (keyboard in frame, no clean page border) `find_page` returns None, so
+  it only deskews and the clutter stays in frame. Works well on a flat,
+  single-problem shot; struggles on a real messy page. Needs better page
+  isolation + problem grouping (logged above). The pipeline is sound on good
+  input, not yet robust on real input.
+- **Transcription quality** — even on clean input, qwen sometimes fragments a
+  line (e.g. `x = 2` → `$x=2$ $x$ $=$ $2$`). Now deterministic (temp pinned) but
+  still noisy; the fix is a fine-tuned handwriting-math vision model, not tokens.
+- Hint-ladder answer-leak (3/5) — now measurable; prompt fix not done.
+- Demo video still zero.
+- Deploy latest to ECS (live URL behind local).
+
+### Next (post-exam lock-in, ~Oct 10)
+1. Demo video (biggest zero; budget 1–2 days)
+2. Vision eval: re-shoot single-problem photos → run for the real number
+3. Problem-segmentation feature (above)
+4. Hint-ladder answer-leak fix
+5. Deploy latest + README polish

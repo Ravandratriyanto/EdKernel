@@ -1,10 +1,3 @@
-"""Text extraction for past-paper PDFs.
-
-pypdf's extract_text() throws away superscripts, so x² comes out as "x2" — a
-different equation, and the tutor cannot tell. This recovers them from glyph
-positions and cleans up the rest of the exam-paper noise.
-"""
-
 import collections
 import re
 
