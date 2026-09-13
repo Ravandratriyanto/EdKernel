@@ -99,6 +99,13 @@ def _groq_vision(prompt: str, b64: str, name: str, vision_model: str, api_key: s
     client = Groq(api_key=api_key)
     response = client.chat.completions.create(
         model=vision_model,
+        # The only vision models on Groq are qwen *reasoning* models. Left on,
+        # they burn the whole token budget thinking and return nothing on a
+        # dense photo. "none" disables reasoning so the tokens go to the answer.
+        reasoning_effort="none",
+        # Groq free tier caps output at 1000 tokens/min; a line of working needs
+        # far less. Also keeps a single call under the per-minute limit.
+        max_tokens=512,
         messages=[{
             "role": "user",
             "content": [

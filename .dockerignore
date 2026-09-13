@@ -19,3 +19,8 @@ curricula/*/papers/
 Pictures/
 *.docx
 .env
+
+# Dev feature flags — must NEVER ship. Holds auth_required:false in dev, which
+# disables auth for the whole deployment. Prod falls back to settings.py
+# DEFAULTS (auth_required: True).
+settings.json

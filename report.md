@@ -190,7 +190,72 @@ Benchmark script: `bench/graviton_standalone.py` — no EdKernel imports, runs o
 
 ---
 
-## 6. What is still missing (honest)
+## 6. Sustainability & Scalability
+
+EdKernel is efficient by design, not by accident. Two architectural choices —
+running small models and doing the vision work in OpenCV on CPU — mean it uses a
+fraction of the energy, water, and hardware of a frontier-model approach.
+
+**Note on method.** Providers do not publish per-query energy or water, and
+water use depends on each datacentre's cooling and location. The figures below
+are order-of-magnitude estimates from published per-query ranges, stated with
+their assumptions. They are meant as a relative comparison, not precise claims.
+
+### Why the design saves
+
+1. **Small models.** Inference runs on `openai/gpt-oss-20b/120b` and
+   `qwen-27b`, not a frontier model with hundreds of billions of active
+   parameters. Fewer FLOPs per token is the largest single lever.
+2. **OpenCV offloads the vision work to CPU.** Rectify, deskew, binarise and
+   segment run locally in milliseconds for negligible energy. A pure-LLM
+   approach would feed the whole image to a large multimodal model and make it
+   do everything on datacentre GPUs.
+3. **Efficient inference hardware.** Groq's LPU is more energy-efficient per
+   token than general-purpose GPUs.
+
+Honest counterweight: the step checker makes *many small calls* (one
+transcription per line, one check per transition). The savings come from
+smaller models and the OpenCV offload — not from making fewer calls.
+
+### Estimated per-task footprint (checking one photo of working)
+
+| | Frontier multimodal (e.g. ChatGPT) | EdKernel (OpenCV + small Groq calls) |
+|---|---|---|
+| Electricity | ~1–5 Wh | ~0.2–1 Wh |
+| Water (cooling + generation) | ~5–30 mL | ~1–6 mL |
+
+→ roughly **3–5× less energy and water per task**.
+
+Illustratively, a school of 500 students at 10 checks/day over a 180-day year
+(~900,000 interactions) saving ~2.5 Wh and ~17 mL each is about **2,250 kWh**
+(2–3 months of an average home's electricity) and **~15,000 L** of water saved
+per year.
+
+### Scalability — no owned AI hardware
+
+The work splits across two tiers: EdKernel's own servers run the Flask app,
+OpenCV pipeline and RAG retrieval; all LLM inference is offloaded to the
+provider's API. EdKernel provisions **zero GPU/inference machines**.
+
+For **1,000 students** (peak concurrency ~5–15%, so ~50–150 active at once),
+most requests are I/O-bound — the app mostly waits on the inference API, with
+short CPU bursts only during OpenCV preprocessing (~0.05–0.3 s per image, per
+the COOL benchmark). Sizing:
+
+- **~2–4 small CPU app servers** (ECS Fargate, 1 vCPU / 2 GB) behind the ALB
+- **1 small RDS PostgreSQL** instance (replacing SQLite)
+- RAG (951 chunks) fits in RAM — no dedicated store
+- **0 GPU servers**
+
+At that scale the binding constraint is not machine count but the inference
+provider's **tokens-per-minute quota and cost**, which scale linearly with
+usage. The takeaway: *1,000 students run on a handful of small CPU servers and
+no owned AI hardware, because the heavy vision work is OpenCV on CPU and
+inference is offloaded per call.*
+
+---
+
+## 7. What is still missing (honest)
 
 - `HoughLinesP` → contour-based deskew replacement (planned, not built)
 - OpenCV 5 on Graviton for a fair COOL comparison (blocked on instance setup)

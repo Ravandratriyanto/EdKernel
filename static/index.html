@@ -179,6 +179,16 @@
       background: #fef2f2; border-left: 3px solid #dc2626;
       color: #7f1d1d; font-size: 0.85rem;
     }
+    .agent-trace {
+      margin-top: 10px; padding: 8px 10px; border-radius: 6px;
+      background: #f5f3ff; border: 1px solid #ddd6fe; font-size: 0.82rem;
+    }
+    .agent-trace summary {
+      cursor: pointer; color: #6d28d9; font-weight: 600;
+      font-family: sans-serif; list-style: revert;
+    }
+    .agent-trace ol { margin: 8px 0 2px; padding-left: 1.3em; color: #4c1d95; }
+    .agent-trace li { margin: 3px 0; line-height: 1.4; }
 
     .bubble p { margin-bottom: 0.5em; }
     .bubble p:last-child { margin-bottom: 0; }
@@ -1294,7 +1304,16 @@
     <div class="qb-pane qb-left">
       <div id="quiz-question-box">Loading question…</div>
       <div class="qb-upload-hint">— or upload a photo of your answer —</div>
-      <button class="qb-upload-btn" onclick="document.getElementById('quiz-file-input').click()">Upload a photo</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="qb-upload-btn" onclick="document.getElementById('quiz-file-input').click()">Upload a photo</button>
+        <label style="font-size:0.78rem;color:#6b7280">Model:</label>
+        <select id="quiz-provider" onchange="setProvider(this.value)"
+                style="font-size:0.82rem;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px">
+          <option value="ollama">Ollama (local)</option>
+          <option value="groq">Groq</option>
+          <option value="bedrock">Bedrock</option>
+        </select>
+      </div>
       <input type="file" id="quiz-file-input" accept=".png,.jpg,.jpeg,.webp" class="hidden" onchange="handleQuizImage(event)">
       <img id="quiz-upload-preview" alt="Your answer">
     </div>
@@ -2001,7 +2020,7 @@
   }
 
   function appendWorkingResult(attach, data) {
-    const { steps, boxes, image_size, error_index, explanation, annotated } = data;
+    const { steps, boxes, image_size, error_index, explanation, annotated, trace } = data;
     if (!steps || steps.length === 0) return;
 
     const area = document.getElementById('chat-area');
@@ -2069,6 +2088,16 @@
       html += `<p style="color:#16a34a;font-weight:600;margin-top:8px">✓ No errors found</p>`;
     } else if (explanation) {
       html += `<div class="step-explanation">${explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+    }
+
+    // Agent trace: the perceive → decide → act chain, so the reasoning is visible
+    if (trace && trace.length) {
+      const rows = trace.map(t =>
+        `<li>${t.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('');
+      html += `<details class="agent-trace">`
+           +  `<summary>Agent trace (${trace.length} steps)</summary>`
+           +  `<ol>${rows}</ol>`
+           +  `</details>`;
     }
     bubble.insertAdjacentHTML('beforeend', html);
 
@@ -2964,6 +2993,7 @@
     document.getElementById('quiz-feedback').style.display = 'none';
     document.getElementById('quiz-upload-preview').style.display = 'none';
     document.getElementById('quiz-timer').textContent = '00:00';
+    document.getElementById('quiz-provider').value = provider;   // reflect current provider
 
     startQuizWatch();
 
@@ -3208,23 +3238,42 @@
     preview.style.display = 'block';
     const fb = document.getElementById('quiz-feedback');
     fb.style.display = 'block';
-    fb.textContent = 'Reading your answer…';
+    fb.textContent = 'Checking your working…';
     try {
       const fd = new FormData();
       fd.append('file', file);
       const up = await fetch('/api/upload', { method: 'POST', body: fd });
       const upData = await up.json();
       if (upData.error) { fb.textContent = upData.error; return; }
-      const res = await fetch('/api/detect_question', {
+
+      const res = await fetch('/api/check_working', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ b64: upData.b64, ...basePayload() }),
       });
       const data = await res.json();
-      fb.innerHTML = (data.found && data.question)
-        ? '<strong>Detected:</strong> ' + data.question
-        : 'Could not read the image clearly. Try a clearer, well-lit photo.';
+      if (data.error) { fb.textContent = 'Could not check the working: ' + data.error; return; }
+      if (!data.steps || !data.steps.length) {
+        fb.textContent = 'No working detected. Try a clearer, well-lit photo.';
+        return;
+      }
+
+      let html = '';
+      if (data.annotated) {
+        html += `<img src="data:image/jpeg;base64,${data.annotated}" `
+             +  `style="max-width:100%;border-radius:8px;display:block;margin-bottom:10px">`;
+      }
+      if (data.error_index === null) {
+        html += `<div style="color:#16a34a;font-weight:600">✓ Every step follows — looks correct.</div>`;
+      } else {
+        html += `<div style="color:#dc2626;font-weight:600">Line ${data.error_index + 1} looks wrong.</div>`;
+        if (data.explanation) {
+          html += `<div style="margin-top:4px">`
+               +  `${data.explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+        }
+      }
+      fb.innerHTML = html;
     } catch (err) {
-      fb.textContent = 'Error reading image: ' + err.message;
+      fb.textContent = 'Error checking working: ' + err.message;
     }
   }
   function backToCanvas() {

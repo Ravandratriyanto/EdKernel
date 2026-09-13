@@ -1,15 +1,3 @@
-"""Score check mode against questions with known answers.
-
-    python -m evals.run                          everything
-    python -m evals.run --only regress           no model calls, no cost
-    python -m evals.run --provider ollama --model gemma4
-    python -m evals.run --case q12 --repeat 30   diagnose one flaky case
-
-The point is one number you can compare across prompt changes. Two regressions
-shipped in this project because a change was checked structurally and never
-against real model output.
-"""
-
 import argparse
 import json
 import os

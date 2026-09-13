@@ -1,9 +1,3 @@
-"""Stateless REST API — /v1/
-
-Auth: Authorization: Bearer <token>
-Every route returns JSON. No cookies, no sessions, no HTML.
-"""
-
 import functools
 import os
 import tempfile
@@ -18,16 +12,6 @@ import core.questions
 import core.vision.step_checker
 
 v1 = Blueprint("v1", __name__, url_prefix="/v1")
-
-# A leaked key used to have no ceiling at all: every /v1/ route below calls
-# into core/, and most of those call an LLM, so an unthrottled key is
-# unbounded spend on our account. Separate instance from app.py's
-# _llm_limiter — importing that would be a circular import, and a browser
-# session and an API key are separate budgets anyway.
-#
-# In memory and per process, so with N gunicorn workers the real ceiling is
-# N x max_calls. That is a throttle, not a quota; a shared store is what
-# metering would need.
 _v1_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
 
 
