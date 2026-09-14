@@ -4122,10 +4122,40 @@ put 4–5 per page across two photos (saved in
 repeated/crossed-out lines. So they need re-shooting one-per-photo (or cropping)
 before the eval gives a clean `error_index`. No accuracy number yet.
 
+### Vision eval — FIRST REAL NUMBER (9 hand-labelled photos)
+
+Ran `evals/vision.py` on 9 real photos (student wrote worksheet Q1-9, labelled
+with ground-truth `lines` + `error_index`). The harness now scores
+transcription separately from the verdict — the key design choice, because a
+wrong `error_index` from a garbled read is a vision problem and from a faithful
+read is a reasoning problem.
+
+```
+step checker      4/9  (44%)
+  error located   2/3
+  clean pass      2/6      (4 false positives on correct work)
+transcription     22/30 lines (73%)
+  clean reads     3/9
+  verdict | clean 2/3      (step check given a faithful read)
+```
+
+**Headline: transcription is the bottleneck, not the reasoning.** When the read
+is faithful the logic is mostly right (2/3); the 44% is dragged down by qwen
+misreading pen strokes. Worst failure — **v8: student's deliberate `x=4` was
+read as `x=-4`, silently correcting the error.** An error-checker that reads
+mistakes as if correct defeats its own purpose. Other misreads: `4x=20`→
+`67.4→-20`, `5x-3=12`→`5x-3=17`, `2x=19-7`→`2x=10j-7`.
+
+Improvement levers (priority): (1) transcribe from the grayscale crop, not the
+harsh binarised one; (2) strict "transcribe verbatim, do not correct/solve"
+prompt to kill the v8 auto-correction; (3) fine-tuned handwriting-math vision
+model on collected real working (long-term). Reasoning layer is sound; the read
+needs the work. Numbers written into `report.md` §4.
+
 ### Known issues / open
 
-- **Vision eval still has no number** — needs single-problem photos + a
-  segmentation-preview pass to label `error_index` correctly.
+- **Vision accuracy is transcription-bound (44%)** — see above; the fix is the
+  read, not the logic.
 - **Real-photo robustness** (from testing paper1): on a cluttered, angled phone
   photo (keyboard in frame, no clean page border) `find_page` returns None, so
   it only deskews and the clutter stays in frame. Works well on a flat,
@@ -4347,3 +4377,45 @@ rented half.
 5. Problem segmentation for multi-problem pages (session 28's plan) — the
    cropping done here is the manual version of it
 6. Demo video (still zero)
+
+### Kernel repositioning — from the laptop (same day, parallel)
+
+While the desktop chased the vision number, the laptop did a strategic pass:
+the realisation that "OpenCV reads handwritten maths" is **table stakes** —
+frontier multimodal models do it, better than our 44%/81%. Competing on that is
+a losing race. The differentiator has to be the **education-specific
+orchestration**, exposed as a composable kernel.
+
+**Research → report.** Grounded the Problem/Impact section (`report.md` §1) in
+real needs across three systems, with sources: US math proficiency (28% of 8th
+graders) + 400k under-staffed classrooms; **Cambridge/IGCSE method marks** —
+students lose marks on *process* (skipped/disconnected steps), which the step
+checker maps to 1:1 (the sharpest wedge); Indonesia PISA 364 vs OECD 463 +
+teacher-capacity gaps, where "kernel not app" enables a local-language front end
+over `/v1/` grounded in Kurikulum Merdeka.
+
+**Kernel made concrete.**
+- New lead diagram in `flowcharts.html`: swappable UIs → `/v1/` API ("syscalls")
+  → `core/` engine → data. The web UI is one reference client, not the product.
+- **Dev sheet** `docs/KERNEL_API.md` — the public `/v1/` contract (every endpoint
+  with real request/response shapes, auth, rate limits, curl, "build your own
+  front end"). A third-party dev can build a UI without reading the code.
+- Cleaned `/v1/`: renamed `/v1/check-working` → `/v1/check/working` (no clients
+  yet) for consistency with `/tutor/start` etc.; swept all refs.
+- `readme.md` gains a "For developers" section linking the dev sheet; corrected
+  stale scores (hint ladder 2/5 → **3/5**, "temperature not pinned" → pinned).
+
+**Method-marks feedback (flagship wedge).** Reframed `CHECK_PROMPT` in
+`step_checker.py` to a Cambridge examiner voice: it now judges "does this line
+earn/keep a method mark?" and the NO explanation names the lost mark and the
+correct step. YES/NO mechanism and `error_index` parsing untouched. Also a
+transcribe-prompt v2 in `image_handler.py` (verbatim, "do NOT correct errors,
+write once, no fragments") — which fixed the v8 silent-correction bug (`x=4`
+was being read as `x=-4`). Note this is a band-aid over what the desktop fixed
+properly in `segment()` (clipped crops); both land in the same tree.
+
+**Vision numbers are now in flux.** The laptop's runs (44% → 81% transcription
+via prompt) and the desktop's (2/9 → segment fixes) measured different code
+states. After both land — desktop's `segment()` crop fix + laptop's transcribe
+v2 + method-marks prompt — **neither number is current**; a clean re-run on the
+merged tree is needed. Blocked today by Groq's daily token limit (200k TPD).

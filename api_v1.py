@@ -142,7 +142,7 @@ def questions_extract():
 
 # ── handwritten step checker ─────────────────────────────────────────────────
 
-@v1.post("/check-working")
+@v1.post("/check/working")
 @require_auth
 def check_working():
     """Upload an image of handwritten working; get back per-step transcription

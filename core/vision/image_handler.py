@@ -20,11 +20,15 @@ DETECT_PROMPT = (
 )
 
 TRANSCRIBE_PROMPT = (
-    "Transcribe the question in this image as plain text. "
-    "Include every number, symbol, equation, and label exactly as written — "
-    "use LaTeX notation for any mathematics. "
-    "If the image contains a diagram or graph, describe it in one sentence after the question text. "
-    "Output only the transcription, with no preamble and no attempt to answer."
+    "Transcribe the handwritten mathematics in this image as a single line of "
+    "plain text, using LaTeX for any mathematics. "
+    "This is a student's working and it may contain mistakes. "
+    "Copy it verbatim: do NOT correct errors, do NOT solve, simplify, or 'fix' "
+    "anything. If a step is wrong, transcribe the wrong version exactly as it "
+    "is written. "
+    "Write the expression exactly once — do NOT repeat it, and do NOT break it "
+    "into separate fragments or pieces. "
+    "Output only the transcription — no preamble, no explanation, no answer."
 )
 
 _MIME = {

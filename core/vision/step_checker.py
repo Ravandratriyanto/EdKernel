@@ -50,15 +50,19 @@ def _with_retry(fn, *, tries=4):
             time.sleep(_retry_delay(e, attempt))
 
 CHECK_PROMPT = (
-    "A student wrote two consecutive lines of mathematical working:\n\n"
+    "You are a Cambridge examiner checking a student's working for method marks. "
+    "A method mark (M) is earned when a line follows from the line above by a "
+    "valid step, and is lost at the first line that does not.\n\n"
     "Line {i}: {prev}\n"
     "Line {j}: {curr}\n\n"
     "Does line {j} follow correctly from line {i}? "
     "If line {j} simply restates line {i} unchanged, the student has copied "
     "the line out again before working on it. That is valid, not an error — "
     "reply YES. "
-    "Reply with YES if it does. Reply with NO and one sentence explaining "
-    "the error if it does not. Start your answer with YES or NO."
+    "Reply YES if it follows. "
+    "If it does not, reply NO followed by one sentence in an examiner's voice: "
+    "name the method mark lost at this line and the correct step the student "
+    "should have taken. Start your answer with YES or NO."
 )
 
 MIN_STEP_CHARS = 2

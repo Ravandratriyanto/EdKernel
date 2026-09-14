@@ -14,6 +14,18 @@ That is the difference between a grade and a teacher. A human tutor looking at a
 
 The impact is access. Per-step feedback on your own handwriting is the part of tutoring that costs money, and it is the part no free tool currently provides.
 
+### The need is measured, not assumed
+
+Three education systems, one shared gap — students are graded on *answers* but learn from *process*, and nobody is checking the process at scale.
+
+- **United States.** Only **28% of 8th graders** and **22% of high-school seniors** are proficient in mathematics — the lowest in over 20 years — and the decline is worst for lower-performing students, widening the equity gap. Meanwhile **400,000+ classrooms** are vacant or staffed by underqualified teachers, and math-teacher graduates fell 36% (2012–2020). The proven intervention — one-to-one per-step feedback — is exactly what is unequally distributed. ([EdSource](https://edsource.org/2025/math-crisis-in-america-california/740849), [Dr. M. Lynch](https://www.drmattlynch.com/this-one-crisis-will-reshape-education-forever-what-you-need-to-know-for-fall-2026/))
+- **Cambridge IGCSE / A-Level.** Examiner reports are consistent: students lose marks **not from lack of knowledge but from process** — skipping intermediate steps and failing to connect their reasoning, which forfeits the **method marks (M)** awarded for a visible, correct chain of working. ([The Brilliant Brains](https://thebrilliantbrains.com/how-do-examiners-mark-a-level-papers/), [Edflik](https://www.edflik.com/blog/inside-cambridge-examiner-reports-what-igcse-a-level-markers-want-to-see-in-written-explanations/)) EdKernel's step checker verifies exactly what earns a method mark: *does each line follow from the one above?* This is the sharpest fit — a documented pain that maps one-to-one to the tool.
+- **Indonesia.** PISA 2022 mathematics: **364 vs the OECD's 463**, among the lowest since 2001, with a named root cause being teachers' own pedagogic and numeracy limitations. The government already runs a national teacher-support platform (Merdeka Mengajar). ([OECD](https://www.oecd.org/en/publications/pisa-2022-results-volume-i-and-ii-country-notes_ed6fbcc5-en/indonesia_c2e1ae0e-en.html)) A foreign app UI will not be adopted here — but a local team can build a Bahasa front end on EdKernel's `/v1/` kernel API, grounded in Kurikulum Merdeka. Integration freedom a monolithic app cannot offer.
+
+### Why this is not "just use ChatGPT"
+
+Reading handwritten maths is no longer a differentiator — frontier multimodal models do it. EdKernel's defensible value is the combination a general chatbot does not ship: **per-step, method-mark-style checking, grounded in a specific exam board or national curriculum, that withholds the answer** (teaches rather than solves), **surfaces misconceptions to teachers**, and is delivered as a **kernel any region builds its own UI on**. A student pasting working into ChatGPT gets the answer handed over — curriculum-blind, and counter-productive for learning.
+
 ---
 
 ## 2. Architecture
@@ -147,14 +159,39 @@ The system retrieves relevant curriculum chunks from ChromaDB, generates a multi
 
 Five-stage pipeline: rectify → binarise → segment → transcribe → evaluate.
 
-**Known failure cases (honest reporting):**
+**Measured accuracy (9 hand-labelled photos, `evals/vision.py`, Groq
+`openai/gpt-oss-120b` + qwen vision, deterministic):**
 
-| Failure mode | Frequency | Cause | Status |
-|---|---|---|---|
-| Merged step boxes | ~15% of uploads | Lines too close together; morphology kernel too narrow | Mitigation: adaptive kernel width based on median line height |
-| Deskew failure | ~10% of uploads | HoughLinesP finds ruled lines not handwriting lines | Fix: replace HoughLinesP with contour-based estimator (in progress) |
-| Blurred frames accepted | Rare | Laplacian threshold too permissive on low-contrast images | Tuning in progress |
-| Correct step flagged as wrong | ~5% of transcriptions | Vision-language model misreads ambiguous handwriting | No mitigation yet; reported honestly |
+| Metric | Score | What it measures |
+|---|---|---|
+| Step checker (overall) | **4/9 (44%)** | Names the exact wrong line (or "no error") |
+| — error located | 2/3 | Found the wrong line on error cases |
+| — clean pass | 2/6 | No false error on correct work |
+| Transcription | **22/30 lines (73%)** | Faithful read of the handwriting |
+| — clean reads | 3/9 | Whole problem read perfectly |
+| Verdict given a faithful read | **2/3** | Step-check logic, isolated from read errors |
+
+**The headline finding: transcription is the bottleneck, not the reasoning.**
+Scoring the read separately from the verdict shows that when the handwriting is
+transcribed faithfully, the step-check logic is mostly right (2/3). The overall
+44% is dragged down by the general vision model (qwen) misreading real pen
+strokes — only 3/9 problems were read cleanly end to end.
+
+**Failure cases (honest reporting):**
+
+| Case | What happened | Cause |
+|---|---|---|
+| v6 | `4x=20` read as `67. 4 → -20` | vision misread — garbled digits |
+| v5 | `5x-3=12` read as `5x-3=17` | vision misread — single digit |
+| v1 | `2x=19-7` read as `2x=10j-7` | vision hallucinated a character |
+| **v8** | student's deliberate `x=4` read as **`x=-4`** | vision **silently corrected the error** — the worst mode: an error-checker that reads mistakes as if they were right defeats its own purpose |
+
+**Path to improvement (in priority order):** (1) transcribe from the grayscale
+crop, not the harsh binarised one — vision models read natural strokes far
+better than adaptive-threshold output; (2) a strict "transcribe verbatim, do
+not correct or solve" prompt to stop the v8 auto-correction; (3) a fine-tuned
+handwriting-math vision model on collected real working — the real long-term
+fix. The reasoning layer is already sound; the read is what needs the work.
 
 ### Teacher dashboard
 

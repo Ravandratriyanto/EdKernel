@@ -22,6 +22,15 @@ core with no dependency on any specific LMS.
 
 ---
 
+## For developers — build your own front end
+
+EdKernel is a **kernel**: the `/v1/` API is the public contract, and the web UI
+in this repo is just one reference client. Build any front end — mobile, an LMS
+plugin, a bot — on the same endpoints. Full contract, with request/response
+shapes and curl examples: **[`docs/KERNEL_API.md`](docs/KERNEL_API.md)**.
+
+---
+
 ## Architecture
 
 ```
@@ -119,7 +128,7 @@ POST /v1/check                           {question, answer, context?} → {feedb
 POST /v1/tutor/start                     {topic, context?, question_bank?} → {reply, correct, messages}
 POST /v1/tutor/reply                     {messages, message, wrong_streak?} → {reply, correct, messages}
 POST /v1/questions/extract               multipart: file (PDF) → {questions, count}
-POST /v1/check-working                   multipart: file (image) → {steps, boxes, error_index, explanation}
+POST /v1/check/working                   multipart: file (image) → {steps, boxes, error_index, explanation}
 GET  /v1/keys                            list your API keys
 POST /v1/keys                            {label} → {token}  — shown once
 DELETE /v1/keys/<id>                     revoke a key
@@ -141,11 +150,14 @@ python -m evals.learn                    # hint ladder — 5 cases, 3 rungs
 **Current scores (Groq `openai/gpt-oss-120b` / `qwen/qwen3.6-27b`):**
 - Check mode: 50/50 — 0 unparsed, 0 errors
 - Regressions: 39/39
-- Hint ladder: 2/5 — rung 2 naming is the open failure
+- Hint ladder: 3/5 — the two failures leak the answer before the final rung
+- Vision step checker: 4/9 exact error line; 81% of lines transcribed
+  faithfully; 3/4 correct given a faithful read (see `evals/vision.py`).
+  Transcription is the bottleneck, not the reasoning.
 
-The score moves ~2 points between identical runs (temperature not pinned).
-Treat anything under 3 points as noise and run twice. One full check-mode
-run costs ~¼ of Groq's free daily token budget.
+Scores are now reproducible — `temperature` is pinned to 0 across all providers
+(chat and vision). One full check-mode run costs ~¼ of Groq's free daily token
+budget, so pace repeated runs.
 
 **`qwen/qwen3.6-27b` is a reasoning model** — it outputs `<think>` blocks.
 Only use it on the vision path (where `drop_reasoning()` is called) or the
@@ -171,8 +183,9 @@ question bank, and triggers re-ingestion without touching the filesystem.
 
 ## Known issues and open work
 
-- **Hint ladder rung 2** — eval scores 2/5. Rung 2 should name the concept
-  explicitly; current prompt is too subtle on some cases.
+- **Hint ladder** — eval scores 3/5. The two failures leak the answer before
+  the final rung (e.g. naming "chloroplast" at rung 2); the prompt needs to
+  hold the answer back harder while still naming the concept.
 - **Phase B token counts on Ollama** — session log token counts have only
   been verified on Groq. Ollama counts are read from `prompt_eval_count` /
   `eval_count` and warned if zero, but never measured end-to-end in a real

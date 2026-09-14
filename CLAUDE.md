@@ -107,6 +107,29 @@ so it is the fallback once 3.6 is spent.
 `qwen3.8` also returns transient **503 "over capacity"** under load, which killed
 3-4 cases per run even with backoff. Retries help; luck helps more.
 
+## Features built (as of session 29)
+
+- **Positioning: kernel, not app.** The differentiator is NOT "reads handwritten
+  maths" (frontier models do that better than our 44%/81%) — it's the
+  education-specific orchestration exposed as a composable kernel. The web UI is
+  one reference client; `/v1/` is the product. Any front end builds on the same
+  API. See `docs/KERNEL_API.md` (the public contract) and the lead diagram in
+  `flowcharts.html`.
+- **Dev sheet** — `docs/KERNEL_API.md` documents every `/v1/` endpoint
+  (request/response, auth, rate limits, curl). Keep it in sync with `api_v1.py`.
+- **`/v1/check-working` renamed to `/v1/check/working`** for path consistency.
+- **Method-marks feedback** — `CHECK_PROMPT` in `step_checker.py` now judges in
+  Cambridge-examiner voice ("does this line earn/keep a method mark?"); the NO
+  explanation names the lost mark. YES/NO mechanism and `error_index` parsing
+  unchanged. Transcribe prompt (`image_handler.py`) is now verbatim +
+  no-fragment, which fixed the v8 silent-correction bug (`x=4` → `x=-4`).
+- **Problem/Impact is now research-grounded** (`report.md` §1) — US / Cambridge
+  method marks / Indonesia PISA, with sources. The Cambridge method-marks wedge
+  is the flagship.
+- **Vision numbers are in flux** — desktop fixed `segment()` clipped crops,
+  laptop added the transcribe/method-marks prompts; neither's measured number is
+  current. Needs a clean re-run on the merged tree (blocked by Groq daily quota).
+
 ## Features built (as of session 27)
 
 - **Server-marked quizzes (`quiz_attempts` table)**: `POST /api/quiz/start`

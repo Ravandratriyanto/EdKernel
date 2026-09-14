@@ -102,10 +102,12 @@
 
 <header>
   <h1>EdKernel — Codebase Flowcharts</h1>
-  <p>One diagram per concern · Updated 2026-09-11 · OpenCV 5 pipeline · server-marked quizzes · progress · AWS Fargate</p>
+  <p>One diagram per concern · Updated 2026-09-14 · kernel architecture (swappable UIs over /v1/) · OpenCV 5 pipeline · server-marked quizzes · progress · AWS Fargate</p>
+  <p>Building a front end? The public kernel API contract is in <code>docs/KERNEL_API.md</code>.</p>
 </header>
 
 <nav>
+  <a href="#kernel">Kernel Architecture</a>
   <a href="#arch">System Architecture</a>
   <a href="#core-pkg">core/ Package</a>
   <a href="#opencv">OpenCV 5 Pipeline</a>
@@ -130,6 +132,77 @@
 </nav>
 
 <main>
+
+<!-- ═══════════════════════ KERNEL ═══════════════════════ -->
+<div class="section color-arch" id="kernel">
+  <div class="section-header">
+    <h2>Kernel Architecture — the engine is the product, the UI is swappable</h2>
+    <span class="badge badge-arch">KERNEL</span>
+  </div>
+  <div class="section-desc">
+    EdKernel is a <strong>kernel, not an app</strong>. The value is the
+    education-specific orchestration — Socratic tutoring that withholds the
+    answer, per-step error localisation, curriculum-grounded questions, progress
+    and misconception tracking — exposed as composable primitives over the
+    <code>/v1/</code> API. Reading handwritten maths is <em>not</em> the moat
+    (frontier models already do that); the pedagogical engine is. Any front end
+    builds on the same API: the shipped web UI is just one reference client, like
+    a Linux distro over the kernel. Swap it for a mobile app, an LMS plugin, a
+    bot — the backend contract is fixed. <code>core/</code> is pure Python with
+    no Flask and no UI; <code>api_v1.py</code> is the only public surface.
+  </div>
+  <div class="chart-area">
+    <div class="mermaid">
+graph TD
+    subgraph CLIENTS["ANY front end — swappable (dev's choice, like a distro)"]
+        WEB["Reference web UI<br/>static/index.html<br/>(one client, for show)"]
+        MOBILE["Mobile app<br/>(3rd-party build)"]
+        LMS["LMS plugin<br/>(3rd-party build)"]
+        BOT["Bot / CLI / portal<br/>(3rd-party build)"]
+    end
+
+    subgraph API["/v1/ — Kernel API · the 'syscalls' · Bearer token + rate limit · api_v1.py"]
+        E1["POST /v1/tutor/start"]
+        E2["POST /v1/tutor/reply<br/>Socratic hint ladder"]
+        E3["POST /v1/check<br/>answer verdict"]
+        E4["POST /v1/check/working<br/>vision → first wrong step"]
+        E5["POST /v1/questions/extract"]
+        E6["/v1/keys<br/>issue / revoke"]
+    end
+
+    subgraph KERNEL["core/ — EdKernel engine (pure Python · no Flask · no UI)"]
+        TUT["tutor.py<br/>Socratic loop"]
+        CHK["check.py<br/>answer check"]
+        VIS["vision/<br/>rectify → segment → step check"]
+        RAG["rag/<br/>curriculum grounding"]
+        LLM["llm/<br/>provider adapters"]
+    end
+
+    subgraph DATA["State & providers"]
+        DB["users.db<br/>progress · misconceptions · keys"]
+        CH["ChromaDB<br/>curriculum RAG"]
+        PROV["Groq · Bedrock · Ollama"]
+    end
+
+    WEB --> API
+    MOBILE --> API
+    LMS --> API
+    BOT --> API
+    E1 --> TUT
+    E2 --> TUT
+    E3 --> CHK
+    E4 --> VIS
+    E5 --> RAG
+    TUT --> RAG
+    TUT --> LLM
+    CHK --> LLM
+    VIS --> LLM
+    RAG --> CH
+    TUT --> DB
+    LLM --> PROV
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════════════ ARCHITECTURE ═══════════════════════ -->
 <div class="section color-arch" id="arch">
@@ -572,7 +645,7 @@ flowchart TD
 
     ROLE --> DEV_R["Dev flags — ADMIN ONLY\nGET /dev (dev.html is still missing)\nGET /api/dev/settings\nPUT /api/dev/settings\nwas open to anyone until session 27"]
 
-    V1_R["api_v1.py Blueprint /v1/\nBearer token auth (separate from cookie)\nGET  /v1/ping\nPOST /v1/check\nPOST /v1/tutor/start\nPOST /v1/tutor/reply\nPOST /v1/questions/extract\nPOST /v1/check-working\nGET  /v1/keys\nPOST /v1/keys\nDELETE /v1/keys/kid"]
+    V1_R["api_v1.py Blueprint /v1/\nBearer token auth (separate from cookie)\nGET  /v1/ping\nPOST /v1/check\nPOST /v1/tutor/start\nPOST /v1/tutor/reply\nPOST /v1/questions/extract\nPOST /v1/check/working\nGET  /v1/keys\nPOST /v1/keys\nDELETE /v1/keys/kid"]
 
     style TUTOR_R   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style STUDENT_R fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
@@ -610,7 +683,7 @@ flowchart TD
 
     AUTH --> QEXT["POST /v1/questions/extract\nmultipart: file (PDF)\n→ core.questions.extract_from_paper()\n→ {questions, count}"]
 
-    AUTH --> CW["POST /v1/check-working\nmultipart: file (image)\nfields: model, provider, vision_model\n→ core.vision.step_checker.check_working()\n→ {steps, boxes, error_index, explanation}"]
+    AUTH --> CW["POST /v1/check/working\nmultipart: file (image)\nfields: model, provider, vision_model\n→ core.vision.step_checker.check_working()\n→ {steps, boxes, error_index, explanation}"]
 
     AUTH --> KGET["GET /v1/keys\n→ list keys (label + date)"]
     AUTH --> KPOST["POST /v1/keys\n{label}\n→ {token} — shown once"]
