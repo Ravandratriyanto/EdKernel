@@ -73,7 +73,8 @@ def _groq_chat(messages: list[dict], model: str, api_key: str,
                temperature: float = 0.0) -> LLMText:
     from groq import Groq
     clean = [{"role": m["role"], "content": m["content"]} for m in messages]
-    client = Groq(api_key=api_key)
+    # Explicit timeout: the SDK default is 600s with two silent retries.
+    client = Groq(api_key=api_key, timeout=60.0, max_retries=0)
     r = client.chat.completions.create(model=model, messages=clean, temperature=temperature)
     u = getattr(r, "usage", None)
     return LLMText(r.choices[0].message.content,

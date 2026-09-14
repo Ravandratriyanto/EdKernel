@@ -96,7 +96,10 @@ def transcribe(b64: str, name: str = "image.png", provider: str = "ollama",
 
 def _groq_vision(prompt: str, b64: str, name: str, vision_model: str, api_key: str) -> str:
     from groq import Groq
-    client = Groq(api_key=api_key)
+    # Without an explicit timeout the SDK waits 600s and retries twice on its
+    # own, so one stuck call can hang a run for half an hour. Fail fast and let
+    # _with_retry in step_checker.py decide whether to try again.
+    client = Groq(api_key=api_key, timeout=60.0, max_retries=0)
     response = client.chat.completions.create(
         model=vision_model,
         # The only vision models on Groq are qwen *reasoning* models. Left on,

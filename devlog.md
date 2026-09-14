@@ -4062,7 +4062,7 @@ names, JS parses.
 ## Session 28 — 2026-09-13
 
 Eval-integrity pass, vision robustness, and a real product gap named.
-
+  
 ### Shipped
 - **Temperature pinned** (`core/llm/client.py`): threaded `temperature` (default
   0.0) through generate/chat and all three providers. Verified deterministic
@@ -4145,3 +4145,205 @@ before the eval gives a clean `error_index`. No accuracy number yet.
 3. Problem-segmentation feature (above)
 4. Hint-ladder answer-leak fix
 5. Deploy latest + README polish
+
+## Session 29 — 2026-09-14
+
+Went in to get a vision number. Got one, and found that the thing the number
+was measuring was broken in four places — none of them where the last two
+sessions assumed. The step checker was being handed clipped, postage-stamp
+crops and blamed for reading them wrong.
+
+### The photos finally became a test set
+
+Session 28 left two multi-problem photos (`raw_papers/paper1.jpg`,
+`paper2.jpg`) and a worksheet answer key, with the note that they needed
+re-shooting one-problem-per-photo. They did not — they needed cropping.
+`v1`–`v9` cut straight out of the two originals, one problem each.
+
+Labels come from **what the student actually wrote**, not from the worksheet.
+That matters: the student repeated a line verbatim in v4, v8 and v9, so the
+worksheet's `error_index = 1` is wrong for those — the repeat pushes the real
+error down to index 2. `vision_cases.jsonl` also now carries a `lines` field
+with the ground-truth text of each line, which is what made the rest of this
+session possible.
+
+### First real number: 2/9
+
+Run on groq `openai/gpt-oss-120b` + `qwen/qwen3.6-27b`:
+
+```
+step checker      2/9  (22%)
+  error located     1/3
+  clean pass        1/6   <- told a correct student they were wrong 5 times in 6
+  PIPELINE ERRORS   3
+```
+
+`clean pass 1/6` is the damning line. For a tutor, a false accusation is worse
+than a missed error.
+
+Of the seven non-passes: **four were transcription, one was step-check
+reasoning, two were infrastructure.** Segmentation — the part that is ours —
+was not implicated in a single failure. That split only became visible because
+the harness was changed to dump the transcribed lines next to each verdict;
+before that, "22%" was one number hiding three unrelated problems.
+
+### Why transcription was failing: the crops were clipped
+
+Dumping the actual crops sent to the vision model settled it. For v6 (`4x = 20`
+/ `x = 5`) the model received an image containing `=20`, and returned `$-20$`.
+It was reading correctly. It was being shown the wrong thing.
+
+Four bugs in `segment()`, each found by drawing the boxes rather than reasoning
+about thresholds:
+
+1. **Filter order.** `MIN_BOX_W`, `MIN_ASPECT` and `MIN_INK_FRAC` ran on
+   individual contour blobs, *then* `_merge_rows` ran. The smear only closes
+   gaps up to `kw` px, so one written line arrives as several blobs — `4x` and
+   `=20` separately. `4x` is under `MIN_BOX_W=30`, so it was deleted before the
+   merge could reunite them. Those thresholds describe a whole line of working;
+   they were being applied to fragments of one. Now: border/speck removal,
+   merge, *then* line-shaped thresholds.
+2. **The merge criterion cascaded.** `overlap * min(h, H)` lets a 4px speck set
+   a 2px bar. One merge grew a box, the bigger box reached the next row, and a
+   page collapsed into a single box (v1 went to 0 lines mid-debug). Now the bar
+   is a fraction of the **median** blob height — a fixed bar cannot be dragged
+   down by the smallest thing in the set.
+3. **The edge filter deleted content.** It discarded *any* blob touching the
+   frame. v6's `= 5` went because the 5's descender reached the bottom row,
+   leaving that line as a bare `x`, which the model read as `\frac{x}{x}`. A
+   real border artifact is a long **thin** line running most of a side; that
+   shape is now required before discarding.
+4. **Over-tall blobs survived into the merge.** v4's left margin rule overlaps
+   every row at once and merged the whole page into one box. The
+   `MAX_HEIGHT_MULT` filter used to catch it, but moving it after the merge
+   meant it ran too late. It now runs on both sides of the merge.
+
+Line-count accuracy against ground truth: **5/9 → 9/9**, v7's crossed-out
+scribble included (it is correctly excluded from the three real lines).
+
+`MIN_INK_FRAC` 0.05 → 0.03, forced by the reorder: a merged line box includes
+the gaps between terms, so `x = 6.` in large sparse handwriting measures well
+under 0.05 and was dropped as noise. Picked from the **middle of a plateau**
+(`ROW_OVERLAP` 0.4–0.6 × `MIN_INK_FRAC` 0.02–0.04 all scored 8/9 at that
+stage), deliberately, to avoid repeating session 28's over-tuning mistake.
+
+### Crops were also too small to read
+
+Even uncut, a segmented line off a phone photo is ~27–43px tall. That is below
+what a vision model can resolve, and no prompt fixes it. `_upscale()` in
+`step_checker.py` takes each line crop to 96px before transcription (cubic, so
+strokes stay smooth). v6 went from `\frac{x}{x}` to a clean read and passes.
+
+Cost worth knowing: this roughly 10×'s the image area, and a call now runs
+~2,100 input tokens. That is what burned the daily quota (below).
+
+### Repeated lines were reported as the error
+
+v9's student wrote line 0 again verbatim before working on it. The checker's
+verdict: *"Line 2 is just a verbatim copy of line 1, so no algebraic step or
+transformation has been performed."* It flagged the copy and stopped — masking
+the real mistake one line further down. Students rewrite lines constantly.
+
+Fixed deterministically rather than by prompt: `_same_line()` skips the pair
+before any model call. It has to survive three ways the model renders the same
+line differently — `$x=6$` vs `$x = 6$`, `x^2` vs `x^{2}`, and the question
+number (`9).`) attaching to only the first line. `CHECK_PROMPT` says the same
+thing as a backstop.
+
+### Infrastructure that was silently eating runs
+
+- **No `timeout=` on any Groq client.** The SDK default is 600s with 2 internal
+  retries — 30 minutes for one stuck call, which is exactly the hang seen this
+  session. Now `timeout=60, max_retries=0` on both the vision and text clients,
+  letting `_with_retry` own the decision.
+- **`_TRANSIENT` missed the most common failure.** An `APIConnectionError`
+  carries the text `"Connection error."` — no "429", no "rate limit" — so a
+  throttled run was never retried. Two eval cases were discarded on an error
+  the retry logic existed to survive.
+- **Backoff was too short to matter.** Groq's 429 body names the wait
+  (*"try again in 15.557142857s"*); `_retry_delay()` now parses it. The
+  fallback for 503 went from 1/2/4s to 3/6/12/24s, because "over capacity"
+  does not clear in a second.
+- **The report crashed after a successful run.** Model explanations contain
+  U+202F (narrow no-break space); the Windows console's cp1252 cannot encode it
+  and the traceback destroyed the numbers. stdout is now reconfigured to UTF-8
+  with `errors="replace"`.
+
+### Harness rewrite
+
+`evals/vision.py` printed nothing until all 9 cases finished, so a hang was
+indistinguishable from slow work. Now: per-case progress with timing, the error
+printed inline when a case dies, `--only` and `--pause`, and — the point of the
+exercise — **transcription scored separately from the verdict**, which splits
+one meaningless number into two useful ones. `_norm()` strips the question
+number so a correct read of `1). 2x + 7 = 19` is not scored as a miss.
+
+### Where it ended up
+
+Best complete run (`qwen/qwen3.8-27b`, 5 of 9 cases scored):
+
+```
+step checker      4/5  (80%)   [4 died before scoring]
+  clean pass        4/5
+transcription     13/16 lines (81%)
+  clean reads       3/5
+  verdict | clean    3/3   <- step check, given a faithful read
+```
+
+An earlier fuller run scored 4/6 with the same `verdict | clean 3/3`.
+
+**The decomposition works.** Every time the step checker is handed accurate
+text it returns the right answer. What fails is reading the handwriting — the
+rented half.
+
+### Known issues
+
+- **`error located` is still unmeasured.** It has been 0/1 or 1/3 on every run,
+  because v7, v8 and v9 — three of the four cases that actually contain an
+  error — have never all completed in one run. The headline "80%" is therefore
+  mostly a measure of not crying wolf on correct work. **The run that matters
+  has not happened yet.**
+- **Both vision models' daily quotas are exhausted.** `qwen/qwen3.6-27b` and
+  `qwen/qwen3.8-27b` each hit TPD 200,000 (free tier). `qwen3.8` is the better
+  of the two here — faster (4–22s vs 13–45s) and it is the only one with a
+  separate bucket once 3.6 is spent. Upscaled crops at ~2,100 tokens/call are
+  what make a 9-case run cost real quota.
+- **503 "over capacity" on `qwen3.8` killed 3–4 cases per run** even with
+  backoff. Transient, but a clean full run needs luck or patience.
+- **New false-positive mode: notation pedantry.** On v4 the student wrote
+  `x^2-5x+6` then `(x-2)(x-3)=0`, and the checker flagged *"incorrectly
+  introduced '= 0' in line 3"*. Defensible mathematically — the student did
+  omit `= 0` — but a tutor that calls that an error is crying wolf again.
+  Unfixed, and it is a prompt problem, not a vision one.
+  **Caveat on that finding:** v4 503'd on every run, so it was reproduced by
+  replaying *hand-written idealised* transcriptions, not recorded model output.
+  Treat it as a real but unconfirmed-on-real-input failure mode.
+- **v1 is a genuine model limit, not a bug.** The handwritten `19` really does
+  look like `10y`; the model read the line as `2x+2=10` / `2x = |c| - 7`. No
+  amount of preprocessing fixes that — it wants a fine-tuned handwriting-maths
+  model.
+- **The sample set is nine photos from one student, one pen, two lighting
+  conditions.** Treat 9/9 segmentation and 80% end-to-end as "no longer
+  obviously broken", not as validated accuracy.
+- **`bench/graviton_standalone.py` carries its own copy of `segment()`** for
+  running dependency-free on EC2. It is now out of step with the real one, so
+  the COOL numbers in `bench/results/` measure the old algorithm. Re-sync
+  before quoting them again.
+- The repeated-line fix is verified end-to-end on v9 (replaying its real
+  recorded transcription: `error_index=2`, correct, with the trace showing
+  `Line 2 repeats line 1 — skipped`). v4 and v8 also contain repeats and have
+  not been confirmed against live output.
+- Nothing here is committed.
+
+### Next
+
+1. When quota resets, run **v7, v8, v9** — that is the `error located` number,
+   and the feature's whole reason to exist is unmeasured without it
+2. Fix the notation-pedantry false positive in `CHECK_PROMPT` (omitted `= 0`,
+   and the same class of notation shortcut)
+3. Re-sync `bench/graviton_standalone.py` with the fixed `segment()`
+4. Measure whether a smaller upscale target than 96px still reads correctly —
+   it directly sets how many eval runs a day's quota buys
+5. Problem segmentation for multi-problem pages (session 28's plan) — the
+   cropping done here is the manual version of it
+6. Demo video (still zero)

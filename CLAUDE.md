@@ -91,6 +91,22 @@ Report what actually happened, including failures. Do not round a partial result
 
 `llama-3.3-70b-versatile` was deprecated. Current default: `openai/gpt-oss-120b` (OpenAI-compat endpoint via Groq). Check `https://console.groq.com/docs/models` if hitting model errors — the catalogue changes.
 
+**Vision models.** Only two on the catalogue, both qwen reasoning models:
+`qwen/qwen3.6-27b` (the `GROQ_VISION_MODEL` default in `image_handler.py`) and
+`qwen/qwen3.8-27b`. Pass the latter with `--vision-model` — it is faster
+(4-22s vs 13-45s per case) and, crucially, has its **own daily token bucket**,
+so it is the fallback once 3.6 is spent.
+
+**Free-tier limits bite hard on vision.** Two separate ceilings:
+- **ITPM 7,000** input tokens/minute. One upscaled line crop is ~2,100 tokens,
+  so roughly **3 vision calls a minute**. Pace eval runs with `--pause`.
+- **TPD 200,000** tokens/day, *per model*. A full 9-case eval run costs a large
+  slice of that; two runs exhausted both models in one afternoon. Budget it, or
+  the run you care about dies half way.
+
+`qwen3.8` also returns transient **503 "over capacity"** under load, which killed
+3-4 cases per run even with backoff. Retries help; luck helps more.
+
 ## Features built (as of session 27)
 
 - **Server-marked quizzes (`quiz_attempts` table)**: `POST /api/quiz/start`
@@ -126,9 +142,10 @@ Report what actually happened, including failures. Do not round a partial result
   (`PRACTICE_FROM_ERROR_PROMPT`, reuses `_parse_questions`/`_format_questions`),
   loading MCQs into the inline papers flow. Closes the vision → tutor →
   curriculum loop. Needs a reachable LLM.
-- **Vision eval harness**: `evals/vision.py` + `evals/vision_cases.jsonl`. Metric
-  is exact match on `error_index`. **No sample photos yet** — no accuracy number
-  until `evals/vision_samples/` is populated.
+- **Vision eval harness**: `evals/vision.py` + `evals/vision_cases.jsonl`.
+  Populated in session 29 — `evals/vision_samples/v1.jpg`–`v9.jpg`, cropped one
+  problem each out of the two raw papers. See the vision numbers section below
+  for what it actually scores.
 
 ## Features built (as of session 26)
 
@@ -169,6 +186,42 @@ Report what actually happened, including failures. Do not round a partial result
 - **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
 - **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
 
+## Vision numbers (as of session 29)
+
+Measured on `evals/vision_samples/v1.jpg`–`v9.jpg`, groq
+`openai/gpt-oss-120b` + `qwen/qwen3.8-27b`, `temperature=0`. **Do not quote a
+number without re-running** — the last three sessions each corrected a stale one.
+
+- **Segmentation line counts: 9/9.** Pure OpenCV, no API, fully reproducible.
+  Was 5/9 before the session 29 fixes.
+- **Step checker: 4/5 (80%)** on the best complete run — but only 5 of 9 cases
+  scored; the rest died on quota/503.
+- **Transcription: 13/16 lines (81%)**, 3/5 whole problems read cleanly.
+- **Verdict given a faithful read: 3/3.** The decomposition is sound; reading
+  the handwriting is the bottleneck.
+- **`error located`: effectively unmeasured (0/1).** v7, v8 and v9 — three of
+  the four cases that actually contain an error — have never all completed in
+  one run. *This is the number the feature exists to produce, and it does not
+  exist yet.* Run those three first when quota resets.
+
+Sample set is nine photos, one student, one pen, two lighting conditions. Treat
+these as "no longer obviously broken", not as validated accuracy.
+
+## Pending (as of session 29)
+
+- **Run v7, v8, v9** for the `error located` number (blocked on daily quota)
+- **Notation pedantry is a false-positive mode.** On v4 the student wrote
+  `x^2-5x+6` then `(x-2)(x-3)=0` and the checker flagged *"incorrectly
+  introduced '= 0'"*. Defensible mathematically, wrong for a tutor — crying
+  wolf on correct work is the worst failure this system has. Prompt fix, not a
+  vision fix. (Found by replaying hand-written idealised transcriptions, since
+  v4 503'd every run — real but unconfirmed on live input.)
+- **`bench/graviton_standalone.py` has its own copy of `segment()`** and is now
+  out of step with the real one, so `bench/results/` measures the old algorithm.
+  Re-sync before quoting the COOL numbers again.
+- **Measure a smaller upscale target than 96px** — it directly sets how many
+  eval runs a day's quota buys.
+
 ## Pending (as of session 27)
 
 - **AWS Bedrock provider** in `core/llm/client.py` — blocked on account
@@ -205,10 +258,54 @@ Report what actually happened, including failures. Do not round a partial result
 - **Don't tune vision thresholds on synthetic images.** `MIN_INK_FRAC` in
   `segment.py` was set to 0.12 from a `cv2.putText` synthetic test (text density
   0.25+), which then dropped **real** handwriting — real pen strokes are only
-  ~0.08-0.11 density. It's now 0.05. A single density threshold can't separate
-  synthetic noise (0.07) from real handwriting (0.09); keep it low so real
-  working lines are never dropped. Always validate vision changes on a real
-  photo, not just `putText`.
+  ~0.08-0.11 density. It's now **0.03** (0.05 until session 29, lowered when the
+  filter moved after the row merge — a merged line box includes the gaps between
+  terms, so `x = 6.` in large sparse writing measures well under 0.05). A single
+  density threshold can't separate synthetic noise (0.07) from real handwriting
+  (0.09); keep it low so real working lines are never dropped. Always validate
+  vision changes on a real photo, not just `putText`.
+- **Order of operations in `segment()` is load-bearing.** `MIN_BOX_W`,
+  `MIN_ASPECT` and `MIN_INK_FRAC` describe a **whole line of working**. The
+  horizontal smear only closes gaps up to `kw` px, so one written line arrives
+  as several blobs (`4x` and `=20` separately). Running those filters before
+  `_merge_rows` deleted the narrow fragment, and the survivor became "the line"
+  — `4x = 20` was cropped to `=20` and transcribed as `-20`. Sequence must stay:
+  border/speck removal → drop over-tall blobs → **merge** → line-shaped
+  thresholds. (Over-tall blobs must go *before* the merge: v4's margin rule
+  vertically overlaps every row and collapses the page into one box.)
+- **Never size a merge threshold off `min(h, H)`.** `overlap * min(h, H)` lets a
+  4px speck set a 2px bar; one merge grows a box, the bigger box reaches the
+  next row, and a whole page cascades into a single box. Measure against the
+  **median** blob height — a fixed bar can't be dragged down by the smallest
+  thing in the set.
+- **The edge filter must target frame artifacts, not anything touching the
+  edge.** It used to drop every blob reaching the border, which deleted real
+  writing whenever a descender hit the last row (v6's `= 5` went, leaving a bare
+  `x` that the model read as `\frac{x}{x}`). A real border artifact is long
+  **and thin**; require that shape before discarding.
+- **Line crops must be upscaled before transcription.** A segmented line off a
+  phone photo is only ~27-43px tall — below what a vision model can resolve, and
+  no prompt fixes it. `_upscale()` in `step_checker.py` takes them to 96px. Cost:
+  ~10× the image area, ~2,100 input tokens per call, which is what makes eval
+  runs burn the daily quota.
+- **A repeated line is not an error.** Students copy a line out again before
+  working on it. The checker called that "no transformation has been performed",
+  flagged the copy, and stopped — masking the real mistake further down.
+  `_same_line()` decides this without a model call, and has to survive `$x=6$`
+  vs `$x = 6$`, `x^2` vs `x^{2}`, and the question number attaching to only the
+  first line.
+- **Always pass `timeout=` to the Groq SDK.** Its default is 600s with 2 silent
+  internal retries — one stuck call hangs for 30 minutes. Both clients now use
+  `timeout=60, max_retries=0` so `_with_retry` owns the retry decision.
+- **`APIConnectionError` says only `"Connection error."`** — no "429", no "rate
+  limit". A `_TRANSIENT` list matching on those strings silently discards
+  throttled calls. Groq's 429 body *does* name the wait ("try again in
+  15.557142857s"); `_retry_delay()` parses it, because exponential backoff from
+  1s never reaches a 15s window.
+- **Windows console is cp1252 and model output is not.** Explanations come back
+  with U+202F (narrow no-break space); printing one raises `UnicodeEncodeError`
+  and killed the eval report *after* a successful run. Any script that prints
+  model text needs `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`.
 - **Pin `temperature=0` on the vision call too.** `_groq_vision` was
   non-deterministic — the same image read cleanly one run and fragmented the
   next, poisoning the step check. All LLM calls (chat AND vision) now pin temp 0.
