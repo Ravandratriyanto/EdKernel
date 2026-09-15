@@ -11,12 +11,19 @@ LLM wrapper:
 
 | Primitive | Endpoint | What it does |
 |---|---|---|
+| List curricula | `GET /v1/curricula` | Discover available classes |
+| Get topics | `GET /v1/curricula/<id>/topics` | Topic tree for a curriculum |
 | Check an answer | `POST /v1/check` | Verdict + feedback on a submitted answer |
 | Start a lesson | `POST /v1/tutor/start` | Opens a Socratic session that withholds the answer |
 | Continue a lesson | `POST /v1/tutor/reply` | Next hint up the ladder; never gives it away |
 | Check handwritten working | `POST /v1/check/working` | Vision → per-step transcription → first wrong step |
 | Extract questions from a PDF | `POST /v1/questions/extract` | Past paper → structured question list |
+| Record progress | `POST /v1/progress` | Log a topic attempt (right/wrong) |
+| Read progress | `GET /v1/progress/<id>` | Mastery per topic |
 | Manage keys | `GET/POST/DELETE /v1/keys` | Self-service API keys |
+
+A UI can build the whole tutoring loop from these: **discover** (curricula/topics)
+→ **teach/check** (tutor, check, check/working) → **track** (progress).
 
 Reading handwriting is not the moat (frontier models do that). The value is the
 pedagogy: per-step, method-mark-style checking that teaches rather than solves.
@@ -193,6 +200,48 @@ provider, model, api_key, host        — optional overrides
 { "questions": [ {...}, {...} ], "count": 12 }
 ```
 `422` if no questions could be parsed.
+
+---
+
+### `GET /v1/curricula`
+List the curricula available on the server, so a UI can render the class list.
+```json
+→ 200  {"curricula": [ {"id": "gcse-maths", "name": "GCSE Mathematics",
+                        "subjects": ["Number", "Algebra", ...]}, ... ]}
+```
+
+---
+
+### `GET /v1/curricula/<id>/topics`
+The topic tree for one curriculum (name, subtopics, objectives per topic).
+```json
+→ 200  {"curriculum": "gcse-maths", "topics": [ {...}, {...} ]}
+```
+Returns `"topics": []` if the curriculum has none.
+
+---
+
+### `POST /v1/progress`
+Record one topic attempt. **Scoped to the API key's owner** — a multi-student
+front end issues one key per student.
+
+**Body**
+```json
+{ "curriculum": "gcse-maths",   // required
+  "topic":      "Algebra",       // required
+  "correct":    true }           // optional (default false)
+```
+**Response** `{"ok": true}`. `400` if `curriculum` or `topic` is missing.
+
+---
+
+### `GET /v1/progress/<id>`
+Read this key owner's mastery for a curriculum.
+```json
+→ 200  {"curriculum": "gcse-maths",
+        "progress": [ {"topic_id": "Algebra", "attempts": 8, "correct": 6,
+                       "last_seen": 1726300000}, ... ]}
+```
 
 ---
 

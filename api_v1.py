@@ -1,6 +1,9 @@
 import functools
 import os
 import tempfile
+import json 
+import curricula
+from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 import users
@@ -186,7 +189,43 @@ def check_working():
     result["boxes"] = [list(b) for b in result.get("boxes", [])]
     return jsonify(result)
 
+@v1.get("/curricula")
+@require_auth
+def curricula_list():
+    out = []
+    for cid in curricula.list_curricula():
+        try:
+            m = curricula.load(cid)
+            out.append({"id": cid, "name": m.get("name", cid),
+                        "subjects": m.get("subjects", [])})
+        except Exception:
+            out.append({"id": cid, "name": cid})
+    return jsonify({"curricula": out})
+@v1.get("/curricula/<cid>/topics")
+@require_auth
+def curricula_topics(cid: str):
+    path = curricula.CURRICULA_DIR / cid / "topics.json"
+    topics = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    return jsonify({"curriculum": cid, "topics": topics})
 
+@v1.post("/progress")
+@require_auth
+def progress_record():
+    body       = request.get_json(silent=True) or {}
+    curriculum = (body.get("curriculum") or "").strip()
+    topic      = (body.get("topic") or "").strip()
+    if not curriculum or not topic:
+        return jsonify({"error": "curriculum and topic are required"}), 400
+    correct = bool(body.get("correct", False))
+    users.record_progress(request.api_user["id"], curriculum, topic, correct)
+    return jsonify({"ok": True})
+
+
+@v1.get("/progress/<cid>")
+@require_auth
+def progress_read(cid: str):
+    rows = users.get_progress(request.api_user["id"], cid)
+    return jsonify({"curriculum": cid, "progress": rows})
 # ── API key management (self-service) ─────────────────────────────────────────
 
 @v1.get("/keys")
