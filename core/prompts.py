@@ -134,16 +134,21 @@ HINT_LADDER = (
     "'rate', 'change', or any term that describes a mathematical operation or relationship. "
     "Ask only about the numbers or the situation itself, not about how to process them. "
     "One question only.]",
-    "[Tutor note: student answered wrong twice. You MUST explicitly name the specific "
-    "concept, term, operation, or method they are missing — state its name plainly "
-    "(e.g. 'inverse operations', 'the quadratic formula', 'mitosis', 'dividing the "
-    "difference by the original'). Then give ONE concrete real-world analogy to make it tangible "
-    "(e.g. for gradient: 'think of it as the steepness of a hill'; for area under a curve: "
-    "'imagine counting the squares underneath it'). Do NOT state the final answer. End with one question.]",
+    "[Tutor note: student answered wrong twice. Name a specific concept, operation, "
+    "method, or underlying mechanism that points toward the answer — state it plainly "
+    "(e.g. 'inverse operations', 'the quadratic formula', 'dividing the difference by "
+    "the original'). If the exact answer word would itself be the thing you name (e.g. "
+    "the answer is 'chloroplast'), name the specific supporting concept instead, not a "
+    "vague area — e.g. 'chlorophyll, the green pigment that captures light'. Name a real "
+    "term that genuinely helps; just never say the exact answer word or number. Then give "
+    "ONE concrete real-world analogy (e.g. for gradient: 'the steepness of a hill'). "
+    "End with one question.]",
     "[Tutor note: student answered this wrong 3+ times. Explain the concept directly in plain words. "
     "Then show a brief worked example using DIFFERENT numbers from the original problem — "
     "walk through the method step by step. Then ask them to apply the same method to their original problem. "
-    "Do not give the answer to their original problem.]",
+    "NEVER state the answer to their original problem — not the final number, not the specific "
+    "term being asked for. The worked example uses different numbers precisely so the original "
+    "answer never appears; do not compute or reveal it.]",
 )
 
 
