@@ -24,7 +24,9 @@ Three education systems, one shared gap — students are graded on *answers* but
 
 ### Why this is not "just use ChatGPT"
 
-Reading handwritten maths is no longer a differentiator — frontier multimodal models do it. EdKernel's defensible value is the combination a general chatbot does not ship: **per-step, method-mark-style checking, grounded in a specific exam board or national curriculum, that withholds the answer** (teaches rather than solves), **surfaces misconceptions to teachers**, and is delivered as a **kernel any region builds its own UI on**. A student pasting working into ChatGPT gets the answer handed over — curriculum-blind, and counter-productive for learning.
+Reading handwritten maths is no longer a differentiator — frontier multimodal models do it, and do it well. We do not try to out-read them, and this report does not claim to. OpenCV's job here is the one thing those models **cannot** do reliably: **deterministic spatial grounding** — producing the verifiable pixel coordinates that let the system box the *exact* wrong line on the student's page. Ask a multimodal LLM "which pixel is the error on" and it hallucinates a location; `findContours` does not. That grounding is auditable, runs offline, and costs nothing per call.
+
+On top of that grounding, EdKernel's defensible value is the combination a general chatbot does not ship: **per-step, method-mark-style checking, grounded in a specific exam board or national curriculum, that withholds the answer** (teaches rather than solves) and **surfaces a class-wide misconception map to teachers**. A student pasting working into ChatGPT gets the answer handed over — curriculum-blind, un-located, and counter-productive for learning. The `/v1/` API is documented so a school can drive this from the LMS it already uses; the shipped web UI is one reference client, not the product.
 
 ---
 
@@ -67,7 +69,7 @@ Every uploaded image passes through six stages before any model call is made:
 | 5. Step segmentation | `morphologyEx` (horizontal close) → `findContours` | One bounding box per working line |
 | 6. Ink mask | `threshold` (Otsu) | Feed HoughLinesP with a clean binary |
 
-The output is a list of bounding boxes. The number of model calls made downstream equals the number of boxes returned. OpenCV does not merely preprocess — it decides the shape of inference.
+The output is a list of bounding boxes. The number of model calls made downstream equals the number of boxes returned. OpenCV does two load-bearing jobs here, neither of which is "reading": it **decides the shape of inference** (box count = tool-call count), and it provides **deterministic spatial grounding** — the coordinates that let the system draw a red box on the exact wrong line of the student's own photo (`step_checker._annotate`). A frontier vision model can say *what* the error is; it cannot reliably say *where* on the page it is. That verifiable "where" is what a teacher can trust and point at, and it is the part frontier models do not provide.
 
 ### Agentic vision loop
 
@@ -204,7 +206,20 @@ fix. The reasoning layer is already sound; the read is what needs the work.
 Per-student progress is recorded to `users.db` on every MCQ answer (correct and wrong). The teacher panel at `/teacher` shows:
 - Topic-level accuracy per student
 - Activity over time
-- (Planned) misconception tags: why the student was wrong, not just that they were wrong
+- **Class-wide misconception map**: when the step checker locates an error, the mistake is categorised and aggregated per topic, so a teacher sees *"N students made a sign error on rearranging"* — not just who scored low. This is the diagnostic layer no LMS ships, and it is *why* a school would install the tool.
+
+**Reliability of the misconception categories (measured, honest).** The first
+implementation classified errors by keyword-matching the examiner's free-text
+explanation; tested against real explanations it scored **1/6 — the examiner
+describes the correct step, never the error keyword**, so post-hoc matching fails.
+The fix, verified at **7/7 (plus no false positive on a valid step)**: use
+**coarse, non-overlapping buckets** (`sign` / `arithmetic` / `algebra_step` /
+`other`) and have the examiner emit the tag **at decision time**, where it can
+see the actual equations rather than guess from its own sentence — at zero extra
+API cost. Coarse is deliberate: a wrong fine-grained label is worse than an
+honest coarse one, and even a human would dispute the fine distinctions. The map
+is presented to teachers as **AI-suggested and teacher-reviewed**, consistent
+with the accuracy ceiling — a flag for review, not an authoritative grade.
 
 ---
 
@@ -303,8 +318,8 @@ inference is offloaded per call.*
 - `HoughLinesP` → contour-based deskew replacement (planned, not built)
 - OpenCV 5 on Graviton for a fair COOL comparison (blocked on instance setup)
 - S3 for file storage (currently local disk on ECS)
-- RDS PostgreSQL (currently SQLite, not durable across ECS restarts)
+- RDS PostgreSQL (currently SQLite; on Fargate the `users.db` / ChromaDB volumes are **not durable across task restarts** — accounts and the misconception map reset when the task recycles. Needs EFS or RDS to persist.)
 - AWS Bedrock LLM provider (account verification hold with AWS support)
-- Misconception detection (architecture designed, not implemented)
+- Misconception map is **built and live**, but categories are coarse and wobble on genuinely-ambiguous errors (e.g. subtracted-vs-added) — hence framed as teacher-reviewed, not authoritative. Full end-to-end verification through the *vision* path is still pending a window when the Groq vision model is not returning `503`.
 - Architecture diagram (required deliverable)
 - Demo video (required deliverable, due 26 Oct 2026)
