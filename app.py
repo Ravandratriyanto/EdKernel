@@ -25,6 +25,7 @@ from core.llm.client import generate, chat
 from core.rag.retrieve import retrieve
 from core.vision.image_handler import transcribe
 from core.vision.step_checker import check_working
+import core.misconceptions
 from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
 import pdftext
@@ -865,6 +866,14 @@ def api_check_working():
              steps=len(result["steps"]),
              error_index=result["error_index"],
              latency_ms=latency)
+
+    # Feed the class misconception map: a located error, categorised.
+    if g.user and result.get("error_index") is not None:
+        cid   = (data.get("curriculum_id") or "").strip()
+        topic = (data.get("topic") or "").strip()
+        if cid and topic:
+            category = core.misconceptions.normalise(result.get("category"))
+            users.record_misconception(g.user["id"], cid, topic, category)
 
     return jsonify(result)
 
@@ -1940,6 +1949,12 @@ def api_teacher_progress(cid):
     err = _teacher_or_admin()
     if err: return err
     return jsonify(users.get_all_progress(cid))
+@app.route("/api/teacher/curricula/<cid>/misconceptions")
+def api_teacher_misconceptions(cid):
+    err = _teacher_or_admin()
+    if err: return err
+    return jsonify(users.get_misconceptions(cid))
+    
 
 
 @app.route("/api/curricula/<cid>/materials")

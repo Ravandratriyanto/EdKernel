@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EdKernel — Reference Client</title>
+<!--
+  A COMPLETE front end for EdKernel, built on nothing but the /v1/ kernel API.
+  ~150 lines, one file, no build step, no dependency on the main web app.
+  It exists to prove the kernel thesis: the UI is swappable. This looks nothing
+  like static/index.html, yet it drives the same engine. Point it at any
+  EdKernel deployment, paste an API key, and teach.
+
+  Docs for the API it uses: docs/KERNEL_API.md
+-->
+<style>
+  :root { --bg:#0b0f14; --card:#141b22; --line:#243240; --ink:#e6edf3;
+          --dim:#8b98a5; --acc:#39d353; --warn:#f78166; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.55 ui-monospace, "SF Mono", Menlo, monospace; }
+  header { padding:18px 22px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:15px; color:var(--acc); letter-spacing:.5px; }
+  header p  { margin:4px 0 0; color:var(--dim); font-size:12px; }
+  main { max-width:760px; margin:0 auto; padding:22px; }
+  .cfg { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+  input, select, button, textarea {
+    background:var(--card); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:8px 10px; font:inherit; }
+  input:focus, textarea:focus, select:focus { outline:1px solid var(--acc); }
+  button { cursor:pointer; color:var(--acc); border-color:var(--acc); }
+  button:hover { background:#0f1a12; }
+  button:disabled { opacity:.4; cursor:default; }
+  .row { display:flex; gap:8px; margin-top:10px; }
+  .row > input, .row > textarea { flex:1; }
+  #log { margin-top:18px; }
+  .msg { border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+         margin:8px 0; white-space:pre-wrap; }
+  .msg.you { border-color:#2d4; color:var(--ink); background:#0f1a12; }
+  .msg.tutor { background:var(--card); }
+  .msg.sys { color:var(--dim); font-size:12px; border:none; padding:2px 0; }
+  .tag { font-size:10px; color:var(--dim); text-transform:uppercase;
+         letter-spacing:.08em; display:block; margin-bottom:3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EdKernel · Reference Client</h1>
+  <p>A whole tutoring UI in one file, built only on the <code>/v1/</code> kernel API — proof the front end is swappable.</p>
+</header>
+
+<main>
+  <div class="cfg">
+    <input id="base" value="http://localhost:5000" size="24" title="Base URL">
+    <input id="key" type="password" placeholder="API key (Bearer)" size="20">
+    <button onclick="loadClasses()">Load classes</button>
+    <select id="curric"><option value="">— classes —</option></select>
+  </div>
+
+  <div class="row">
+    <input id="topic" placeholder="topic to learn, e.g. quadratic factorising"
+           onkeydown="if(event.key==='Enter') startLesson()">
+    <button id="startBtn" onclick="startLesson()">Start lesson</button>
+  </div>
+
+  <div id="log"></div>
+
+  <div class="row" id="replyRow" style="display:none">
+    <textarea id="reply" rows="1" placeholder="your answer…"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply()}"></textarea>
+    <button onclick="sendReply()">Send</button>
+  </div>
+</main>
+
+<script>
+  // ── kernel client: every call is one fetch to /v1/ ───────────────────────
+  const $ = id => document.getElementById(id);
+  const base = () => $('base').value.replace(/\/$/, '');
+  const authHeaders = () => ({ 'Content-Type': 'application/json',
+                               'Authorization': 'Bearer ' + $('key').value.trim() });
+
+  let messages = [];      // the client owns the transcript (stateless kernel)
+  let wrongStreak = 0;
+
+  function log(role, text, tag) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + role;
+    d.innerHTML = (tag ? `<span class="tag">${tag}</span>` : '') +
+                  text.replace(/</g, '&lt;');
+    $('log').appendChild(d);
+    d.scrollIntoView({ block: 'end' });
+  }
+
+  async function loadClasses() {
+    try {
+      const r = await fetch(base() + '/v1/curricula', { headers: authHeaders() });
+      const d = await r.json();
+      if (d.error) return log('sys', 'error: ' + d.error);
+      const sel = $('curric');
+      sel.innerHTML = '<option value="">— classes —</option>';
+      (d.curricula || []).forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.name;
+        sel.appendChild(o);
+      });
+      log('sys', `loaded ${d.curricula.length} class(es) from GET /v1/curricula`);
+    } catch (e) { log('sys', 'network error: ' + e.message); }
+  }
+
+  async function startLesson() {
+    const topic = $('topic').value.trim();
+    if (!topic) return;
+    messages = []; wrongStreak = 0;
+    log('you', topic, 'topic');
+    try {
+      const r = await fetch(base() + '/v1/tutor/start', {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ topic, provider: 'groq', model: 'openai/gpt-oss-120b' }),
+      });
+      const d = await r.json();
+      if (d.error) return log('sys', 'error: ' + d.error);
+      messages = d.messages || [];
+      log('tutor', d.reply, 'tutor · /v1/tutor/start');
+      $('replyRow').style.display = 'flex';
+    } catch (e) { log('sys', 'network error: ' + e.message); }
+  }
+
+  async function sendReply() {
+    const msg = $('reply').value.trim();
+    if (!msg) return;
+    $('reply').value = '';
+    log('you', msg, 'you');
+    try {
+      const r = await fetch(base() + '/v1/tutor/reply', {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ messages, message: msg, wrong_streak: wrongStreak,
+                               provider: 'groq', model: 'openai/gpt-oss-120b' }),
+      });
+      const d = await r.json();
+      if (d.error) return log('sys', 'error: ' + d.error);
+      messages = d.messages || messages;
+      wrongStreak = d.correct === false ? wrongStreak + 1 : 0;
+      log('tutor', d.reply, `tutor · /v1/tutor/reply · streak ${wrongStreak}`);
+    } catch (e) { log('sys', 'network error: ' + e.message); }
+  }
+</script>
+</body>
+</html>

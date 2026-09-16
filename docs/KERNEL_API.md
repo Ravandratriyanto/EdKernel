@@ -284,3 +284,13 @@ The kernel is stateless and UI-agnostic. A client is responsible for:
    Merdeka, …).
 
 Everything else — layout, language, platform — is yours.
+
+**Working example:** [`examples/reference_client.html`](../examples/reference_client.html)
+is a complete tutoring UI in one ~150-line file, built only on `/v1/` — no build
+step, no dependency on the main web app. Open it, point it at a deployment, paste
+an API key, and teach. It looks nothing like the shipped web UI, which is the
+whole point: same kernel, swappable front end.
+
+**CORS:** `/v1/` sends `Access-Control-Allow-Origin: *`. It's safe because auth
+is a Bearer *header*, not a cookie — there are no credentials for a hostile
+origin to ride — so a browser UI on any domain can call the kernel directly.

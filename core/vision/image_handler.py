@@ -5,7 +5,7 @@ first and fed into the normal learn/check flow — which every provider accepts.
 """
 
 
-GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
+GROQ_VISION_MODEL = "qwen/qwen3.8-27b"  # qwen3.6-27b was decommissioned by Groq
 
 DETECT_PROMPT = (
     "Look at this image. If it contains a printed or handwritten mathematical "

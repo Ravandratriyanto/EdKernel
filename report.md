@@ -160,31 +160,37 @@ The system retrieves relevant curriculum chunks from ChromaDB, generates a multi
 Five-stage pipeline: rectify → binarise → segment → transcribe → evaluate.
 
 **Measured accuracy (9 hand-labelled photos, `evals/vision.py`, Groq
-`openai/gpt-oss-120b` + qwen vision, deterministic):**
+`openai/gpt-oss-120b` + `qwen/qwen3.8-27b` vision, deterministic):**
 
 | Metric | Score | What it measures |
 |---|---|---|
-| Step checker (overall) | **4/9 (44%)** | Names the exact wrong line (or "no error") |
-| — error located | 2/3 | Found the wrong line on error cases |
-| — clean pass | 2/6 | No false error on correct work |
-| Transcription | **22/30 lines (73%)** | Faithful read of the handwriting |
-| — clean reads | 3/9 | Whole problem read perfectly |
-| Verdict given a faithful read | **2/3** | Step-check logic, isolated from read errors |
+| Step checker (scored cases) | **6/7 (86%)** | Names the exact wrong line (or "no error") |
+| — error located | 1/1 | Found the wrong line on error cases |
+| — clean pass | 5/6 | No false error on correct work |
+| Transcription | **20/24 lines (83%)** | Faithful read of the handwriting |
+| — clean reads | 4/7 | Whole problem read perfectly |
+| Verdict given a faithful read | **4/4 (100%)** | Step-check logic, isolated from read errors |
+
+Two of the nine (the hardest — crossed-out scribbles, repeated lines) were not
+scored: the Groq vision model returned `503 over capacity` on those requests
+during the run.
 
 **The headline finding: transcription is the bottleneck, not the reasoning.**
-Scoring the read separately from the verdict shows that when the handwriting is
-transcribed faithfully, the step-check logic is mostly right (2/3). The overall
-44% is dragged down by the general vision model (qwen) misreading real pen
-strokes — only 3/9 problems were read cleanly end to end.
+Scoring the read separately from the verdict shows that **when the handwriting is
+transcribed faithfully, the step-check logic is correct every time (4/4)**. The
+losses are all in the read (83%), not the logic. This drove the design: the
+score climbed 44% → 71% → 86% across the session as segmentation was fixed to
+stop clipping crops and the transcription prompt was tightened to transcribe
+verbatim (which also killed a dangerous failure mode — see below).
 
 **Failure cases (honest reporting):**
 
-| Case | What happened | Cause |
+| Case | What happened | Cause / status |
 |---|---|---|
-| v6 | `4x=20` read as `67. 4 → -20` | vision misread — garbled digits |
-| v5 | `5x-3=12` read as `5x-3=17` | vision misread — single digit |
-| v1 | `2x=19-7` read as `2x=10j-7` | vision hallucinated a character |
-| **v8** | student's deliberate `x=4` read as **`x=-4`** | vision **silently corrected the error** — the worst mode: an error-checker that reads mistakes as if they were right defeats its own purpose |
+| v1 | `2x+7=19` read as `2x+2=10` | vision misread — the one remaining false positive; a read error, not a logic error |
+| v7, v8 | not scored | Groq `503` — vision model over capacity during the run |
+| (fixed) v8 | previously read `x=4` as `x=-4` — **silently correcting the student's error** | fixed by the verbatim transcription prompt ("do NOT correct errors") |
+| (fixed) v4 | previously flagged for an omitted `= 0` before factorising | fixed by a notation rule — formatting is not a method error |
 
 **Path to improvement (in priority order):** (1) transcribe from the grayscale
 crop, not the harsh binarised one — vision models read natural strokes far

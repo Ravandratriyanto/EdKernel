@@ -265,6 +265,8 @@
           <section>
             <h3>Student progress</h3>
             <div id="progress-container"><p style="color:var(--muted);font-size:12px">Select a curriculum to view progress.</p></div>
+            <h3 style="margin-top:24px">Class misconception map</h3>
+            <div id="misconceptions-container"><p style="color:var(--muted);font-size:12px">Select a curriculum to view.</p></div>
             <div id="progress-chart-wrap" style="display:none;position:relative;height:320px;margin-top:16px">
               <canvas id="progress-chart"></canvas>
             </div>
@@ -337,6 +339,7 @@
   // ── Select curriculum ────────────────────────────────────────────────────────
   async function selectCurriculum(id) {
     currentId = id;
+    
     document.querySelectorAll("#curr-list li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
     const res = await fetch(`/api/teacher/curricula/${id}`);
     if (!res.ok) return;
@@ -358,7 +361,7 @@
       document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-      if (btn.dataset.tab === "progress") loadProgress();
+      if (btn.dataset.tab === "progress") { loadProgress(); loadMisconceptions(); }
     });
   });
 
@@ -606,7 +609,36 @@
   });
 }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
+  async function loadMisconceptions() {
+    if (!currentId) return;
+    const res = await fetch(`/api/teacher/curricula/${currentId}/misconceptions`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    const box = document.getElementById("misconceptions-container");
+    if (!rows.length) {
+      box.innerHTML = '<p style="color:var(--muted);font-size:12px">No misconceptions logged yet.</p>';
+      return;
+    }
+    const label = {
+      sign: "Sign error", arithmetic: "Arithmetic slip",
+      algebra_step: "Algebra step (dropped / skipped / wrong operation)", other: "Other",
+    };
+    box.innerHTML =
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+      '<tr style="text-align:left;color:var(--muted)">' +
+      '<th style="padding:4px 8px">Topic</th><th style="padding:4px 8px">Misconception</th>' +
+      '<th style="padding:4px 8px">Students</th><th style="padding:4px 8px">Times</th></tr>' +
+      rows.map(r =>
+        '<tr style="border-top:1px solid #2a2d3a">' +
+        `<td style="padding:4px 8px">${esc(r.topic)}</td>` +
+        `<td style="padding:4px 8px">${esc(label[r.category] || r.category)}</td>` +
+        `<td style="padding:4px 8px">${r.students}</td>` +
+        `<td style="padding:4px 8px">${r.occurrences}</td>` +
+        '</tr>'
+      ).join("") +
+      '</table>';
+  }
+
   function esc(s) {
     return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }

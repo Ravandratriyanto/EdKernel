@@ -87,7 +87,7 @@ EdKernel/
 | Provider | Text models | Vision models |
 |---|---|---|
 | Ollama (local) | any model pulled locally | any multimodal model |
-| Groq (cloud) | `openai/gpt-oss-120b`, `qwen/qwen3.8-27b` | `qwen/qwen3.6-27b` |
+| Groq (cloud) | `openai/gpt-oss-120b`, `qwen/qwen3.8-27b` | `qwen/qwen3.8-27b` |
 
 Keys live in `.env` only — see `.env.example`. The app reads `API_KEY`
 (Groq) and `TAVILY_KEY`. Both are passed per-request from the UI or
@@ -147,19 +147,23 @@ python -m evals.run --only regress       # regressions only — no model calls, 
 python -m evals.learn                    # hint ladder — 5 cases, 3 rungs
 ```
 
-**Current scores (Groq `openai/gpt-oss-120b` / `qwen/qwen3.6-27b`):**
+**Current scores (Groq `openai/gpt-oss-120b` / `qwen/qwen3.8-27b`):**
 - Check mode: 50/50 — 0 unparsed, 0 errors
 - Regressions: 39/39
-- Hint ladder: 3/5 — the two failures leak the answer before the final rung
-- Vision step checker: 4/9 exact error line; 81% of lines transcribed
-  faithfully; 3/4 correct given a faithful read (see `evals/vision.py`).
-  Transcription is the bottleneck, not the reasoning.
+- Hint ladder: answer never leaked 5/5 (the cardinal rule — fixed this session);
+  2/5 on the strict per-rung keyword check, where rung-2 concept-naming is
+  keyword-matched and undersells correct paraphrases.
+- Vision step checker: **6/7 exact error line on scored cases (86%)**; 83% of
+  lines transcribed faithfully; **4/4 correct given a faithful read** (see
+  `evals/vision.py`). Transcription is the bottleneck, not the reasoning — the
+  one false positive is a misread, not a logic error. 2 cases (v7, v8) blocked
+  by Groq 503 (vision model over capacity), not scored.
 
 Scores are now reproducible — `temperature` is pinned to 0 across all providers
 (chat and vision). One full check-mode run costs ~¼ of Groq's free daily token
 budget, so pace repeated runs.
 
-**`qwen/qwen3.6-27b` is a reasoning model** — it outputs `<think>` blocks.
+**`qwen/qwen3.8-27b` is a reasoning model** — it outputs `<think>` blocks.
 Only use it on the vision path (where `drop_reasoning()` is called) or the
 learn eval (which now strips think blocks before checking). Do not use it
 for check mode — `<think>` blocks would reach the student.

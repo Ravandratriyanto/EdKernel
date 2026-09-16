@@ -18,13 +18,33 @@ v1 = Blueprint("v1", __name__, url_prefix="/v1")
 _v1_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
 
 
+@v1.after_request
+def _cors(resp):
+    """Allow any origin to call the kernel. Safe because /v1/ authenticates with
+    a Bearer token (a header), not a cookie — so there are no credentials for a
+    malicious origin to ride. This is what lets a third-party browser UI on a
+    different domain build on the kernel. Preflight (OPTIONS) is answered by
+    Flask's automatic handler, which this still decorates with the headers."""
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+    return resp
+
+
 def _llm_kwargs() -> dict:
-    """Pull model/provider/api_key/host from request JSON if provided."""
+    """Pull model/provider/api_key/host from request JSON if provided.
+
+    Falls back to the server's own provider key (API_KEY in the env) when the
+    client sends none — so a front end needs only its /v1/ Bearer token, not the
+    upstream provider key. This is what makes the kernel usable out of the box.
+    """
     body = request.get_json(silent=True) or {}
     out = {}
     for key in ("model", "provider", "api_key", "host"):
         if key in body:
             out[key] = body[key]
+    if not out.get("api_key"):
+        out["api_key"] = os.environ.get("API_KEY", "")
     return out
 
 
@@ -35,6 +55,8 @@ def _form_llm_kwargs(extra_keys=()) -> dict:
         val = request.form.get(key)
         if val:
             out[key] = val
+    if not out.get("api_key"):
+        out["api_key"] = os.environ.get("API_KEY", "")
     return out
 
 

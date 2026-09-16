@@ -5,6 +5,7 @@ import time
 import cv2
 
 from core.llm.client import generate
+import core.misconceptions
 from core.vision.image_handler import transcribe
 from core.vision.preprocess import preprocess
 from core.vision.segment import crops, segment
@@ -65,9 +66,16 @@ CHECK_PROMPT = (
     "Only a genuine mathematical mistake — wrong arithmetic, a bad algebraic "
     "step, a sign error — loses a method mark. "
     "Reply YES if it follows. "
-    "If it does not, reply NO followed by one sentence in an examiner's voice: "
-    "name the method mark lost at this line and the correct step the student "
-    "should have taken. Start your answer with YES or NO."
+    "If it does NOT, reply NO, then a category in square brackets, then one "
+    "sentence in an examiner's voice naming the correct step the student should "
+    "have taken. Choose the category from ONLY these, based on the actual mistake:\n"
+    "[sign] a + / - sign is wrong (e.g. dividing by a negative and keeping it positive)\n"
+    "[arithmetic] a pure number calculation is wrong (e.g. 7 + 8 taken as 14)\n"
+    "[algebra_step] a term was dropped, a step skipped, or the wrong operation "
+    "used to rearrange\n"
+    "[other] none of these\n"
+    "For example: 'NO [sign] Divide both sides by -3 to obtain x = -4.' "
+    "Start your answer with YES or NO."
 )
 
 MIN_STEP_CHARS = 2
@@ -165,6 +173,7 @@ def check_working(path, *, provider, model, host, api_key, vision_model) -> dict
 
     error_index = None
     explanation = None
+    category = None
     for i in range(1, len(steps)):
         if _low_confidence(steps[i]) or _low_confidence(steps[i - 1]):
             continue
@@ -182,8 +191,11 @@ def check_working(path, *, provider, model, host, api_key, vision_model) -> dict
                                              provider=provider, api_key=api_key))
         if reply.strip().upper().startswith("NO"):
             error_index = i
-            explanation = reply.strip()[2:].strip()
-            trace.append(f"Line {i + 1} does not follow from line {i} — flagged as the error.")
+            rest = reply.strip()[2:].strip()
+            tag = re.match(r"\[([a-z_]+)\]", rest)
+            category = core.misconceptions.normalise(tag.group(1) if tag else "")
+            explanation = rest[tag.end():].strip() if tag else rest
+            trace.append(f"Line {i + 1} does not follow from line {i} — flagged as the error ({category}).")
             break
     if error_index is None:
         trace.append("Every step follows — no error found.")
@@ -194,6 +206,7 @@ def check_working(path, *, provider, model, host, api_key, vision_model) -> dict
         "image_size": [binary.shape[0], binary.shape[1]],
         "error_index": error_index,
         "explanation": explanation,
+        "category": category,
         "annotated": _annotate(binary, boxes, error_index),
         "trace": trace,
     }

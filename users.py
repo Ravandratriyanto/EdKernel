@@ -92,6 +92,21 @@ def init() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_attempts_user "
                 "ON quiz_attempts (user_id, started_at)"
             )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS misconceptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES uses (id) ON DELETE CASCADE,
+                    curriculum TEXT NOT NULL,
+                    topic TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    ts INTEGER NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_misconceptions_curric "
+                "ON misconceptions (curriculum, topic, category)"
+            )
+
             # Migration: add role column to existing databases
             try:
                 conn.execute(
@@ -527,4 +542,36 @@ def get_all_progress(curriculum: str) -> list[dict]:
     finally:
         conn.close()
     return [dict(r) for r in rows]
+def record_misconception(user_id: int, curriculum: str, topic: str, category: str) -> None:
+    """Append one categorised error. Append-only, so the teacher view can count
+    both distinct students and total occurrences later."""
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO misconceptions (user_id, curriculum, topic, category, ts) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (user_id, curriculum, topic, category, int(time.time())),
+            )
+    finally:
+        conn.close()
 
+
+def get_misconceptions(curriculum: str) -> list[dict]:
+    """Class-wide misconception map: per (topic, category), how many distinct
+    students hit it and how many times total — for the teacher view."""
+    conn = _connect()
+    try:
+        rows = conn.execute("""
+            SELECT topic, category,
+                   COUNT(DISTINCT user_id) AS students,
+                   COUNT(*)                AS occurrences,
+                   MAX(ts)                 AS last_seen
+            FROM misconceptions
+            WHERE curriculum = ?
+            GROUP BY topic, category
+            ORDER BY students DESC, occurrences DESC
+        """, (curriculum,)).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
