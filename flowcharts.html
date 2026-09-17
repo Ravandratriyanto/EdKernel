@@ -102,7 +102,7 @@
 
 <header>
   <h1>EdKernel — Codebase Flowcharts</h1>
-  <p>One diagram per concern · Updated 2026-09-14 · kernel architecture (swappable UIs over /v1/) · OpenCV 5 pipeline · server-marked quizzes · progress · AWS Fargate</p>
+  <p>One diagram per concern · Updated 2026-09-17 · single curriculum (GCSE Maths) · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · AWS Fargate (live)</p>
   <p>Building a front end? The public kernel API contract is in <code>docs/KERNEL_API.md</code>.</p>
 </header>
 
@@ -261,7 +261,7 @@ graph TD
     AUTH --> UDB[("users.db\nSQLite at DB_DIR\nusers / sessions\napi_keys / progress")]
     APP -.->|"docker to ECR"| FARG["AWS ECS Fargate + ALB\nEFS holds users.db\nand ChromaDB"]
 
-    EVALS["evals/\nrun · regress · learn"] -.->|test calls| CORE
+    EVALS["evals/\nrun · regress · learn\nvision · error_faithfulness"] -.->|test calls| CORE
 
     style APP   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style CORE  fill:#0d2a0d,stroke:#6fdd6f,color:#e8e8e8
@@ -354,7 +354,7 @@ flowchart TD
     <h2>OpenCV 5 Pipeline — photo of working → first wrong step</h2>
     <span class="badge badge-vision">VISION</span>
   </div>
-  <div class="section-desc">The perception half of the agentic loop, and the part the competition judges on. A phone photo is rectified, deskewed, binarised and cut into one crop per working line before any model is called. The LLM never sees the raw photo — it sees one line at a time. Fires automatically when a student attaches an image in Learn mode.</div>
+  <div class="section-desc">The perception half of the agentic loop, and the part the competition judges on. A phone photo is rectified, deskewed, binarised and cut into one crop per working line before any model is called. The LLM never sees the raw photo — it sees one line at a time. OpenCV's role here is <strong>deterministic spatial grounding</strong> — the verifiable box coordinates a vision LLM cannot reliably produce — which lets the system draw a red box on the exact wrong line. A located error is then categorised (coarse tag emitted by the examiner) and fed to the class misconception map. Fires automatically when a student attaches an image in Learn mode.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -369,8 +369,10 @@ flowchart TD
     SEG --> CROP["crops()\none image per working line\nplus box coordinates"]
     CROP --> TRANS["image_handler.transcribe()\nvision LLM, one call per line\ndrop_reasoning strips think blocks"]
     TRANS --> EVAL["step_checker.check_working()\nLLM judges the line sequence\nfinds the FIRST wrong step"]
-    EVAL --> OUT["steps + boxes + error_index\n+ explanation"]
-    OUT --> UI["index.html runStepChecker()\ncanvas overlay\ngreen = correct, red = error line"]
+    EVAL --> OUT["steps + boxes + error_index\n+ explanation + category\n(examiner emits coarse tag)"]
+    OUT --> UI["index.html runStepChecker()\ncanvas overlay = spatial grounding\ngreen = correct, red = error line"]
+    OUT -->|"error located"| MISC["app.py\ncore.misconceptions.normalise(category)\nusers.record_misconception()"]
+    MISC --> MDB[("misconceptions table\ncurriculum / topic / category\n→ class misconception map")]
 
     BOTTLE["COOL benchmark: HoughLinesP is\nthe bottleneck on both architectures\n240 ms x86 vs 1587 ms Graviton\nplanned swap: contour-based rotation\nreusing the findContours output"]
     DESK -.-> BOTTLE
@@ -378,6 +380,7 @@ flowchart TD
     style OUT    fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
     style EVAL   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style TRANS  fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style MDB    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style BOTTLE fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
     </div>
   </div>
@@ -498,7 +501,7 @@ flowchart TD
     <h2>Progress Tracking — mastery per topic</h2>
     <span class="badge badge-auth">AUTH</span>
   </div>
-  <div class="section-desc">A fourth SQLite table in users.py, written only from a server-side comparison against the stored answer key. Mastery is correct/attempts, rendered as a coloured dot on the topic list and used to pick the Continue recommendation. Right and wrong both count, once per question per attempt.</div>
+  <div class="section-desc">A SQLite table in users.py, written only from a server-side comparison against the stored answer key. Mastery is correct/attempts, rendered as a coloured dot on the topic list and used to pick the Continue recommendation. Right and wrong both count, once per question per attempt. A companion <code>misconceptions</code> table (written by the OpenCV step checker, not by MCQ answers) aggregates <em>why</em> students were wrong into the class misconception map.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -512,11 +515,15 @@ flowchart TD
     ATT2[("quiz_attempts\nscore, total, tab_switches\nsubmitted_at")] --> GET3["GET /api/teacher/curricula/:cid/attempts\nusers.list_attempts()"]
     GET3 --> TDASH
 
+    MDB2[("misconceptions table\ncurriculum / topic / category / ts\nwritten by the OpenCV step checker")] --> GET4["GET /api/teacher/curricula/:cid/misconceptions\nusers.get_misconceptions()\nCOUNT(DISTINCT user) per topic + category"]
+    GET4 --> TDASH
+
     GET1 --> DOTS["Mastery dots on topic list\n0.8 or more = green\nabove 0 = yellow\nuntouched = grey"]
     GET1 --> CONT["Continue banner\nrecommended next topic"]
-    GET2 --> TDASH["Teacher dashboard\nclass-wide view"]
+    GET2 --> TDASH["Teacher dashboard\nclass-wide view + misconception map"]
 
     style TBL   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style MDB2  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style DOTS  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     </div>
   </div>
@@ -749,7 +756,7 @@ flowchart TD
 flowchart TD
     subgraph FLAGS["Flags — defaults"]
         F1["auth_required: true\nfalse = everyone is treated as admin"]
-        F2["stub_testing: true\ntrue = demo curriculum shown to students"]
+        F2["stub_testing: true\n(demo curriculum removed —\nflag now inert for curricula)"]
         F3["rate_limiting: true\nfalse = no 20-req/min cap during testing"]
     end
 
@@ -763,7 +770,7 @@ flowchart TD
 
     LOAD --> BEF2["before_request\ncheck auth_required\nAND DEV_BYPASS_AUTH env var"]
     LOAD --> RLC["_check_llm_rate()\nskip if rate_limiting is false"]
-    LOAD --> CURIC["GET /api/curricula\nfilter demo if stub_testing is false"]
+    LOAD --> CURIC["GET /api/curricula\nreturns gcse-maths (sole curriculum)"]
 
     style SAVE fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style LOAD fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
@@ -851,7 +858,7 @@ flowchart TD
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
-    START["python -m core.rag.ingest\n--curriculum merdeka-indonesia-curriculum"] --> CUR2["load curriculum manifest\nget collection name\nget reference_dir + papers_dir"]
+    START["python -m core.rag.ingest\n--curriculum gcse-maths"] --> CUR2["load curriculum manifest\nget collection name\nget reference_dir + papers_dir"]
 
     CUR2 --> BUILD["build(collection_name, ref_dir, papers_dir)"]
     BUILD --> DEL["delete old collection"]

@@ -141,9 +141,28 @@ Benchmark script: `bench/graviton_standalone.py` (no external dependencies). Raw
 
 **Key caveat:** The two runs use different OpenCV versions (5.0 x86 vs 4.5 Graviton) and different instance classes. OpenCV 5 introduced significant SIMD rewrites for `warpPerspective` and `resize` on x86; those gains do not exist in 4.5 on ARM. A fair comparison requires OpenCV 5 on both — which is the production target.
 
-### Action from findings
+### Action from findings — done, and re-measured
 
-`HoughLinesP` is used only for deskew (estimating page rotation). We are replacing it with a contour-based rotation estimator that uses the same `findContours` output already computed in the segmentation stage — an operation where Graviton wins. This eliminates the bottleneck and plays to Graviton's strength.
+`HoughLinesP` was used only for deskew (estimating page rotation). **We replaced it**
+with a contour-based estimator (`_contour_estimate` in `preprocess.py`): it takes
+the min-area rectangle of each text-line blob from the *same* `findContours` output
+the segmentation stage already computes, and reads the tilt off the longest box
+edge. No second Hough pass.
+
+Re-measured on this hardware, the op it removes vs the op it reuses:
+
+| Op | Mean (ms) | Notes |
+|---|---:|---|
+| `HoughLinesP` (removed) | **445.9** | 2.2 img/s — 20× slower than the next op |
+| `findContours` (reused) | **1.3** | already computed for segmentation |
+
+Verified for correctness on the 9 labelled sample photos: the final deskew angle
+(after the projection-profile refinement the seed feeds) matches the old
+Hough-seeded result within **< 0.1° on 6 of 9** and **< 0.75° on 8 of 9**; one
+outlier (v5) differs by 1.38°, still within tolerance for downstream segmentation (box
+counts unchanged). Net: the single heaviest OpenCV call is gone from the hot path
+with no quality regression, and the replacement leans on `findContours` — an op
+where Graviton *wins*.
 
 ---
 

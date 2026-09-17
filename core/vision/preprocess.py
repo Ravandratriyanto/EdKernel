@@ -75,17 +75,32 @@ def _rotate(img, deg):
                           borderMode=cv2.BORDER_REPLICATE)
 
 
-def _hough_estimate(small):
-    """Median tilt of the near-horizontal text lines, or None."""
+def _contour_estimate(small):
+    """Median tilt of the text-line blobs, or None.
+
+    Reuses the same contour machinery as segmentation instead of a second
+    HoughLinesP pass — Hough was the COOL-benchmark bottleneck (240 ms x86 /
+    1587 ms Graviton). ink_mask() already closes each written line into a
+    horizontal streak, so its external contours ARE the lines; the min-area
+    rectangle of each gives that line's tilt. The angle is read from the
+    longest edge of the box (via boxPoints) so it is independent of OpenCV's
+    version-dependent minAreaRect angle convention.
+    """
     m = ink_mask(small)
-    lines = cv2.HoughLinesP(m, 1, np.pi / 720, threshold=80,
-                            minLineLength=int(m.shape[1] * 0.25), maxLineGap=20)
-    if lines is None or len(lines) == 0:
+    contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
         return None
-    # OpenCV 5 returns (N, 4). OpenCV 4 returned (N, 1, 4) - reshape covers both.
+    min_len = m.shape[1] * 0.15          # ignore specks; a line spans the page
     angs = []
-    for x1, y1, x2, y2 in lines.reshape(-1, 4):
-        a = np.degrees(np.arctan2(float(y2 - y1), float(x2 - x1)))
+    for c in contours:
+        rect = cv2.minAreaRect(c)
+        box = cv2.boxPoints(rect)
+        # angle of the longest edge, measured from horizontal
+        p1, p2 = max(((box[i], box[(i + 1) % 4]) for i in range(4)),
+                     key=lambda e: np.hypot(*(e[1] - e[0])))
+        if np.hypot(*(p2 - p1)) < min_len:
+            continue
+        a = np.degrees(np.arctan2(float(p2[1] - p1[1]), float(p2[0] - p1[0])))
         if a > 90:  a -= 180
         if a < -90: a += 180
         if abs(a) <= MAX_TILT:
@@ -103,7 +118,7 @@ def skew_angle(img):
         r = cv2.warpAffine(mask, M, (w, h), flags=cv2.INTER_NEAREST, borderValue=0)
         return float(np.var(r.sum(axis=1).astype(float)))
 
-    start = _hough_estimate(small) or 0.0
+    start = _contour_estimate(small) or 0.0
     coarse = max(np.arange(start - SEARCH_SPAN, start + SEARCH_SPAN + 1e-9, 0.5), key=score)
     return float(max(np.arange(coarse - 0.5, coarse + 0.5 + 1e-9, SEARCH_STEP), key=score))
 
