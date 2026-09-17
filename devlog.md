@@ -4419,3 +4419,66 @@ via prompt) and the desktop's (2/9 → segment fixes) measured different code
 states. After both land — desktop's `segment()` crop fix + laptop's transcribe
 v2 + method-marks prompt — **neither number is current**; a clean re-run on the
 merged tree is needed. Blocked today by Groq's daily token limit (200k TPD).
+
+## Session 30 — 2026-09-17
+
+### Contour deskew — killed the COOL bottleneck, verified
+Replaced the `HoughLinesP` seed in `preprocess.py` with `_contour_estimate`:
+min-area rectangle of each text-line blob from the `findContours` output the
+segmenter already computes, tilt read off the longest box edge (convention-safe).
+Verified vs the old Hough seed on all 9 sample photos: **final deskew angle within
+<0.1° on 6/9, <0.75° on 8/9** (one 1.38° outlier, v5 — still segments fine). The
+projection-profile refinement absorbs the wobblier seed. ~10–15× faster locally.
+
+### Real Graviton COOL benchmark — fair at last, and an honest correction
+Launched a real `t4g.small` (Graviton2), ran the op suite on **OpenCV 5.0** (x86
+regenerated on 5.0 too — the old 5.0-vs-4.5 caveat is gone), pulled results,
+terminated. `HoughLinesP` = **1737 ms on ARM** (0.6 img/s, ~97% of naive pipeline
+time), 3.8× x86. **Correction:** the old table's "Graviton wins findContours /
+ink_mask / binarise" was a 4.5-vs-5.0 artifact — on equal 5.0, x86 wins every op.
+Report §3 rewritten with real numbers. The COOL story is now honest: ARM isn't
+faster per-op; removing HoughLinesP collapses ARM per-image ~1.75 s → ~40 ms (~40×),
+which is what makes the ~20%-cheaper hardware viable. Bench data in
+`bench/results/{x86,graviton}.json`; architecture PNG refreshed (`make_diagram.py`).
+
+### Error-faithfulness thesis — tested, and it did NOT hold
+Built `evals/error_faithfulness.py` to prove the wedge "naive prompts correct
+student errors, ours preserve them" (the v8 `x=4`→`x=-4` anecdote). Result at N=3:
+**error-preservation 2/3 vs 2/3 — identical**, and the apparent line-fidelity gap
+was a `_norm` `\(\)`-delimiter scoring artifact, not real correction. On qwen3.8
+with `reasoning_effort=none` the naive prompt reads errors about as faithfully as
+the guarded one. **Do not pitch error-faithfulness** unless a clean N≥20 run
+resurrects it. The eval doing its job (killing a false claim before the video) is
+the win. Separately confirmed: misconception *categorisation* is a different axis
+and is fine at coarse grain (`sign`/`arithmetic`/`algebra_step`/`other`, examiner-
+emitted).
+
+### Class-home UI restructure — tiles-only nav
+`static/index.html`: the class home is now header + four tiles (**Topics · Learn ·
+Papers · Quiz**), nothing dumped below by default (killed the "messy beneath").
+Topics is a tile → reveals a **drill-in**: a topic tile grid (checkmark ✓ at ≥80%
+mastery, from existing `progress` data) → tap a topic → its subtopics + objectives
++ "Learn this topic" / "Practice questions" buttons. `Questions` (student Qs +
+flashcards) was **moved behind the Topics tile** (its tab), not deleted. Removed
+the redundant **Upload** tile — photographing working already lives in Learn's
+attach button. New JS: `openTopic` / `startTopic`; render moved to a grid in
+`loadCanvasClasswork`.
+
+### Bug found + fixed: the misconception map was silently dead in production
+`basePayload()` sent `curriculum_id` but never `topic`, and the record hook is
+`if cid and topic:` — so the flagship misconception map **never recorded from real
+student uploads**. Fixed by sending `topic: currentTopic` on both
+`/api/check_working` calls. (Needs a redeploy to go live.)
+
+### Teacher UI overclaim closed
+The report said the misconception map is "AI-suggested, teacher-reviewed" but the
+live teacher panel showed the category as a bare table with no hedge. Added a
+one-line caveat under the panel header — the UI now says what the report admits.
+
+### Still open / honest gaps
+- **No user interviews / classroom validation** — the weakest spot for Impact
+  (20%). Highest-leverage non-code work left, alongside the demo video.
+- **Bedrock** still pending (AWS support escalated the case, no ETA) — keep it
+  "pending verification" in report/diagram; Groq carries inference.
+- **Fargate persistence** — `users.db` / ChromaDB reset on task recycle; seed the
+  demo account right before recording.

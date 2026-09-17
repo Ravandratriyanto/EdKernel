@@ -1,95 +1,95 @@
 {
   "system": {
-    "python": "3.10.12",
-    "opencv": "4.5.4",
-    "platform": "Linux-6.8.0-1063-aws-aarch64-with-glibc2.35",
+    "python": "3.9.25",
+    "opencv": "5.0.0",
+    "platform": "Linux-6.18.48-107.148.amzn2023.aarch64-aarch64-with-glibc2.34",
     "machine": "aarch64",
     "cpu": "aarch64",
-    "numpy": "1.21.5"
+    "numpy": "2.0.2"
   },
   "results": [
     {
       "operation": "resize",
-      "mean_ms": 0.586,
-      "std_ms": 0.029,
-      "img_per_s": 1706.0,
+      "mean_ms": 0.374,
+      "std_ms": 0.011,
+      "img_per_s": 2674.68,
       "n_iters": 50
     },
     {
       "operation": "cvtColor",
-      "mean_ms": 0.872,
-      "std_ms": 0.01,
-      "img_per_s": 1146.28,
+      "mean_ms": 0.331,
+      "std_ms": 0.012,
+      "img_per_s": 3023.74,
       "n_iters": 50
     },
     {
       "operation": "bilateralFilter",
-      "mean_ms": 38.529,
-      "std_ms": 0.082,
-      "img_per_s": 25.95,
+      "mean_ms": 27.476,
+      "std_ms": 0.077,
+      "img_per_s": 36.4,
       "n_iters": 50
     },
     {
       "operation": "adaptiveThreshold",
-      "mean_ms": 9.026,
-      "std_ms": 0.036,
-      "img_per_s": 110.79,
+      "mean_ms": 8.128,
+      "std_ms": 0.144,
+      "img_per_s": 123.03,
       "n_iters": 50
     },
     {
       "operation": "Canny",
-      "mean_ms": 2.356,
-      "std_ms": 0.07,
-      "img_per_s": 424.53,
+      "mean_ms": 2.15,
+      "std_ms": 0.032,
+      "img_per_s": 465.18,
       "n_iters": 50
     },
     {
       "operation": "morphologyEx",
-      "mean_ms": 1.84,
-      "std_ms": 0.016,
-      "img_per_s": 543.56,
+      "mean_ms": 2.183,
+      "std_ms": 0.025,
+      "img_per_s": 458.01,
       "n_iters": 50
     },
     {
       "operation": "findContours",
-      "mean_ms": 1.386,
-      "std_ms": 0.018,
-      "img_per_s": 721.31,
+      "mean_ms": 1.679,
+      "std_ms": 0.023,
+      "img_per_s": 595.56,
       "n_iters": 50
     },
     {
       "operation": "HoughLinesP",
-      "mean_ms": 1587.227,
-      "std_ms": 64.107,
-      "img_per_s": 0.63,
+      "mean_ms": 1736.591,
+      "std_ms": 73.145,
+      "img_per_s": 0.58,
       "n_iters": 50
     },
     {
       "operation": "warpPerspective",
-      "mean_ms": 17.809,
-      "std_ms": 0.185,
-      "img_per_s": 56.15,
+      "mean_ms": 5.188,
+      "std_ms": 0.05,
+      "img_per_s": 192.75,
       "n_iters": 50
     },
     {
       "operation": "ink_mask",
-      "mean_ms": 1.834,
-      "std_ms": 0.034,
-      "img_per_s": 545.29,
+      "mean_ms": 1.353,
+      "std_ms": 0.043,
+      "img_per_s": 739.17,
       "n_iters": 50
     },
     {
       "operation": "segment",
-      "mean_ms": 3.421,
-      "std_ms": 0.03,
-      "img_per_s": 292.29,
+      "mean_ms": 4.153,
+      "std_ms": 0.093,
+      "img_per_s": 240.79,
       "n_iters": 30
     },
     {
       "operation": "binarise (full)",
-      "mean_ms": 48.963,
-      "std_ms": 0.77,
-      "img_per_s": 20.42,
+      "mean_ms": 33.493,
+      "std_ms": 0.183,
+      "img_per_s": 29.86,
       "n_iters": 20
     }
   ]

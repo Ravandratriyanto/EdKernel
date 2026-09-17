@@ -108,38 +108,54 @@ We benchmarked EdKernel's actual OpenCV pipeline operations on two architectures
 
 | | x86 baseline | Graviton (ARM) |
 |---|---|---|
-| Instance | Local dev (Arch Linux) | AWS t4g.micro (ap-southeast-1) |
-| Architecture | x86\_64 | aarch64 |
-| OpenCV | 5.0.0.93 | 4.5.4 |
-| Python | 3.14 | 3.10.12 |
+| Instance | Local dev (Arch Linux) | AWS t4g.small (ap-southeast-1) |
+| Architecture | x86\_64 | aarch64 (Graviton2) |
+| OpenCV | 5.0.0 | 5.0.0 |
+| Python | 3.14 | 3.9 |
 | Benchmark | 50 iterations per op (3 warm-up) | 50 iterations per op (3 warm-up) |
 
-Benchmark script: `bench/graviton_standalone.py` (no external dependencies). Raw results: `bench/results/x86.json`, `bench/results/graviton.json`.
+**Both runs use OpenCV 5.0.0** — the earlier version-mismatch caveat (5.0 vs 4.5)
+is resolved, so this is a fair architecture comparison. Benchmark script:
+`bench/graviton_standalone.py` (no external dependencies). Raw results:
+`bench/results/x86.json`, `bench/results/graviton.json`.
 
-### Results
+### Results (OpenCV 5.0 on both)
 
-| Operation | x86 (ms) | Graviton (ms) | Ratio | Notes |
-|---|---:|---:|---:|---|
-| resize | 0.26 | 0.59 | 2.3× slower | SIMD gap, OpenCV 5 vs 4 |
-| cvtColor | 0.29 | 0.87 | 3.0× slower | |
-| bilateralFilter | 33.00 | 38.53 | 1.2× slower | Both slow; compute-bound |
-| adaptiveThreshold | 8.32 | 9.03 | 1.1× slower | Effectively equal |
-| Canny | 1.89 | 2.36 | 1.3× slower | |
-| morphologyEx | 0.80 | 1.84 | 2.3× slower | |
-| **findContours** | **1.77** | **1.39** | **0.8× — Graviton wins** | ARM NEON benefits pointer-chasing |
-| HoughLinesP | 240.09 | 1587.23 | 6.6× slower | Pipeline bottleneck on both |
-| warpPerspective | 2.56 | 17.81 | 7.0× slower | Major OpenCV 5 SIMD rewrite |
-| ink\_mask | 4.58 | 1.83 | 0.4× — Graviton wins | Otsu threshold; ARM NEON |
-| segment pipeline | 2.68 | 3.42 | 1.3× slower | |
-| binarise (full) | 295.66 | 48.96 | 0.2× — Graviton wins | Different input path |
+| Operation | x86 (ms) | Graviton (ms) | Ratio |
+|---|---:|---:|---:|
+| resize | 0.25 | 0.37 | 1.5× slower |
+| cvtColor | 0.19 | 0.33 | 1.8× slower |
+| bilateralFilter | 21.63 | 27.48 | 1.3× slower |
+| adaptiveThreshold | 5.82 | 8.13 | 1.4× slower |
+| Canny | 1.28 | 2.15 | 1.7× slower |
+| morphologyEx | 0.60 | 2.18 | 3.6× slower |
+| findContours | 1.33 | 1.68 | 1.3× slower |
+| **HoughLinesP** | **452.86** | **1736.59** | **3.8× slower** |
+| warpPerspective | 2.61 | 5.19 | 2.0× slower |
+| ink\_mask | 1.09 | 1.35 | 1.2× slower |
+| segment pipeline | 1.97 | 4.15 | 2.1× slower |
+| binarise (full) | 25.60 | 33.49 | 1.3× slower |
 
 ### Analysis
 
-**Primary finding: `HoughLinesP` is the bottleneck on both architectures.** On x86 it costs 240 ms per image (81% of total pipeline time). On Graviton t4g.micro it costs 1,587 ms — 6.6× worse. This is our clearest optimization target.
+**Primary finding: `HoughLinesP` is the bottleneck on both, and catastrophic on
+Graviton** — 1,737 ms per image (0.6 img/s), 3.8× the x86 cost and ~97% of the
+naive pipeline's time on ARM. It is the clearest optimization target, and it
+disproportionately punishes the cheaper hardware.
 
-**Where Graviton wins:** `findContours` (1.3×) and `ink_mask` (2.5×) run faster on ARM. Both are memory-traversal workloads that benefit from ARM NEON's memory bandwidth characteristics. The segment pipeline, which chains morphology → findContours, is within 1.3× of x86.
+**With OpenCV 5.0 on both, x86 is faster on every operation (1.2–3.8×).** This
+corrects an earlier, unfair result: a prior run showed Graviton "winning"
+`findContours`, `ink_mask` and `binarise`, but that compared OpenCV 4.5 on ARM
+against 5.0 on x86. On equal OpenCV 5.0, x86's SIMD advantage holds across the
+board — the honest result, not the one we hoped for.
 
-**Key caveat:** The two runs use different OpenCV versions (5.0 x86 vs 4.5 Graviton) and different instance classes. OpenCV 5 introduced significant SIMD rewrites for `warpPerspective` and `resize` on x86; those gains do not exist in 4.5 on ARM. A fair comparison requires OpenCV 5 on both — which is the production target.
+**The COOL win is not raw op speed — it is that the optimization makes the cheap
+hardware viable.** Replacing `HoughLinesP` with the contour-based deskew (below)
+removes ~1,737 ms from every image on Graviton, collapsing per-image pipeline
+time from ~1.75 s to ~40 ms — roughly a **40× pipeline speedup on ARM**. Graviton
+(t4g) runs ~20% cheaper per hour than the equivalent x86 (t3); once the bottleneck
+is gone, the remaining pipeline is light enough that the cheaper ARM instance
+becomes the cost-efficient choice for this CPU-bound CV workload.
 
 ### Action from findings — done, and re-measured
 

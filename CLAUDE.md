@@ -107,6 +107,38 @@ so it is the fallback once 3.6 is spent.
 `qwen3.8` also returns transient **503 "over capacity"** under load, which killed
 3-4 cases per run even with backoff. Retries help; luck helps more.
 
+## Features built (as of session 30)
+
+- **Class home is tiles-only nav** (`static/index.html`) — header + four tiles:
+  **Topics · Learn · Papers · Quiz**. Nothing renders below by default. Topics
+  reveals a drill-in (topic tile grid → detail with subtopics/objectives +
+  "Learn this topic" / "Practice questions"); checkmark ✓ at ≥80% mastery from
+  the existing `progress` table. `Questions` moved *behind* the Topics tile (its
+  tab), not deleted. **Upload tile removed** — working-check lives in Learn's
+  attach button. Render + drill-in: `loadCanvasClasswork`, `openTopic`,
+  `startTopic`.
+- **Misconception map records from real uploads now** — `basePayload()` never
+  sent `topic`, so the hook `if cid and topic:` never fired; fixed by sending
+  `topic: currentTopic` on both `/api/check_working` calls. **Needs a redeploy to
+  go live.** Categories are coarse + examiner-emitted (`sign`/`arithmetic`/
+  `algebra_step`/`other`); teacher UI carries an "AI-suggested, verify" caveat.
+- **COOL: real Graviton2 benchmark, OpenCV 5.0 on both** — `report.md` §3 +
+  `bench/results/*.json` are real, fair numbers. `HoughLinesP` (1737 ms ARM) is
+  the bottleneck; replaced in the deskew path by a contour estimate
+  (`_contour_estimate` in `preprocess.py`), verified no regression. The old
+  "Graviton wins some ops" table was a 4.5-vs-5.0 artifact — corrected.
+- **Error-faithfulness thesis tested FLAT** (`evals/error_faithfulness.py`, N=3:
+  2/3 vs 2/3). **Do not pitch "we preserve student errors better than frontier"**
+  unless a clean N≥20 run revives it. The categorisation axis is separate and fine.
+- **Positioning / false-ad caution:** the GCSE-maths tutor is a *distro* of the
+  engine (`core/` + `/v1/`). Defensible judge-facing claims: *deterministic
+  spatial grounding on real paper · evidence-derived misconception map ·
+  open/self-hostable*. Say **"engine"** not "kernel" to judges (no LTI, no
+  external adopters → "kernel" invites the "that's not a kernel" flag). Bedrock
+  still pending (AWS escalated, no ETA). **No user interviews yet** — the Impact
+  gap; demo video + a couple of teacher/student interviews are the top remaining
+  non-code work.
+
 ## Features built (as of session 29)
 
 - **Positioning: kernel, not app.** The differentiator is NOT "reads handwritten
