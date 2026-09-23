@@ -574,7 +574,19 @@ def api_start():
              tokens=getattr(raw, "usage", {}),
              latency_ms=round((time.monotonic() - started) * 1000))
 
+    if g.user:
+        users.record_activity(g.user["id"], "lesson")
+
     return jsonify({"response": response, "messages": _strip_images(messages), "done": "Topic complete." in response})
+
+
+@app.route("/api/gamify")
+def api_gamify():
+    """Streak / XP / daily missions / sidequests for the current student."""
+    if g.user is None:
+        return jsonify({"error": "Not logged in"}), 401
+    return jsonify(users.get_gamify(g.user["id"]))
+
 
 @app.route("/api/reply", methods=["POST"])
 def api_reply():
@@ -686,6 +698,7 @@ def api_reply():
     cid = (data.get("curriculum_id") or "").strip()
     if correct is not None and g.user and cid and topic:
         users.record_progress(g.user["id"], cid, topic, correct)
+        users.record_activity(g.user["id"], "answer", correct=correct)
 
     return jsonify({
         "response": response,
@@ -874,6 +887,9 @@ def api_check_working():
         if cid and topic:
             category = core.misconceptions.normalise(result.get("category"))
             users.record_misconception(g.user["id"], cid, topic, category)
+
+    if g.user:
+        users.record_activity(g.user["id"], "check_working")
 
     return jsonify(result)
 
@@ -1405,6 +1421,7 @@ def api_quiz_answer():
     if qid not in attempt["marked"]:
         # Once per question. Clicking twice must not inflate the attempt count.
         users.record_progress(g.user["id"], attempt["curriculum"], attempt["topic"], correct)
+        users.record_activity(g.user["id"], "answer", correct=correct)
     users.record_answer(attempt["id"], g.user["id"], qid, choice, correct)
 
     return jsonify({"correct": correct,
@@ -1447,6 +1464,7 @@ def api_quiz_submit():
         # A resubmit re-renders the review but never writes progress again.
         if not resubmit and qid not in attempt["marked"]:
             users.record_progress(g.user["id"], attempt["curriculum"], attempt["topic"], ok)
+            users.record_activity(g.user["id"], "answer", correct=ok)
             users.record_answer(attempt["id"], g.user["id"], qid, chosen, ok)
         review.append({
             "id":             qid,
@@ -1582,6 +1600,7 @@ def api_papers_hint():
         topic = (data.get("topic") or "").strip()
         if cid and topic:
             users.record_progress(g.user["id"], cid, topic, correct=False)
+            users.record_activity(g.user["id"], "answer", correct=False)
 
     opts_text = "\n".join(f"{o['letter']}) {o['text']}" for o in options)
     if wrong_streak == 1:

@@ -772,6 +772,27 @@
     .topic-action.learn { background: #6366f1; color: white; }
     .topic-action.practice { background: #ede9fe; color: #5b21b6; }
 
+    /* gamification */
+    #gamify-bar { display:flex; gap:10px; margin:8px 0 4px; flex-wrap:wrap; }
+    #gamify-bar .gb-item {
+      font-size:0.8rem; font-weight:700; color:#c4b5fd;
+      background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.35);
+      border-radius:20px; padding:3px 12px;
+    }
+    #quests-panel { max-width:760px; margin:0 auto; padding:8px 4px 24px; }
+    .gd-head { display:flex; gap:12px; margin-bottom:8px; }
+    .gd-stat { flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; text-align:center; }
+    .gd-num { font-size:1.3rem; font-weight:800; color:#1a1a2e; }
+    .gd-cap { font-size:0.72rem; color:#9ca3af; margin-top:2px; }
+    .gd-title { font-size:0.9rem; color:#1a1a2e; margin:18px 0 8px; }
+    .q-row { display:flex; align-items:center; gap:10px; padding:8px 0; }
+    .q-row.done .q-label { color:#16a34a; }
+    .q-label { flex:0 0 42%; font-size:0.82rem; color:#374151; }
+    .q-bar { flex:1; height:8px; background:#f3f4f6; border-radius:6px; overflow:hidden; }
+    .q-fill { height:100%; background:#8b5cf6; border-radius:6px; transition:width .3s; }
+    .q-row.done .q-fill { background:#22c55e; }
+    .q-count { flex:0 0 auto; font-size:0.75rem; color:#6b7280; font-variant-numeric:tabular-nums; }
+
     #progress-banner {
       background: #ede9fe; border-radius: 10px;
       padding: 10px 16px; margin-bottom: 14px;
@@ -1148,6 +1169,7 @@
   <div id="canvas-banner">
     <h2 id="canvas-title"></h2>
     <div class="banner-sub" id="canvas-sub"></div>
+    <div id="gamify-bar" style="display:none"></div>
     <div id="service-tiles">
       <div class="svc-tile" onclick="enterService('topics')">
         <div class="svc-icon" style="background:rgba(139,92,246,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
@@ -1169,12 +1191,21 @@
         <div class="svc-name">Quiz</div>
         <div class="svc-desc">Timed answers</div>
       </div>
+      <div class="svc-tile" onclick="enterService('quests')">
+        <div class="svc-icon" style="background:rgba(244,114,22,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+        <div class="svc-name">Quests</div>
+        <div class="svc-desc">Missions &amp; streak</div>
+      </div>
     </div>
   </div>
 
   <div id="canvas-tabs" style="display:none">
     <button class="canvas-tab active" id="tab-btn-classwork" onclick="showCanvasTab('classwork')">Topics</button>
     <button class="canvas-tab"        id="tab-btn-questions"  onclick="showCanvasTab('questions')">Questions</button>
+  </div>
+
+  <div id="quests-panel" style="display:none">
+    <div id="gamify-detail"></div>
   </div>
 
   <div id="canvas-body" style="display:none">
@@ -2719,6 +2750,7 @@
       ? curriculum.subjects.join(' · ')
       : (curriculum.level || '');
     document.getElementById('canvas-sub').textContent = subjects;
+    renderGamify();
 
     showCanvasTab('classwork');
     loadCanvasClasswork(curriculum.id);
@@ -2938,12 +2970,55 @@
     showChatView();
   }
 
+  async function renderGamify() {
+    try {
+      const res = await fetch('/api/gamify');
+      if (!res.ok) return;
+      const g = await res.json();
+      const bar = document.getElementById('gamify-bar');
+      if (bar) {
+        bar.style.display = '';
+        bar.innerHTML =
+          `<span class="gb-item">🔥 ${g.streak} day${g.streak === 1 ? '' : 's'}</span>` +
+          `<span class="gb-item">Lv ${g.level}</span>` +
+          `<span class="gb-item">${g.xp} XP</span>`;
+      }
+      const detail = document.getElementById('gamify-detail');
+      if (!detail) return;
+      const rows = items => items.map(it => {
+        const cur = it.count ?? it.progress, tot = it.target;
+        const pct = tot ? Math.min(100, Math.round(cur / tot * 100)) : 0;
+        return `<div class="q-row${it.done ? ' done' : ''}">
+            <div class="q-label">${it.done ? '✓ ' : ''}${it.label}</div>
+            <div class="q-bar"><div class="q-fill" style="width:${pct}%"></div></div>
+            <div class="q-count">${cur}/${tot}</div>
+          </div>`;
+      }).join('');
+      detail.innerHTML = `
+        <div class="gd-head">
+          <div class="gd-stat"><div class="gd-num">🔥 ${g.streak}</div><div class="gd-cap">day streak</div></div>
+          <div class="gd-stat"><div class="gd-num">Lv ${g.level}</div><div class="gd-cap">${g.xp} XP</div></div>
+          <div class="gd-stat"><div class="gd-num">${g.longest}</div><div class="gd-cap">best streak</div></div>
+        </div>
+        <h3 class="gd-title">Today's missions</h3>${rows(g.missions)}
+        <h3 class="gd-title">Sidequests</h3>${rows(g.quests)}`;
+    } catch (_) {}
+  }
+
   function enterService(type) {
     if (type === 'topics') {
+      document.getElementById('quests-panel').style.display = 'none';
       document.getElementById('canvas-tabs').style.display = '';
       document.getElementById('canvas-body').style.display = '';
       showCanvasTab('classwork');
       document.getElementById('canvas-tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (type === 'quests') {
+      document.getElementById('canvas-tabs').style.display = 'none';
+      document.getElementById('canvas-body').style.display = 'none';
+      const p = document.getElementById('quests-panel');
+      p.style.display = '';
+      renderGamify();
+      p.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (type === 'learn') {
       enterTutor();
     } else if (type === 'papers') {

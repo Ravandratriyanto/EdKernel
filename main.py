@@ -62,9 +62,7 @@ def question_from_image(path: str, model: str, host: str,
     return text
 
 
-def question_from_video(path: str, model: str, host: str,
-                        provider: str, api_key: str, vision_model: str) -> str:
-    """Read a video file and return the question inside it as plain text."""
+def question_from_video(path: str, model: str, host: str, provider: str, api_key: str, vision_model: str) -> str:
     video_path = Path(path)
     if not video_path.is_file():
         raise SystemExit(f"No such video: {path}")

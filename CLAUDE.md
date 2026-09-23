@@ -107,6 +107,36 @@ so it is the fallback once 3.6 is spent.
 `qwen3.8` also returns transient **503 "over capacity"** under load, which killed
 3-4 cases per run even with backoff. Retries help; luck helps more.
 
+## Features built (as of session 31)
+
+- **Gamification — built & LIVE** (`gamify.py` + `users.py` + `app.py` +
+  `static/index.html`). XP, streaks, daily missions, sidequests. Lives
+  **app-layer, NOT `core/`** (engagement is a distro concern). Tables: `gamify`,
+  `daily_missions`, `quests`. `users.record_activity(uid, event, correct)` fires
+  alongside every `record_progress` site + check_working + `/api/start`;
+  `users.get_gamify(uid)` → `GET /api/gamify`. UI: 5th **Quests** tile + panel +
+  header 🔥/Lv/XP widget (`renderGamify()`). Rules (missions/quests/XP/level) all
+  in `gamify.py`. Verified e2e + on the ALB.
+- **Deploy is CURRENT** — redeployed this session; gamification + the `topic` fix
+  (misconception map now records from real uploads) are live on the ALB. Verified
+  `/v1/ping` 200 + `/api/gamify` 200.
+- **`~/Desktop/photo-db` is a SEPARATE project** (face-recog photo gallery). User
+  considered pivoting the whole competition entry to it — **rejected**: OpenCV is
+  garnish there too (brain = InsightFace/DeepFace), no AWS (edge/RKNN), face-recog
+  ethics flag, 180° off-proposal, discards deployed EdKernel. Don't re-open as a
+  competition pivot; it's a fine standalone product if that's where the heart is.
+- **Honest positioning (reaffirmed):** OpenCV is deterministic *scaffolding*
+  (grounding) + the COOL benchmark, NOT a recognition-beater — don't pitch it as
+  one. Say **"engine" not "kernel"** to judges. Don't pitch error-faithfulness
+  (tested flat). The GCSE tutor is a *distro* of the engine.
+- **Recurring pattern to watch:** features keep getting proposed (animations,
+  photo-db, gamification) while the *scored* remaining work sits idle. Redeploy is
+  now done. **Demo video + user interviews are the top remaining non-code work**
+  (Impact 20% has zero validation; the demo is the last required deliverable).
+- **IN PROGRESS — emoji→SVG swap** (`static/index.html`): user asked to replace
+  all emoji with inline SVGs. Inventory done (🔥, 📄/📊/📝, ✓/✗, 📎, →/←/↗/⬇/🔗/☰/⚠,
+  `&#10003;`), NOT yet executed. Start here next convo.
+
 ## Features built (as of session 30)
 
 - **Class home is tiles-only nav** (`static/index.html`) — header + four tiles:

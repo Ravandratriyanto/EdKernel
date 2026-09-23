@@ -6,6 +6,8 @@ import time
 import os
 from pathlib import Path
 
+import gamify
+
 
 _N, _R, _P, _DKLEN, _SALT_BYTES = 2 ** 14, 8, 1, 32, 16
 
@@ -95,11 +97,38 @@ def init() -> None:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS misconceptions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL REFERENCES uses (id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
                     curriculum TEXT NOT NULL,
                     topic TEXT NOT NULL,
                     category TEXT NOT NULL,
                     ts INTEGER NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS gamify (
+                    user_id        INTEGER PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+                    xp             INTEGER NOT NULL DEFAULT 0,
+                    current_streak INTEGER NOT NULL DEFAULT 0,
+                    longest_streak INTEGER NOT NULL DEFAULT 0,
+                    last_active    TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS daily_missions (
+                    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                    date       TEXT NOT NULL,
+                    mission_id TEXT NOT NULL,
+                    count      INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (user_id, date, mission_id)
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS quests (
+                    user_id  INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                    quest_id TEXT NOT NULL,
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    done     INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (user_id, quest_id)
                 )
             """)
             conn.execute(
@@ -381,14 +410,102 @@ def record_progress(user_id: int, curriculum: str, topic_id: str, correct: bool)
             """, (user_id, curriculum, topic_id, inc, now, inc, now))
     finally:
         conn.close()
+def record_activity(user_id: int, event: str, correct: bool | None = None) -> None:
+    """Central gamification hook — call alongside record_progress. Bumps XP,
+    advances today's matching missions, updates the streak, checks sidequests."""
+    today = time.strftime("%Y-%m-%d")
+    yesterday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+    conn = _connect()
+    try:
+        with conn:
+            row = conn.execute(
+                "SELECT xp, current_streak, longest_streak, last_active FROM gamify WHERE user_id=?",
+                (user_id,)).fetchone()
+            xp, cur, longest, last = (row["xp"], row["current_streak"],
+                                      row["longest_streak"], row["last_active"]) if row else (0, 0, 0, None)
+
+            if last != today:
+                cur = cur + 1 if last == yesterday else 1
+                longest = max(longest, cur)
+
+            xp += (gamify.XP["answer_correct"] if (event == "answer" and correct)
+                   else gamify.XP["answer"] if event == "answer"
+                   else gamify.XP.get(event, 0))
+
+            for mid, (label, mevent, target) in gamify.MISSIONS.items():
+                if mevent != event:
+                    continue
+                cnt_row = conn.execute(
+                    "SELECT count FROM daily_missions WHERE user_id=? AND date=? AND mission_id=?",
+                    (user_id, today, mid)).fetchone()
+                cnt = cnt_row["count"] if cnt_row else 0
+                if cnt >= target:
+                    continue
+                cnt += 1
+                conn.execute(
+                    "INSERT INTO daily_missions (user_id, date, mission_id, count) VALUES (?,?,?,?) "
+                    "ON CONFLICT(user_id, date, mission_id) DO UPDATE SET count=?",
+                    (user_id, today, mid, cnt, cnt))
+                if cnt == target:
+                    xp += gamify.XP["mission_complete"]
+
+            conn.execute(
+                "INSERT INTO gamify (user_id, xp, current_streak, longest_streak, last_active) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                "xp=?, current_streak=?, longest_streak=?, last_active=?",
+                (user_id, xp, cur, longest, today, xp, cur, longest, today))
+
+            mastered = conn.execute(
+                "SELECT COUNT(*) AS n FROM progress WHERE user_id=? AND attempts>0 "
+                "AND CAST(correct AS FLOAT)/attempts >= 0.8", (user_id,)).fetchone()["n"]
+            for qid, (label, kind, target) in gamify.QUESTS.items():
+                prog = {"streak": cur, "xp": xp, "mastery": mastered}[kind]
+                p = min(prog, target)
+                conn.execute(
+                    "INSERT INTO quests (user_id, quest_id, progress, done) VALUES (?,?,?,?) "
+                    "ON CONFLICT(user_id, quest_id) DO UPDATE SET progress=?, done=?",
+                    (user_id, qid, p, int(prog >= target), p, int(prog >= target)))
+    finally:
+        conn.close()
+def get_gamify(user_id: int) -> dict:
+    """Everything the gamification UI needs for one student."""
+    today = time.strftime("%Y-%m-%d")
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT xp, current_streak, longest_streak FROM gamify WHERE user_id=?",
+            (user_id,)).fetchone()
+        xp      = row["xp"] if row else 0
+        streak  = row["current_streak"] if row else 0
+        longest = row["longest_streak"] if row else 0
+
+        counts = {r["mission_id"]: r["count"] for r in conn.execute(
+            "SELECT mission_id, count FROM daily_missions WHERE user_id=? AND date=?",
+            (user_id, today)).fetchall()}
+        missions = [
+            {"id": mid, "label": label, "count": min(counts.get(mid, 0), target),
+             "target": target, "done": counts.get(mid, 0) >= target}
+            for mid, (label, _ev, target) in gamify.MISSIONS.items()
+        ]
+
+        qrows = {r["quest_id"]: r for r in conn.execute(
+            "SELECT quest_id, progress, done FROM quests WHERE user_id=?",
+            (user_id,)).fetchall()}
+        quests = [
+            {"id": qid, "label": label, "target": target,
+             "progress": qrows[qid]["progress"] if qid in qrows else 0,
+             "done": bool(qrows[qid]["done"]) if qid in qrows else False}
+            for qid, (label, _k, target) in gamify.QUESTS.items()
+        ]
+    finally:
+        conn.close()
+    return {"xp": xp, "level": gamify.level_for_xp(xp), "streak": streak,
+            "longest": longest, "missions": missions, "quests": quests}
+    
 
 
-# ── Quiz attempts ─────────────────────────────────────────────────────────────
-#
-# The answer key lives here and nowhere else. The browser is sent questions with
-# the key stripped, and correctness is decided by comparing a submitted letter
-# against this row — never by the client saying "I was right".
-
+            
+                                      
 
 def create_attempt(user_id: int, curriculum: str, topic: str,
                    questions: list[dict]) -> str:

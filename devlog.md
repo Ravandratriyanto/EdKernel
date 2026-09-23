@@ -4482,3 +4482,65 @@ one-line caveat under the panel header — the UI now says what the report admit
   "pending verification" in report/diagram; Groq carries inference.
 - **Fargate persistence** — `users.db` / ChromaDB reset on task recycle; seed the
   demo account right before recording.
+
+## Session 31 — 2026-09-23
+
+### Gamification — full feature, built and deployed
+Studying-as-gaming: XP, streaks, daily missions, sidequests. Chosen by the user
+*over* my recommendation to park it (I flagged: zero OpenCV, table-stakes, trades
+against demo/interviews — they went ahead informed). Built to reuse the existing
+`progress` infra and to live **app-layer, not `core/`** (engagement is a distro
+concern; keeps the engine clean).
+- `gamify.py` (new) — pure rules: `MISSIONS` (answer_5 / lesson_1 / check_1),
+  `QUESTS` (streak_7 / xp_100 / master_3), `XP` per event, `level_for_xp`.
+- `users.py` — three tables (`gamify`, `daily_missions`, `quests`) +
+  `record_activity(user_id, event, correct)` (bumps XP, advances today's matching
+  missions + mission-complete bonus, updates streak vs `last_active`, recomputes
+  quests) + `get_gamify(user_id)`.
+- `app.py` — `GET /api/gamify`, and `record_activity` fired alongside every
+  existing `record_progress` site (papers answer, quiz answer, quiz submit, wrong
+  answer) + check_working (`check_working` event) + `/api/start` (`lesson`).
+- `static/index.html` — 5th **Quests** tile → panel (3 stat cards + today's
+  missions with progress bars + sidequests) + a header 🔥/Lv/XP widget;
+  `renderGamify()` reads one `/api/gamify`. I drove all the HTML.
+- **NB: most of the hand-typed backend arrived badly garbled** (empty `gamify.py`,
+  a mashed-newline statement, inverted mission logic, `asnswer`/`user_Id`/`xom`,
+  missing quests block); I rewrote both functions + wrote `gamify.py`. Verified
+  end-to-end (XP 160 for a full loop, streak increments/resets, missions complete,
+  master_3 fires) and live on the ALB.
+
+### Redeploy #2 — gamification + topic fix now LIVE
+Build → push (`sha256:fd6e0a1…`) → force-new-deployment → `services-stable` →
+verified: `/v1/ping` 200, and `/api/gamify` 200 on the ALB (new-code-only route,
+proves the build shipped). The earlier `topic` fix (misconception map recording
+from real uploads) is live too. Prod was ahead of git at deploy time (built from
+working tree) — **commit still pending**: `gamify.py`, `users.py`, `app.py`,
+`static/index.html`.
+
+### Strategic explorations — two ideas killed, one recurring pattern named
+- **photo-db pivot — rejected.** User floated switching the whole entry to
+  `~/Desktop/photo-db` (a face-recognition photo-gallery for photographers,
+  InsightFace + DeepFace + some real OpenCV: kmeans on clothing/hair for re-ID).
+  Verdict: does NOT fix the OpenCV-centrality worry — the *brain* is downloaded
+  NNs (InsightFace), OpenCV is garnish; same structure as EdKernel. Plus no AWS
+  (edge/RKNN, anti-cloud), face-recognition responsible-use flag, 180° off the
+  proposal (eligibility risk), and it bins a deployed EdKernel 3 weeks out. If the
+  heart is in photo-db as a *product*, fine — but not the move that wins *this*
+  competition.
+- **AI-generated animations — rejected** (unreliable LLM anim code, zero OpenCV,
+  off-subject, frontier commoditizes it). The defensible version = curate/route
+  to existing sims (PhET/Desmos), a post-comp roadmap item.
+- **Honest OpenCV-vs-frontier reckoning:** our OpenCV does NOT beat frontier at
+  recognition and never will — its role is deterministic/cheap/offline *scaffolding*
+  (grounding) + the COOL benchmark, not the brain. This is the reality of every
+  2026 vision product; not a reason to pivot. Pitch "engine" not "kernel."
+- **Pattern named:** three feature ideas in a row (animations, photo-db,
+  gamification) while the *scored* remaining work — demo video + interviews — sat
+  untouched. Redeploy is now done; **demo video + user interviews are still the
+  open front** and the highest-leverage non-code work left.
+
+### In progress (picked up next convo)
+- **Emoji → SVG swap** — user asked to replace all emoji with inline SVGs.
+  Inventory done (index.html: 🔥, 📄/📊/📝 materials, ✓/✗ verdicts, 📎 attach,
+  📊 graph, → / ← / ↗ / ⬇ / 🔗 / ☰ / ⚠, and `&#10003;` topic-check). NOT yet
+  executed — start here.
