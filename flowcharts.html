@@ -102,7 +102,7 @@
 
 <header>
   <h1>EdKernel — Codebase Flowcharts</h1>
-  <p>One diagram per concern · Updated 2026-09-17 · single curriculum (GCSE Maths) · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · AWS Fargate (live)</p>
+  <p>One diagram per concern · Updated 2026-09-23 · single curriculum (GCSE Maths) · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · gamification (XP / streaks / quests) · AWS Fargate (live)</p>
   <p>Building a front end? The public kernel API contract is in <code>docs/KERNEL_API.md</code>.</p>
 </header>
 
@@ -126,6 +126,7 @@
   <a href="#settings">settings.py</a>
   <a href="#vision">core/vision/image_handler.py</a>
   <a href="#users">users.py</a>
+  <a href="#gamify">Gamification</a>
   <a href="#ratelimit">ratelimit.py</a>
   <a href="#eval-run">evals/run.py</a>
   <a href="#eval-learn">evals/learn.py</a>
@@ -959,7 +960,7 @@ flowchart TD
     <h2>users.py</h2>
     <span class="badge badge-auth">AUTH</span>
   </div>
-  <div class="section-desc">SQLite-backed accounts. Three tables: users, sessions, api_keys. Passwords and API keys both stored as SHA-256 / scrypt hashes — a leaked DB yields no working credentials. Roles: student / teacher / admin. API keys are minted with token_urlsafe(32) and the plaintext is returned once.</div>
+  <div class="section-desc">SQLite-backed accounts. Tables: users, sessions, api_keys (below), plus progress, quiz_attempts, and the three gamification tables (see Gamification). Passwords and API keys both stored as SHA-256 / scrypt hashes — a leaked DB yields no working credentials. Roles: student / teacher / admin. API keys are minted with token_urlsafe(32) and the plaintext is returned once.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -992,6 +993,59 @@ flowchart TD
     style HASH   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style CAK    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style UFT2   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Gamification ═══════════════════════ -->
+<div class="section color-core" id="gamify">
+  <div class="section-header">
+    <h2>Gamification — XP · streaks · daily missions · sidequests</h2>
+    <span class="badge badge-core">APP-LAYER</span>
+  </div>
+  <div class="section-desc">
+    Engagement layer, kept <strong>out of core/</strong> on purpose (a distro
+    concern, not the engine). <code>gamify.py</code> is pure rules;
+    <code>users.py</code> owns three tables and the write path; <code>app.py</code>
+    fires <code>record_activity()</code> beside every existing
+    <code>record_progress</code> site. One <code>GET /api/gamify</code> feeds the
+    header widget and the Quests tile in <code>index.html</code>.
+  </div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph FIRE["app.py — record_activity fires beside record_progress"]
+        A1["/api/start → 'lesson'"]
+        A2["papers / quiz answer → 'answer' (+correct)"]
+        A3["wrong answer → 'answer' correct=False"]
+        A4["/api/check_working → 'check_working'"]
+    end
+
+    A1 & A2 & A3 & A4 --> RA["users.record_activity(user_id, event, correct)"]
+
+    RA --> STREAK{"last_active vs today"}
+    STREAK -->|yesterday| INC["streak + 1"]
+    STREAK -->|older / none| RST["streak = 1"]
+    STREAK -->|today| KEEP["streak unchanged"]
+
+    RA --> XP["+ XP (gamify.XP)\nanswer_correct 10 · answer 3\nlesson 15 · check_working 20"]
+    RA --> MIS["advance today's daily_missions\nwhere mission.event == event\nreached target → + 25 mission_complete"]
+    RA --> QS["recompute quests\nmastery = topics ≥ 0.8 in progress"]
+
+    INC & RST & KEEP & XP --> GT[("gamify\nuser_id · xp · current/longest_streak · last_active")]
+    MIS --> DM[("daily_missions\nuser_id · date · mission_id · count")]
+    QS --> QT[("quests\nuser_id · quest_id · progress · done")]
+
+    GT & DM & QT --> GG["GET /api/gamify → users.get_gamify()"]
+    GG --> UILAYER["index.html renderGamify()\nheader flame / Lv / XP widget\nQuests tile → missions + sidequests"]
+
+    RULES["gamify.py (pure rules)\nMISSIONS answer_5 · lesson_1 · check_1\nQUESTS streak_7 · xp_100 · master_3\nlevel_for_xp() — 1@0 · 2@100 · 3@400 · 4@900"]
+    RULES -.-> RA
+    RULES -.-> GG
+
+    style RULES fill:#0d1a0d,stroke:#6fdd6f,color:#e8e8e8
+    style RA    fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style GG    fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     </div>
   </div>
 </div>

@@ -9,88 +9,88 @@
   },
   "results": [
     {
-      "operation": "resize",
-      "mean_ms": 0.253,
-      "std_ms": 0.02,
-      "img_per_s": 3953.91,
+      "operation": "resize (900\u2192450)",
+      "mean_ms": 0.266,
+      "std_ms": 0.013,
+      "img_per_s": 3761.33,
       "n_iters": 50
     },
     {
-      "operation": "cvtColor",
-      "mean_ms": 0.189,
-      "std_ms": 0.006,
-      "img_per_s": 5297.24,
+      "operation": "cvtColor BGR\u2192Gray",
+      "mean_ms": 0.292,
+      "std_ms": 0.149,
+      "img_per_s": 3426.06,
       "n_iters": 50
     },
     {
       "operation": "bilateralFilter",
-      "mean_ms": 21.63,
-      "std_ms": 1.495,
-      "img_per_s": 46.23,
+      "mean_ms": 21.094,
+      "std_ms": 1.325,
+      "img_per_s": 47.41,
       "n_iters": 50
     },
     {
       "operation": "adaptiveThreshold",
-      "mean_ms": 5.817,
-      "std_ms": 0.364,
-      "img_per_s": 171.91,
+      "mean_ms": 5.885,
+      "std_ms": 0.472,
+      "img_per_s": 169.91,
       "n_iters": 50
     },
     {
-      "operation": "Canny",
-      "mean_ms": 1.283,
-      "std_ms": 0.268,
-      "img_per_s": 779.36,
+      "operation": "Canny edge detect",
+      "mean_ms": 1.393,
+      "std_ms": 0.357,
+      "img_per_s": 717.78,
       "n_iters": 50
     },
     {
-      "operation": "morphologyEx",
-      "mean_ms": 0.6,
-      "std_ms": 0.057,
-      "img_per_s": 1667.27,
+      "operation": "morphologyEx CLOSE",
+      "mean_ms": 0.566,
+      "std_ms": 0.006,
+      "img_per_s": 1766.21,
       "n_iters": 50
     },
     {
       "operation": "findContours",
-      "mean_ms": 1.33,
-      "std_ms": 0.11,
-      "img_per_s": 751.81,
+      "mean_ms": 1.544,
+      "std_ms": 0.117,
+      "img_per_s": 647.55,
       "n_iters": 50
     },
     {
       "operation": "HoughLinesP",
-      "mean_ms": 452.859,
-      "std_ms": 15.623,
-      "img_per_s": 2.21,
+      "mean_ms": 244.372,
+      "std_ms": 11.113,
+      "img_per_s": 4.09,
       "n_iters": 50
     },
     {
       "operation": "warpPerspective",
-      "mean_ms": 2.606,
-      "std_ms": 0.339,
-      "img_per_s": 383.78,
+      "mean_ms": 2.389,
+      "std_ms": 0.2,
+      "img_per_s": 418.53,
       "n_iters": 50
     },
     {
-      "operation": "ink_mask",
-      "mean_ms": 1.091,
-      "std_ms": 0.1,
-      "img_per_s": 916.83,
+      "operation": "ink_mask (full)",
+      "mean_ms": 4.615,
+      "std_ms": 0.541,
+      "img_per_s": 216.69,
       "n_iters": 50
     },
     {
-      "operation": "segment",
-      "mean_ms": 1.965,
-      "std_ms": 0.165,
-      "img_per_s": 508.84,
-      "n_iters": 30
-    },
-    {
-      "operation": "binarise (full)",
-      "mean_ms": 25.596,
-      "std_ms": 1.823,
-      "img_per_s": 39.07,
+      "operation": "segment pipeline",
+      "mean_ms": 2.792,
+      "std_ms": 0.149,
+      "img_per_s": 358.15,
       "n_iters": 20
+    },
+    {
+      "operation": "preprocess (full page)",
+      "mean_ms": 44.562,
+      "std_ms": 1.792,
+      "img_per_s": 22.44,
+      "n_iters": 50
     }
   ]
 }

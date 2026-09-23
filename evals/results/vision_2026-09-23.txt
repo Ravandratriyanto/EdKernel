@@ -1,0 +1,27 @@
+Vision step-checker eval — localization run
+Date: 2026-09-23 (session 32)
+Command: python -m evals.vision --provider groq --model openai/gpt-oss-120b \
+         --vision-model qwen/qwen3.8-27b --only v7,v8,v9 --pause 20
+
+running 3 vision cases on groq/openai/gpt-oss-120b...
+  [1/3] v7 ... ok  (wanted 1, got 1, 60s)
+  [2/3] v8 ... ok  (wanted 2, got 2, 43s)
+  [3/3] v9 ... ok  (wanted 2, got 2, 64s)
+
+step checker      3/3  (100%)   [0 case(s) died before scoring]
+  error located     3/3  (exact line)
+
+transcription     10/10 lines read faithfully (100%)
+  clean reads       3/3  (whole problem)
+  verdict | clean    3/3  (step check, given a faithful read)
+
+Notes:
+- First run in which all three error cases (v7/v8/v9) completed together.
+- 10/10 lines read faithfully this run, so the localization hits are genuine
+  reasoning hits, not index shifts from a wrong box count. The devlog's feared
+  segmentation-box-count shift on v7's scribble and v8/v9's repeated line 0 did
+  NOT bite here.
+- N=3, one student, one pen, flat cropped single-problem photos. "Feature works
+  on clean input", not validated accuracy. Box-count robustness on messy/real
+  pages is untested and remains the known fragility.
+- Prior single-case dry run (v7 only) also scored error located 1/1.

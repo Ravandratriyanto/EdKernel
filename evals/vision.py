@@ -30,6 +30,7 @@ def _norm(s: str) -> str:
     s = s.replace("\\times", "*").replace("\\cdot", "*")
     s = s.replace("^{2}", "^2").replace("^{3}", "^3")
     s = re.sub(r"\\[a-z]+", "", s)
+    s = re.sub(r"\\[()\[\]]", "", s)   # drop LaTeX delimiters \( \) \[ \]
     s = _STRIP.sub("", s)
     # The photo's question number ("1).", "6).") is genuinely on the line and
     # the model is right to read it, but the ground-truth labels record only

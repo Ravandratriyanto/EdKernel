@@ -91,11 +91,12 @@ Report what actually happened, including failures. Do not round a partial result
 
 `llama-3.3-70b-versatile` was deprecated. Current default: `openai/gpt-oss-120b` (OpenAI-compat endpoint via Groq). Check `https://console.groq.com/docs/models` if hitting model errors — the catalogue changes.
 
-**Vision models.** Only two on the catalogue, both qwen reasoning models:
-`qwen/qwen3.6-27b` (the `GROQ_VISION_MODEL` default in `image_handler.py`) and
-`qwen/qwen3.8-27b`. Pass the latter with `--vision-model` — it is faster
-(4-22s vs 13-45s per case) and, crucially, has its **own daily token bucket**,
-so it is the fallback once 3.6 is spent.
+**Vision models.** `qwen/qwen3.8-27b` is now the `GROQ_VISION_MODEL` default in
+`image_handler.py`. **`qwen/qwen3.6-27b` was decommissioned by Groq** — do NOT
+pass it (it 404s and kills the run on the first vision call). That also means the
+old "3.6 spent → fall back to 3.8's own bucket" trick is gone: there is one vision
+bucket now, so budget the 200k TPD accordingly. Check
+`https://console.groq.com/docs/models` before a run — the catalogue changes.
 
 **Free-tier limits bite hard on vision.** Two separate ceilings:
 - **ITPM 7,000** input tokens/minute. One upscaled line crop is ~2,100 tokens,
@@ -284,17 +285,22 @@ number without re-running** — the last three sessions each corrected a stale o
 - **Transcription: 13/16 lines (81%)**, 3/5 whole problems read cleanly.
 - **Verdict given a faithful read: 3/3.** The decomposition is sound; reading
   the handwriting is the bottleneck.
-- **`error located`: effectively unmeasured (0/1).** v7, v8 and v9 — three of
-  the four cases that actually contain an error — have never all completed in
-  one run. *This is the number the feature exists to produce, and it does not
-  exist yet.* Run those three first when quota resets.
+- **`error located`: 3/3 (session 32, 2026-09-23).** v7, v8, v9 — the three
+  cases that contain an error — **all completed in one run and all localised to
+  the exact line** (`--only v7,v8,v9 --pause 20`, groq `openai/gpt-oss-120b` +
+  `qwen/qwen3.8-27b`, temp 0). The number the feature exists to produce now
+  exists. Caveats that keep it honest: **N=3**, and this run read **10/10 lines
+  faithfully**, so the feared box-count shift on the repeated/scribbled lines
+  (v7's scribble, v8/v9's repeated line 0) did NOT bite — these are genuine
+  reasoning hits, not lucky index shifts. But box-count robustness on messy/real
+  pages is untested and remains the fragility. Reproduce before quoting.
 
 Sample set is nine photos, one student, one pen, two lighting conditions. Treat
 these as "no longer obviously broken", not as validated accuracy.
 
 ## Pending (as of session 29)
 
-- **Run v7, v8, v9** for the `error located` number (blocked on daily quota)
+- ~~**Run v7, v8, v9** for the `error located` number~~ — **DONE (session 32): 3/3.**
 - **Notation pedantry is a false-positive mode.** On v4 the student wrote
   `x^2-5x+6` then `(x-2)(x-3)=0` and the checker flagged *"incorrectly
   introduced '= 0'"*. Defensible mathematically, wrong for a tutor — crying

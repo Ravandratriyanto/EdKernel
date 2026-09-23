@@ -4544,3 +4544,99 @@ working tree) — **commit still pending**: `gamify.py`, `users.py`, `app.py`,
   Inventory done (index.html: 🔥, 📄/📊/📝 materials, ✓/✗ verdicts, 📎 attach,
   📊 graph, → / ← / ↗ / ⬇ / 🔗 / ☰ / ⚠, and `&#10003;` topic-check). NOT yet
   executed — start here.
+
+## Session 32 — 2026-09-23
+
+### Emoji → SVG swap — done
+Finished the session-31 in-progress item in `static/index.html`. Added a `.ico`
+CSS class (sizes to surrounding text, follows `currentColor`) + an `_ICO_PATHS`
+map / `ico(name)` helper (Feather-style, matches the existing service-tile SVGs).
+Swapped every user-facing emoji and emoji HTML-entity: static buttons (☰ menu, 📎
+attach, 📄 Papers, 📊 graph, ← back, 📄 Materials, × close ×3, 📸 Image ×2), JS
+strings (verdict ✓/✗, attach pill/strip 📄 + ✕, "← error here", "✓ No errors",
+📊 graph request, paper links ⚠/⬇, source 🔗, topic-check ✓, class/topic 📚,
+material 📄/📊/📝 + "Open ↗", gamify 🔥 ×2 + ✓, review ✓/✗ badge, "✓ Every step
+follows"), and the `content: "→"` CSS bullet (now an SVG data-URI). `textContent`
+sites switched to `innerHTML`/`append` so the SVG renders (link text added as a
+text node — no injection). Left the four `→` in JS *comments* alone. Verified:
+both `<script>` blocks pass `node --check`; every `ico()` call resolves. Could NOT
+render live (Chrome extension not connected) — validated statically only.
+
+### Reckoning: gamification was a session-31 detour, but 1–4 were mostly already green
+User (fairly) called out that session 31 shipped gamification — off the finalised
+plan, touches none of the scored judging axes — while the 7-item plan looked
+undone. Audited the **code** (not the devlog's word): #1 contour deskew, #2
+Graviton, #4 error-faithfulness all genuinely shipped in **session 30**; the
+*flowchart* just never got synced (still shows "planned swap" + old 1587ms). #5
+Ollama / #6 persistence infra present. **The one item in 1–4 actually open was #3,
+the `error located` number** — harness built (`evals/vision.py`) but never run to a
+number (quota/503). So: documentation lag, plus one real hole. Fixed the flowchart
+in an earlier pass this session by adding a Gamification diagram — which, ironically,
+*reinforced* the complaint by leaving the OpenCV node stale. That doc-sync is a
+noted follow-up (user deprioritised it in favour of closing #3).
+
+### #3 CLOSED — `error located` 3/3
+Ran the localization eval on the three error cases:
+`python -m evals.vision --provider groq --model openai/gpt-oss-120b
+--vision-model qwen/qwen3.8-27b --only v7,v8,v9 --pause 20`.
+Result: **error located 3/3 (exact line)**, transcription **10/10 lines faithful**,
+verdict|clean 3/3. All three completed in one run — the first time. Because the
+read was 10/10, these are genuine reasoning hits, not lucky index shifts from a
+wrong box count (the devlog's feared v7-scribble / v8-v9-repeat-line-0 segmentation
+shift did not bite this run). Output saved to
+`evals/results/vision_2026-09-23.txt`; CLAUDE.md "Vision numbers" updated.
+
+**Also corrected a stale fact:** `qwen/qwen3.6-27b` is **decommissioned** by Groq —
+`GROQ_VISION_MODEL` is now `qwen/qwen3.8-27b`, and there is only **one** vision
+bucket now (the "3.6 spent → fall back to 3.8" trick is gone). CLAUDE.md fixed.
+
+### COOL bench re-run (x86) — contour deskew confirmed, x86 number is not stable
+Re-ran `bench/graviton_bench.py --out bench/results/x86.json` (OpenCV 5.0, this
+laptop). The main bench imports the REAL `core.vision.preprocess.deskew` (contour
+path) + `segment`, so it exercises current code — NOT the stale `graviton_standalone.py`
+copy. **Contour deskew validated on timing:** full-page `preprocess` = **44.6ms**,
+while a lone `HoughLinesP` op = **244ms** — the deskew path no longer calls Hough,
+so the whole pipeline costs <20% of a single old Hough pass. `findContours` = 1.5ms.
+**Honesty flag:** this run's HoughLinesP is **244ms** vs the committed Sep-17
+`x86.json` **452ms** on the *same machine* (identical platform string). Intra-run
+std is ~11ms, so the 2× gap is environmental (CPU governor / thread count / load),
+not noise. The old report's "**3.8× ARM**" ratio (1737ms ARM ÷ 452ms x86) is
+therefore **not reproducible as stated** — the x86 denominator moves. Qualitative
+COOL story is unchanged (Hough dominates; contour swap removes it). **ARM half NOT
+re-run** — needs a t4g EC2 instance; `graviton.json` remains the Sep-17 baseline.
+
+### Error-faithfulness re-run — still FLAT (the 1/3 is a scoring artifact)
+`python -m evals.error_faithfulness --only v7,v8,v9`. Raw metric: naive **1/3**,
+guarded **3/3** on the labelled error lines — which LOOKS like a guarded win and
+ISN'T. Reading the actual transcriptions: on all three error lines the naive prompt
+read the student's wrong step **correctly** (`2x=4`, `x=4`, `3x-2x=9+4`); two were
+scored "changed" only because they came back wrapped in `\( … \)` and `_norm`
+(`evals/vision.py`) strips `$$…$$` but not `\(…\)` delimiters. So the "gap" is which
+delimiter style each prompt elicits, not fidelity. **Content-wise it is 3/3 vs 3/3 —
+flat**, re-confirming session 30. **Do NOT pitch error-faithfulness.** (This is the
+exact `\(\)`-delimiter artifact the session-30 note warned about — it bit again.)
+The eval earned its keep by killing a false claim before the demo. NB on the
+non-error line v9 L1 naive misread `=` as `≤` — that *introduces* an error, so it
+doesn't support the "helpful model corrects mistakes" thesis either.
+
+### Known issues / honest gaps
+- **N=3.** One student, one pen, flat cropped single-problem photos. This is
+  "works on clean input", NOT validated accuracy. Box-count robustness on messy /
+  real pages is still untested and remains the fragility.
+- **Flowchart OpenCV node + report Graviton numbers still stale** — 1/2 *look*
+  undone though done in code. Deferred doc-sync.
+- **`bench/graviton_standalone.py` still carries its own stale `segment()`** — the
+  standalone COOL bench measures the old algorithm until re-synced.
+- ~~**`_norm` scoring artifact**~~ — **FIXED (session 32).** `_norm` in
+  `evals/vision.py` stripped `$…$`/`$$…$$` but left the parens from `\(…\)`, so a
+  correct read wrapped in `\(\)` scored as "changed" (misled twice: session-30
+  line-fidelity gap, session-32 error-faithfulness 1/3). Added
+  `s = re.sub(r"\\[()\[\]]", "", s)` to drop the `\( \) \[ \]` delimiter tokens
+  whole (backslash + bracket) — real content parens like `(x+3)(x+2)` survive
+  because they carry no backslash. Verified: the two artifact cases now normalise
+  equal and `(x+3)(x+2)` is untouched. NOT yet re-scored through a live eval run
+  (unit-checked only) to save Groq quota; content-truth is already known to be 3/3.
+- **x86 COOL number is not stable run-to-run** (452ms → 244ms HoughLinesP, same
+  machine). The "3.8× ARM" ratio needs a fresh *paired* x86+ARM run on OpenCV 5.0,
+  ideally with `cv2.setNumThreads` pinned, before it can be quoted precisely.
+- **#7 demo video** — the other genuine open deliverable, still not started.

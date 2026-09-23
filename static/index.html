@@ -557,6 +557,10 @@
       justify-content: center;
       font-size: 1.5rem;
     }
+    /* inline text-flow icons: size with the surrounding text, follow its colour */
+    .ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em;
+           stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round;
+           stroke-linejoin: round; flex-shrink: 0; }
     .svc-name { font-size: 0.82rem; font-weight: 600; color: white; }
     .svc-desc { font-size: 0.7rem; color: rgba(255,255,255,0.5); }
     /* ── Quiz: SAT Bluebook style ── */
@@ -826,7 +830,8 @@
       display: flex; gap: 6px; align-items: flex-start;
     }
     .objectives-list li::before {
-      content: "→"; color: #4f46e5; flex-shrink: 0;
+      content: ""; flex-shrink: 0; width: 0.95em; height: 0.95em; margin-top: 0.1em;
+      background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f46e5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='12 5 19 12 12 19'/></svg>") no-repeat center / contain;
     }
 
     /* materials section */
@@ -1143,7 +1148,7 @@
 
 <header>
   <h1>EdKernel</h1>
-  <button id="btn-back" class="hidden" onclick="backToCanvas()">&#8592; Class</button>
+  <button id="btn-back" class="hidden" onclick="backToCanvas()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg> Class</button>
   <span id="header-class-name" class="hidden"></span>
   <div id="mode-toggle-wrap" class="mode-toggle hidden">
     <button id="btn-learn" class="active" onclick="setMode('learn')">Learn</button>
@@ -1154,7 +1159,7 @@
   </button>
   <span id="whoami"></span>
   <button id="btn-logout" onclick="logout()" title="Log out">Log out</button>
-  <button id="btn-sidebar" class="hidden" onclick="toggleSidebar()" title="Show or hide past lessons">☰</button>
+  <button id="btn-sidebar" class="hidden" onclick="toggleSidebar()" title="Show or hide past lessons"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
 </header>
 
 <!-- classes landing page -->
@@ -1214,7 +1219,7 @@
       <div id="progress-banner"></div>
       <div id="canvas-topics"></div>
       <div id="canvas-materials" class="materials-section" style="display:none">
-        <div class="materials-header">&#128196; Materials</div>
+        <div class="materials-header"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Materials</div>
         <div id="canvas-materials-list"></div>
       </div>
       <p id="canvas-classwork-empty" class="hidden" style="color:#9ca3af;font-size:0.85rem;padding:20px 0">
@@ -1237,10 +1242,10 @@
           <input type="text" id="canvas-q-answer" placeholder="Answer (optional)" />
           <div id="canvas-q-img-preview">
             <img id="canvas-q-img-thumb" src="" alt="">
-            <button id="canvas-q-img-remove" onclick="removeCanvasQImage()">&#215;</button>
+            <button id="canvas-q-img-remove" onclick="removeCanvasQImage()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div class="canvas-q-row">
-            <button id="btn-canvas-q-img" onclick="pickCanvasQImage()">&#128248; Image</button>
+            <button id="btn-canvas-q-img" onclick="pickCanvasQImage()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Image</button>
             <button id="btn-canvas-q-submit" onclick="submitCanvasQuestion()">Add question</button>
           </div>
         </div>
@@ -1326,18 +1331,18 @@
     <div id="learn-attach-strip" class="attach-strip hidden"></div>
     <div id="learn-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
-      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('learn')">📎</button>
+      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('learn')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
       <input id="input-topic" placeholder="Enter a topic to learn (e.g. photosynthesis)" onkeydown="if(event.key==='Enter') startLearn()" />
       <button class="send-btn" id="btn-start" onclick="startLearn()">Start</button>
-      <button class="send-btn" id="btn-papers" onclick="startPapers()" style="background:#0891b2" title="Search past papers and generate questions">📄 Papers</button>
+      <button class="send-btn" id="btn-papers" onclick="startPapers()" style="background:#0891b2" title="Search past papers and generate questions"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Papers</button>
     </div>
   </div>
   <div id="answer-row" class="hidden">
     <div id="answer-attach-strip" class="attach-strip hidden"></div>
     <div id="answer-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
-      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')">📎</button>
-      <button class="icon-btn" title="Generate graph" onclick="requestGraph()">📊</button>
+      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+      <button class="icon-btn" title="Generate graph" onclick="requestGraph()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
       <textarea id="input-answer" rows="1" placeholder="Type your answer or describe a graph..." onkeydown="answerKeydown(event)"></textarea>
       <button class="send-btn" id="btn-send" onclick="sendAnswer()">Send</button>
     </div>
@@ -1416,6 +1421,32 @@
 </div>
 
 <script>
+  // Inline SVG icons (Feather-style, currentColor) — replaces emoji so glyphs
+  // render identically across platforms. `ico(name)` returns an <svg> string
+  // sized to the surrounding text via the .ico class.
+  const _ICO_PATHS = {
+    menu:     '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
+    paperclip:'<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    file:     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    fileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/>',
+    barChart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    edit:     '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    link:     '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    alert:    '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    flame:    '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+    check:    '<polyline points="20 6 9 17 4 12"/>',
+    x:        '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    arrowRight:'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+    arrowLeft: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    arrowUpRight:'<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+    book:     '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+    camera:   '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  };
+  function ico(name) {
+    return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${_ICO_PATHS[name] || ''}</svg>`;
+  }
+
   let mode = 'learn';
   let messages = [];
   let busy = false;
@@ -1594,7 +1625,7 @@
       img.src = attachment.previewUrl;
       strip.appendChild(img);
     } else {
-      strip.insertAdjacentHTML('beforeend', `<span>📄</span>`);
+      strip.insertAdjacentHTML('beforeend', `<span>${ico('file')}</span>`);
     }
 
     const name = document.createElement('span');
@@ -1603,7 +1634,7 @@
     strip.appendChild(name);
 
     const rm = document.createElement('button');
-    rm.textContent = '✕';
+    rm.innerHTML = ico('x');
     rm.onclick = () => clearAttachment();
     strip.appendChild(rm);
   }
@@ -1726,7 +1757,7 @@
       const cls = verdict ? 'verdict-correct' : 'verdict-wrong';
       bubble.classList.add(cls);
       bubble.insertAdjacentHTML('afterbegin',
-        `<div class="verdict ${cls}">${verdict ? '✓ Correct' : '✗ Not correct'}</div>`);
+        `<div class="verdict ${cls}">${verdict ? ico('check') + ' Correct' : ico('x') + ' Not correct'}</div>`);
     }
 
     if (attach) {
@@ -1739,7 +1770,7 @@
         bubble.appendChild(wrap);
       } else {
         bubble.insertAdjacentHTML('beforeend',
-          `<div class="attach-pill">📄 ${attach.name}</div>`);
+          `<div class="attach-pill">${ico('file')} ${attach.name}</div>`);
       }
     }
 
@@ -2142,13 +2173,13 @@
       return `<li class="${isErr ? 'step-error' : ''}">`
            + `<span style="color:#6b7280;font-size:0.8rem;margin-right:8px">Line ${i + 1}</span>`
            + `${s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`
-           + (isErr ? `<span class="step-error-label">← error here</span>` : '')
+           + (isErr ? `<span class="step-error-label">${ico('arrowLeft')} error here</span>` : '')
            + `</li>`;
     }).join('');
 
     let html = `<ul class="step-list">${items}</ul>`;
     if (error_index === null) {
-      html += `<p style="color:#16a34a;font-weight:600;margin-top:8px">✓ No errors found</p>`;
+      html += `<p style="color:#16a34a;font-weight:600;margin-top:8px">${ico('check')} No errors found</p>`;
     } else if (explanation) {
       html += `<div class="step-explanation">${explanation.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
     }
@@ -2276,7 +2307,7 @@
     document.getElementById('btn-send').disabled = true;
     document.getElementById('input-answer').value = '';
 
-    appendBubble('student', `📊 Graph request: ${description}`);
+    appendBubble('student', `${ico('barChart')} Graph request: ${description}`);
     appendThinking();
 
     try {
@@ -2387,7 +2418,8 @@
         a.className = 'paper-chip' + (unusable ? ' scanned' : '');
         a.href = p.download;
         a.setAttribute('download', '');
-        a.textContent = (unusable ? '⚠ ' : '⬇ ') + (p.title || 'Past paper');
+        a.innerHTML = unusable ? ico('alert') : ico('download');
+        a.append(' ' + (p.title || 'Past paper'));
         a.title = p.scanned
           ? `${p.url}\n\nScanned paper — downloadable, but it has no text layer, so the questions below are not based on it.`
           : p.no_questions
@@ -2424,7 +2456,8 @@
       a.href = s.url;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
-      a.textContent = '🔗 ' + (s.title || s.url);
+      a.innerHTML = ico('link');
+      a.append(' ' + (s.title || s.url));
       bar.appendChild(a);
     });
     area.appendChild(bar);
@@ -2714,7 +2747,7 @@
           ? c.subjects.join(', ')
           : (c.level || '');
         card.innerHTML = `
-          <div class="class-icon">&#128218;</div>
+          <div class="class-icon">${ico('book')}</div>
           <div class="class-name">${c.name}</div>
           <div class="class-meta">${subjects}</div>
         `;
@@ -2813,10 +2846,10 @@
       const done = pct >= 0.8;
       const nSub = (t.subtopics || []).length;
       const badge = done
-        ? '<span class="topic-check" title="Mastered">&#10003;</span>'
+        ? `<span class="topic-check" title="Mastered">${ico('check')}</span>`
         : `<span class="mastery-dot ${m ? 'started' : 'unseen'}" title="${m ? `${m.correct}/${m.attempts} correct` : 'Not started'}"></span>`;
       return `<div class="topic-tile${done ? ' done' : ''}" onclick="openTopic(${i})">
-          <div class="topic-icon">&#128218;</div>
+          <div class="topic-icon">${ico('book')}</div>
           <div class="topic-tile-text">
             <div class="topic-tile-name">${t.name || 'Topic'}</div>
             <div class="topic-tile-meta">${nSub} subtopic${nSub === 1 ? '' : 's'}</div>
@@ -2829,11 +2862,11 @@
     if (mats.length) {
       matListEl.innerHTML = mats.map(f => {
         const ext = f.name.split('.').pop().toLowerCase();
-        const icon = ext === 'pdf' ? '📄' : ext === 'pptx' ? '📊' : '📝';
+        const icon = ext === 'pdf' ? ico('file') : ext === 'pptx' ? ico('barChart') : ico('edit');
         return `<a class="material-item" href="${f.url}" target="_blank" rel="noopener">
           <span class="mat-icon">${icon}</span>
           <span class="mat-name">${f.name}</span>
-          <span class="mat-dl">Open ↗</span>
+          <span class="mat-dl">Open ${ico('arrowUpRight')}</span>
         </a>`;
       }).join('');
       materialsEl.style.display = '';
@@ -2852,10 +2885,10 @@
     const el = document.getElementById('canvas-topics');
     el.className = '';
     el.innerHTML = `
-      <a class="topic-back" href="#" onclick="event.preventDefault();loadCanvasClasswork(currentCurriculumId)">&#8592; All topics</a>
+      <a class="topic-back" href="#" onclick="event.preventDefault();loadCanvasClasswork(currentCurriculumId)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg> All topics</a>
       <div class="topic-detail">
         <div class="topic-detail-head">
-          <div class="topic-icon">&#128218;</div>
+          <div class="topic-icon">${ico('book')}</div>
           <div class="topic-detail-name">${t.name || 'Topic'}</div>
           ${pct !== null ? `<span class="topic-detail-pct">${pct}% mastered</span>` : ''}
         </div>
@@ -2979,7 +3012,7 @@
       if (bar) {
         bar.style.display = '';
         bar.innerHTML =
-          `<span class="gb-item">🔥 ${g.streak} day${g.streak === 1 ? '' : 's'}</span>` +
+          `<span class="gb-item">${ico('flame')} ${g.streak} day${g.streak === 1 ? '' : 's'}</span>` +
           `<span class="gb-item">Lv ${g.level}</span>` +
           `<span class="gb-item">${g.xp} XP</span>`;
       }
@@ -2989,14 +3022,14 @@
         const cur = it.count ?? it.progress, tot = it.target;
         const pct = tot ? Math.min(100, Math.round(cur / tot * 100)) : 0;
         return `<div class="q-row${it.done ? ' done' : ''}">
-            <div class="q-label">${it.done ? '✓ ' : ''}${it.label}</div>
+            <div class="q-label">${it.done ? ico('check') + ' ' : ''}${it.label}</div>
             <div class="q-bar"><div class="q-fill" style="width:${pct}%"></div></div>
             <div class="q-count">${cur}/${tot}</div>
           </div>`;
       }).join('');
       detail.innerHTML = `
         <div class="gd-head">
-          <div class="gd-stat"><div class="gd-num">🔥 ${g.streak}</div><div class="gd-cap">day streak</div></div>
+          <div class="gd-stat"><div class="gd-num">${ico('flame')} ${g.streak}</div><div class="gd-cap">day streak</div></div>
           <div class="gd-stat"><div class="gd-num">Lv ${g.level}</div><div class="gd-cap">${g.xp} XP</div></div>
           <div class="gd-stat"><div class="gd-num">${g.longest}</div><div class="gd-cap">best streak</div></div>
         </div>
@@ -3275,7 +3308,7 @@
       head.className = 'qb-review-head';
       const badge = document.createElement('span');
       badge.className = 'qb-review-badge ' + (ok ? 'ok' : 'bad');
-      badge.textContent = ok ? '✓' : '✗';
+      badge.innerHTML = ok ? ico('check') : ico('x');
       const qEl = document.createElement('span');
       qEl.className = 'qb-review-q';
       head.appendChild(badge);
@@ -3399,7 +3432,7 @@
              +  `style="max-width:100%;border-radius:8px;display:block;margin-bottom:10px">`;
       }
       if (data.error_index === null) {
-        html += `<div style="color:#16a34a;font-weight:600">✓ Every step follows — looks correct.</div>`;
+        html += `<div style="color:#16a34a;font-weight:600">${ico('check')} Every step follows — looks correct.</div>`;
       } else {
         html += `<div style="color:#dc2626;font-weight:600">Line ${data.error_index + 1} looks wrong.</div>`;
         if (data.explanation) {
@@ -3667,7 +3700,7 @@
   <div id="questions-panel">
     <div id="questions-header">
       <h2>Question bank</h2>
-      <button id="btn-close-questions" onclick="closeQuestions()">&#215;</button>
+      <button id="btn-close-questions" onclick="closeQuestions()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
 
     <div id="questions-list"></div>
@@ -3677,10 +3710,10 @@
       <input type="text" id="q-answer" placeholder="Answer (optional)" />
       <div id="q-img-preview">
         <img id="q-img-thumb" src="" alt="">
-        <button id="q-img-remove" onclick="removeQImage()">&#215;</button>
+        <button id="q-img-remove" onclick="removeQImage()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div id="q-form-row">
-        <button id="btn-q-img" onclick="pickQImage()">&#128248; Image</button>
+        <button id="btn-q-img" onclick="pickQImage()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Image</button>
         <button id="btn-q-submit" onclick="submitQuestion()">Add question</button>
       </div>
     </div>
