@@ -1,0 +1,11 @@
+{
+  "id": "gcse-maths-test",
+  "name": "GCSE Mathematics (test)",
+  "level": "GCSE",
+  "subjects": ["algebra"],
+  "tutor_style": "Socratic",
+  "prompt_flavour": "GCSE Mathematics exam preparation",
+  "collection": "gcse_maths_test",
+  "reference_dir": "curricula/gcse-maths-test/reference",
+  "papers_dir": "curricula/gcse-maths-test/reference"
+}

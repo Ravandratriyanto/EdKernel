@@ -121,6 +121,7 @@
   <a href="#deploy">AWS Deployment</a>
   <a href="#llm-client">core/llm/client.py</a>
   <a href="#prompts">core/prompts.py</a>
+  <a href="#sources">Content Sources</a>
   <a href="#rag-ingest">core/rag/ingest.py</a>
   <a href="#rag-retrieve">core/rag/retrieve.py</a>
   <a href="#settings">settings.py</a>
@@ -845,6 +846,53 @@ flowchart TD
 
     style SRE  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
     style TR   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ core/rag/ingest.py ═══════════════════════ -->
+<!-- ═══════════════════════ Content Sources ═══════════════════════ -->
+<div class="section color-core" id="sources">
+  <div class="section-header">
+    <h2>Content Sources — swappable adapters over the ingest folder</h2>
+    <span class="badge badge-core">APP-LAYER</span>
+  </div>
+  <div class="section-desc">
+    Where a curriculum's materials come from is a <strong>pluggable input</strong>,
+    not part of the engine. Every source adapter has exactly one job: land files
+    in <code>curricula/&lt;id&gt;/reference/</code>, then hand off to the existing
+    ingest. The pipeline downstream never knows the source. Adapters are
+    <strong>app-layer</strong> — a Drive client is HTTP, and the core invariant is
+    <code>core/</code> stays HTTP-free (same reason <code>gamify.py</code> lives
+    outside core). Swap Google Drive for a git repo, an offline USB copy, or S3
+    without touching a line of ingest/retrieve/tutor.
+  </div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph SRC["Content sources — pluggable, app-layer"]
+        DRIVE["drive_sync.py\nGoogle Drive folder\nAPI key, read-only\n(built; live pull pending GCP verify)"]
+        GIT["git repo\ngit clone / pull into reference/"]
+        LOCAL["local / USB / NFS\nplain file copy — offline, no network"]
+        S3["S3 / Dropbox / HTTP\nfuture adapter, same shape"]
+    end
+
+    DRIVE --> REF
+    GIT --> REF
+    LOCAL --> REF
+    S3 --> REF
+
+    REF[("curricula/&lt;id&gt;/reference/\nTHE contract: land files here")]
+
+    REF --> ING["app.py _start_ingest(cid, manifest)\n→ core.rag.ingest.build()"]
+    ING --> CHROMA[("ChromaDB collection\nper curriculum")]
+
+    NOTE["Discipline that keeps it swappable:\nnothing downstream imports an adapter.\nDrive-isms never leak past reference/."]
+    NOTE -.-> REF
+
+    style REF    fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style DRIVE  fill:#0d1a0d,stroke:#6fdd6f,color:#e8e8e8
+    style CHROMA fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
     </div>
   </div>
 </div>

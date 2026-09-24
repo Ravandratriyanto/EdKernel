@@ -1,0 +1,41 @@
+# Expanding Brackets
+
+Expanding brackets means multiplying every term inside the bracket by the term
+outside it. This removes the brackets and rewrites the expression as a sum of
+separate terms.
+
+## A single bracket
+
+Multiply the term outside by each term inside.
+
+Example: 3(x + 2) = 3 times x + 3 times 2 = 3x + 6.
+
+## Two brackets added together
+
+Expand each bracket separately, then collect like terms.
+
+Example: 3(x + 2) + 2(x - 1)
+- Expand the first: 3x + 6
+- Expand the second: 2x - 2
+- Add them: 3x + 6 + 2x - 2
+- Collect like terms: 5x + 4
+
+Be careful with the second bracket: 2 times -1 is -2, not +2. A sign slip here
+is one of the most common mistakes in the whole topic.
+
+## Multiplying two brackets together
+
+Every term in the first bracket multiplies every term in the second. A useful
+memory aid is FOIL: First, Outer, Inner, Last.
+
+Example: (x + 3)(x + 2)
+- First: x times x = x squared
+- Outer: x times 2 = 2x
+- Inner: 3 times x = 3x
+- Last: 3 times 2 = 6
+- Collect: x squared + 2x + 3x + 6 = x squared + 5x + 6
+
+## Collecting like terms
+
+Like terms have the same letter to the same power. 2x and 3x are like terms and
+add to 5x. But x squared and x are not like terms and cannot be combined.

@@ -1,0 +1,39 @@
+# Solving Linear Equations
+
+A linear equation is one where the unknown (usually x) appears only to the power
+of one. There are no x-squared or higher terms. The goal is always the same:
+get x on its own on one side of the equals sign.
+
+## The golden rule
+
+Whatever you do to one side of the equation, you must do to the other. The
+equals sign means both sides are worth exactly the same, and they stay equal
+only if you treat them identically.
+
+## One-step equations
+
+If x + 7 = 12, subtract 7 from both sides to get x = 5.
+If 4x = 20, divide both sides by 4 to get x = 5.
+
+## Two-step equations
+
+Deal with addition or subtraction first, then multiplication or division.
+
+Example: 2x + 7 = 19
+- Subtract 7 from both sides: 2x = 12
+- Divide both sides by 2: x = 6
+
+Example: 5x - 3 = 12
+- Add 3 to both sides: 5x = 15
+- Divide both sides by 5: x = 3
+
+## Watch the signs
+
+A very common mistake is dividing by a negative number and keeping the answer
+positive. If -3x = 12, divide both sides by -3 to get x = -4, NOT x = 4.
+The negative sign does not disappear.
+
+## Checking your answer
+
+Substitute your value back into the original equation. If both sides are equal,
+your answer is correct. For 2x + 7 = 19 with x = 6: 2(6) + 7 = 12 + 7 = 19. Correct.

@@ -1,0 +1,40 @@
+# Factorising Quadratics
+
+Factorising is the reverse of expanding. You start with a quadratic like
+x squared + 5x + 6 and rewrite it as a product of two brackets.
+
+## The standard form
+
+A quadratic is written as x squared + bx + c. To factorise it into
+(x + p)(x + q), you need two numbers that:
+- multiply to give c (the constant term)
+- add to give b (the coefficient of x)
+
+## A worked example
+
+Factorise x squared + 5x + 6.
+- We need two numbers that multiply to 6 and add to 5.
+- The pairs that multiply to 6 are: 1 and 6, 2 and 3.
+- The pair 2 and 3 adds to 5. That is the one.
+- So x squared + 5x + 6 = (x + 2)(x + 3).
+
+## When the middle term is negative
+
+Factorise x squared - 5x + 6.
+- Two numbers that multiply to +6 and add to -5.
+- Since they multiply to a positive but add to a negative, both are negative.
+- -2 and -3 multiply to 6 and add to -5.
+- So x squared - 5x + 6 = (x - 2)(x - 3).
+
+## Using factorising to solve equations
+
+If (x - 2)(x - 3) = 0, then one of the brackets must equal zero, because the
+only way two numbers multiply to zero is if at least one of them is zero.
+- Either x - 2 = 0, giving x = 2
+- Or x - 3 = 0, giving x = 3
+So the solutions are x = 2 or x = 3.
+
+## Checking
+
+Expand your brackets back out. If you get the original quadratic, your
+factorising is correct.
