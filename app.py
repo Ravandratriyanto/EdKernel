@@ -27,7 +27,7 @@ from core.vision.image_handler import transcribe
 from core.vision.step_checker import check_working
 import core.misconceptions
 from diagram_shots import shot_messages
-from sessionlog import log_turn, attachment_meta, list_sessions, session_turns
+from sessionlog import log_turn, attachment_meta, list_sessions, session_turns, all_sessions, session_turns_admin, stats
 import pdftext
 import users
 import quizbank
@@ -1613,8 +1613,23 @@ def api_admin_revoke_key(key_id: int):
     users.revoke_api_key(key_id, g.user['id'])
     return jsonify({'ok': True})
 
-@app.route('/dev')
-def dev_panel():
+def _dev_ok() -> bool:
+    """True only if the request carries the DEV_PANEL_KEY. The panel is served at
+    /dev/<key>; its API calls resend the key as an X-Dev-Key header. Constant-time,
+    denies outright if the key is unset. Hides the whole /api/dev surface behind an
+    unguessable path, independent of the auth_required flag."""
+    import hmac
+    expected = os.environ.get('DEV_PANEL_KEY', '')
+    provided = request.headers.get('X-Dev-Key') or request.args.get('k', '')
+    return bool(expected) and hmac.compare_digest(provided, expected)
+
+
+@app.route('/dev/<key>')
+def dev_panel(key):
+    import hmac
+    expected = os.environ.get('DEV_PANEL_KEY', '')
+    if not (expected and hmac.compare_digest(key, expected)):
+        return 'Not Found', 404
     err = _admin_only()
     if err:
         return err
@@ -1622,6 +1637,8 @@ def dev_panel():
 
 @app.route('/api/dev/settings')
 def api_dev_get_settings():
+    if not _dev_ok():
+        return 'Not Found', 404
     err = _admin_only()
     if err:
         return err
@@ -1629,10 +1646,40 @@ def api_dev_get_settings():
 
 @app.route('/api/dev/settings', methods=['PUT'])
 def api_dev_put_settings():
+    if not _dev_ok():
+        return 'Not Found', 404
     err = _admin_only()
     if err:
         return err
     saved = _settings.save(request.get_json(force=True) or {})
     return jsonify(saved)
+@app.route('/api/dev/sessions')
+def api_dev_sessions():
+    if not _dev_ok():
+        return 'Not Found', 404
+    err = _admin_only()
+    if err:
+        return err
+    return jsonify({'sessions': all_sessions()})
+
+
+@app.route('/api/dev/sessions/<sid>')
+def api_dev_session_turns(sid):
+    if not _dev_ok():
+        return 'Not Found', 404
+    err = _admin_only()
+    if err:
+        return err
+    return jsonify({'turns': session_turns_admin(sid)})
+
+
+@app.route('/api/dev/stats')
+def api_dev_stats():
+    if not _dev_ok():
+        return 'Not Found', 404
+    err = _admin_only()
+    if err:
+        return err
+    return jsonify(stats())
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5000, use_reloader=False)
