@@ -69,8 +69,8 @@ def all_sessions(limit: int = 200) -> list[dict]:
             continue 
         s = sessions.get(sid)
         if s is None:
-            s = sessions[sid] = {'session_id': sid, 'user_id': rec.get('userid'), 'mode': rec.get('mode', 'learn'), 'title': '', 'turns': 0, 'started': rec.get('ts', ''), 'updated': rec.get('ts', '') }
-            s['turns'] += 1
+            s = sessions[sid] = {'session_id': sid, 'user_id': rec.get('user_id'), 'mode': rec.get('mode', 'learn'), 'title': '', 'turns': 0, 'started': rec.get('ts', ''), 'updated': rec.get('ts', '') }
+        s['turns'] += 1
         s['updated'] = rec.get('ts', s['updated'])
         if not s['title']:
             s['title'] = (rec.get('topic') or rec.get('input') or '').strip()[:80]

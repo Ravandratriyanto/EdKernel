@@ -1660,7 +1660,11 @@ def api_dev_sessions():
     err = _admin_only()
     if err:
         return err
-    return jsonify({'sessions': all_sessions()})
+    names = {u['id']: u['username'] for u in users.list_users()}
+    sess = all_sessions()
+    for s in sess:
+        s['username'] = names.get(s['user_id'])
+    return jsonify({'sessions': sess})
 
 
 @app.route('/api/dev/sessions/<sid>')
@@ -1683,3 +1687,13 @@ def api_dev_stats():
     return jsonify(stats())
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5000, use_reloader=False)
+
+@app.route('/api/dev/study')
+def api_dev_study():
+    if not _dev_ok():
+        return 'Not Found', 404
+    err = _admin_only()
+    if err:
+        return err
+    return jsonify({'study': users.study_deltas()})
+    

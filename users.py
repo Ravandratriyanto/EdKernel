@@ -17,6 +17,8 @@ def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 def init() -> None:
@@ -325,6 +327,25 @@ def list_attempts(curriculum: str) -> list[dict]:
         conn.close()
     return [dict(r) for r in rows]
 
+def study_deltas() -> list[dict]:
+    conn = _connect()
+    try: 
+        rows = conn.execute('''
+        SELECT u.username, a.user_id, a.curriculum, a.topic, a.score, a.total, a.submitted_at 
+        FROM quiz_attempts a JOIN users u ON u.id = a.user_id
+        WHERE a.submitted_at IS NOT NULL
+        ORDER BY a.submitted_at ASC
+        ''').fetchall()
+    finally:
+        conn.close()
+    groups = {}
+    for r in rows:
+        groups.setdefault((r['user_id'], r['curriculum'], r['topic']), []).append(r)
+    out = []
+    for (uid, cur, topic), atts in groups.items():
+        first, last = atts[0], atts[-1]
+        out.append({'username': first['username'], 'topic': topic,'attempts': len(atts),'pre_score': first['score'], 'pre_total': first['total'],'post_score': last['score'], 'post_total': last['total']})
+    return out
 def get_progress(user_id: int, curriculum: str) -> list[dict]:
     conn = _connect()
     try:

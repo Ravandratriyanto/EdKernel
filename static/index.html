@@ -575,7 +575,24 @@
     .qb-title { font-size: 1rem; font-weight: 700; color: #1a1a2e; }
     .qb-top-center { display: flex; flex-direction: column; align-items: center; gap: 6px; }
     .qb-timer { font-size: 1.35rem; font-weight: 700; color: #1a1a2e; font-variant-numeric: tabular-nums; }
-    .qb-top-right { text-align: right; }
+    .qb-top-right { text-align: right; }.qb-tutor-toggle { font: inherit; font-size: 0.8rem; background: #4f46e5; color: #fff;
+      border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+    
+    #body-row.with-tutor #main-col {
+      flex: none; width: 40%; min-width: 300px; max-width: 72%;
+      border-left: 1px solid #e5e7eb;
+    }
+    #tutor-splitter { display: none; }
+    #body-row.with-tutor #tutor-splitter {
+      display: block; flex: none; width: 6px; cursor: col-resize;
+      background: #e5e7eb; align-self: stretch;
+    }
+    #body-row.with-tutor #tutor-splitter:hover { background: #a5b4fc; }
+    #body-row.with-tutor.tutor-right #main-col {
+      order: 3; border-left: none; border-right: 1px solid #e5e7eb;
+    }
+    #body-row.with-tutor.tutor-right #tutor-splitter { order: 2; }
+    #body-row.with-tutor .settings-bar { display: none; }
     .quiz-tab-warn {
       font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
       color: #dc2626; background: #fef2f2; border: 1px solid #fecaca;
@@ -1352,6 +1369,7 @@
 
 
 </div>
+<div id="tutor-splitter" onmousedown="startTutorDrag(event)"></div>
 <div id="quiz-panel" class="hidden">
   <!-- top bar -->
   <div class="qb-top">
@@ -1362,7 +1380,7 @@
       <div class="qb-timer" id="quiz-timer">00:00</div>
       <span class="quiz-tab-warn hidden" id="quiz-tab-warn">TAB SWITCH DETECTED (<span id="quiz-tab-count">0</span>)</span>
     </div>
-    <div class="qb-top-right"></div>
+    <div class="qb-top-right"><button class="qb-tutor-toggle" onclick="toggleQuizTutor()">Ask tutor</button> <button class="qb-tutor-toggle" onclick="swapTutorSide()" title="Move tutor to the other side">⇄ Side</button></div>
   </div>
   <div class="qb-rule"></div>
 
@@ -2723,6 +2741,7 @@
     document.getElementById('quiz-panel').classList.add('hidden');
     stopQuizWatch();
     document.getElementById('body-row').classList.remove('hidden');
+    document.getElementById('body-row').classList.remove('with-tutor');
     document.getElementById('btn-back').classList.remove('hidden');
     document.getElementById('header-class-name').classList.remove('hidden');
     document.getElementById('btn-sidebar').classList.remove('hidden');
@@ -3003,6 +3022,48 @@
     showChatView();
   }
 
+  function toggleQuizTutor() {
+    const row = document.getElementById('body-row');
+    const on = row.classList.toggle('with-tutor');
+    document.getElementById('main-col').classList.toggle('hidden', !on);
+    // First time it's opened for this quiz, hand the tutor the current question so
+    // it engages the actual problem directly instead of small-talk.
+    if (on && !quizTutorStarted) { quizTutorStarted = true; startTutorForQuestion(); }
+  }
+
+  function startTutorForQuestion() {
+    const q = quizQuestions[quizIndex];
+    if (!q || !q.text) return;
+    document.getElementById('input-topic').value =
+      'Help me with this problem please: ' + q.text;
+    startLearn();
+  }
+
+  function swapTutorSide() {
+    document.getElementById('body-row').classList.toggle('tutor-right');
+  }
+
+  function startTutorDrag(e) {
+    e.preventDefault();
+    const row = document.getElementById('body-row');
+    const mc = document.getElementById('main-col');
+    const rect = row.getBoundingClientRect();
+    document.body.style.userSelect = 'none';
+    function move(ev) {
+      const right = row.classList.contains('tutor-right');
+      let w = right ? (rect.right - ev.clientX) : (ev.clientX - rect.left);
+      w = Math.max(300, Math.min(w, rect.width * 0.72));
+      mc.style.width = w + 'px';
+    }
+    function up() {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.style.userSelect = '';
+    }
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  }
+
   async function renderGamify() {
     try {
       const res = await fetch('/api/gamify');
@@ -3081,6 +3142,7 @@
   let quizAttemptId = '';
   let quizReview = [];
   let quizIndex = 0;
+  let quizTutorStarted = false;   // has the side tutor been seeded with the current question?
   let quizTimerInt = null;
   let quizElapsed = 0;
 
@@ -3135,6 +3197,7 @@
     quizTabSwitches = 0;
     quizQuestions = [];
     quizAnswers = [];
+    quizTutorStarted = false;
     quizReview = [];
     quizAttemptId = '';
     quizIndex = 0;
@@ -3142,6 +3205,7 @@
     _hideAllViews();
     document.getElementById('body-row').classList.remove('hidden');
     document.getElementById('main-col').classList.add('hidden');
+    document.getElementById('body-row').classList.remove('with-tutor');
     document.getElementById('quiz-panel').classList.remove('hidden');
     document.getElementById('btn-back').classList.remove('hidden');
     document.getElementById('header-class-name').classList.remove('hidden');
