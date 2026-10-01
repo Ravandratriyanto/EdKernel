@@ -7,8 +7,10 @@
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
     onload="renderMathInPage()"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathlive"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -597,6 +599,26 @@
       font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
       color: #dc2626; background: #fef2f2; border: 1px solid #fecaca;
       padding: 4px 10px; border-radius: 6px;
+      #math-input-bar { display: flex; gap: 8px; align-items: center; padding: 8px 0; }
+    #math-input-bar.hidden { display: none; }
+    math-field { flex: 1; font-size: 1.1rem; border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 10px; }
+    #calc-panel { display: inline-block; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; margin-bottom: 8px; width: 260px; }
+    #calc-panel.hidden { display: none; }
+    #calc-display { width: 100%; text-align: right; font-size: 1.3rem; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; font-family: monospace; box-sizing: border-box; }
+    .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .calc-grid button { font: inherit; font-size: 1rem; padding: 10px 0; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; cursor: pointer; }
+    .calc-grid button:hover { background: #eef2ff; }
+    .calc-grid .calc-eq { background: #4f46e5; color: #fff; border: none; }
+    /* periodic table */
+    #pt-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; margin-bottom: 8px; overflow-x: auto; }
+    #pt-panel.hidden { display: none; }
+    #pt-grid { display: grid; grid-template-columns: repeat(18, minmax(28px, 1fr)); gap: 3px; min-width: 640px; }
+    .pt-el { position: relative; font-size: 0.7rem; font-weight: 600; padding: 8px 2px 4px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb; cursor: pointer; color: #1a1a2e; }
+    .pt-el:hover { background: #eef2ff; border-color: #8b5cf6; }
+    .pt-num { position: absolute; top: 1px; left: 2px; font-size: 0.5rem; font-weight: 400; color: #9ca3af; }
+    /* icon-button captions */
+    .icon-btn:has(.cap) { flex-direction: column; gap: 2px; height: auto; padding: 4px 8px; }
+    .cap { font-size: 0.58rem; color: #6b7280; line-height: 1; }
     }
     .qb-rule {
       border-top: 2px dashed #d1d5db;
@@ -1344,13 +1366,47 @@
 <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" class="hidden" onchange="handleFileChange()" />
 
 <div id="learn-panel">
+  <div id="math-input-bar" class="hidden">
+    <math-field id="math-field"></math-field>
+    <button class="send-btn" onclick="insertMath()">Insert</button>
+  </div>
+  <div id="calc-panel" class="hidden">
+    <input id="calc-display" readonly placeholder="0">
+    <div class="calc-grid">
+      <button type="button" onclick="calcClear()">C</button>
+      <button type="button" onclick="calcKey('(')">(</button>
+      <button type="button" onclick="calcKey(')')">)</button>
+      <button type="button" onclick="calcKey('÷')">÷</button>
+      <button type="button" onclick="calcKey('7')">7</button>
+      <button type="button" onclick="calcKey('8')">8</button>
+      <button type="button" onclick="calcKey('9')">9</button>
+      <button type="button" onclick="calcKey('×')">×</button>
+      <button type="button" onclick="calcKey('4')">4</button>
+      <button type="button" onclick="calcKey('5')">5</button>
+      <button type="button" onclick="calcKey('6')">6</button>
+      <button type="button" onclick="calcKey('-')">−</button>
+      <button type="button" onclick="calcKey('1')">1</button>
+      <button type="button" onclick="calcKey('2')">2</button>
+      <button type="button" onclick="calcKey('3')">3</button>
+      <button type="button" onclick="calcKey('+')">+</button>
+      <button type="button" onclick="calcKey('0')">0</button>
+      <button type="button" onclick="calcKey('.')">.</button>
+      <button type="button" onclick="calcBack()">⌫</button>
+      <button type="button" class="calc-eq" onclick="calcEq()">=</button>
+    </div>
+    <button type="button" class="send-btn" onclick="calcInsert()" style="width:100%;margin-top:8px">Insert into answer</button>
+  </div>
+  <div id="pt-panel" class="hidden">
+    <div id="pt-grid"></div>
+  </div>
   <div id="topic-row">
     <div id="learn-attach-strip" class="attach-strip hidden"></div>
     <div id="learn-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
       <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('learn')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
       <input id="input-topic" placeholder="Enter a topic to learn (e.g. photosynthesis)" onkeydown="if(event.key==='Enter') startLearn()" />
-      <button class="send-btn" id="btn-start" onclick="startLearn()">Start</button>
+      <button class="icon-btn" id="btn-math-topic" title="Insert math" onclick="toggleMathInput('input-topic')" style="font-weight:700;font-size:1.1rem">Σ</button>
+      <button class="send-btn hidden" id="btn-start" onclick="startLearn()">Start</button>
       <button class="send-btn" id="btn-papers" onclick="startPapers()" style="background:#0891b2" title="Search past papers and generate questions"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Papers</button>
     </div>
   </div>
@@ -1358,8 +1414,11 @@
     <div id="answer-attach-strip" class="attach-strip hidden"></div>
     <div id="answer-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
-      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
-      <button class="icon-btn" title="Generate graph" onclick="requestGraph()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
+      <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><span class="cap">Attach</span></button>
+      <button class="icon-btn" title="Generate graph" onclick="requestGraph()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="cap">Graph</span></button>
+      <button class="icon-btn" title="Insert math" onclick="toggleMathInput('input-answer')" style="font-weight:700;font-size:1.1rem">Σ<span class="cap">Symbols</span></button>
+      <button class="icon-btn" title="Calculator" onclick="toggleCalc()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="8" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="16" y1="14" x2="16" y2="18"/></svg><span class="cap">Calc</span></button>
+      <button class="icon-btn" title="Periodic table" onclick="togglePeriodicTable()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="cap">Elements</span></button>
       <textarea id="input-answer" rows="1" placeholder="Type your answer or describe a graph..." onkeydown="answerKeydown(event)"></textarea>
       <button class="send-btn" id="btn-send" onclick="sendAnswer()">Send</button>
     </div>
@@ -2076,6 +2135,87 @@
 
   function answerKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAnswer(); }
+  }
+  let mathTarget = 'input-answer';
+  function toggleMathInput(targetId) {
+    mathTarget = targetId || 'input-answer';
+    const bar = document.getElementById('math-input-bar');
+    const shown = !bar.classList.toggle('hidden');
+    if (shown) {
+      document.getElementById('math-field').focus();
+      if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.show();
+    } else if (window.mathVirtualKeyboard) {
+      window.mathVirtualKeyboard.hide();
+    }
+  }
+  function insertMath() {
+    const mf = document.getElementById('math-field');
+    const latex = (mf.value || '').trim();
+    const ta = document.getElementById(mathTarget);
+    if (latex && ta) {
+      ta.value += (ta.value ? ' ' : '') + '$' + latex + '$';
+      mf.value = '';
+      ta.focus();
+    }
+    document.getElementById('math-input-bar').classList.add('hidden');
+    if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide();
+  }
+
+  function toggleCalc() { document.getElementById('calc-panel').classList.toggle('hidden'); }
+  function calcKey(k) { const d = document.getElementById('calc-display'); if (d.value === 'Error') d.value = ''; d.value += k; }
+  function calcClear() { document.getElementById('calc-display').value = ''; }
+  function calcBack() { const d = document.getElementById('calc-display'); d.value = d.value.slice(0, -1); }
+  function calcEq() {
+    const d = document.getElementById('calc-display');
+    const expr = d.value.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+    if (!/^[-+*/().\d\s]+$/.test(expr)) { d.value = 'Error'; return; }
+    try {
+      const r = Function('"use strict";return(' + expr + ')')();
+      d.value = (r === undefined || r === null || Number.isNaN(r)) ? 'Error' : String(r);
+    } catch (e) { d.value = 'Error'; }
+  }
+  function calcInsert() {
+    const d = document.getElementById('calc-display');
+    const ta = document.getElementById('input-answer');
+    if (d.value && d.value !== 'Error' && ta) { ta.value += (ta.value ? ' ' : '') + d.value; ta.focus(); }
+  }
+
+  // Periodic table: [symbol, atomic number, group (1-18), display row].
+  // Lanthanides on row 9, actinides on row 10 (row 8 left blank as a gap).
+  const PT_ELEMENTS = [
+    ["H",1,1,1],["He",2,18,1],
+    ["Li",3,1,2],["Be",4,2,2],["B",5,13,2],["C",6,14,2],["N",7,15,2],["O",8,16,2],["F",9,17,2],["Ne",10,18,2],
+    ["Na",11,1,3],["Mg",12,2,3],["Al",13,13,3],["Si",14,14,3],["P",15,15,3],["S",16,16,3],["Cl",17,17,3],["Ar",18,18,3],
+    ["K",19,1,4],["Ca",20,2,4],["Sc",21,3,4],["Ti",22,4,4],["V",23,5,4],["Cr",24,6,4],["Mn",25,7,4],["Fe",26,8,4],["Co",27,9,4],["Ni",28,10,4],["Cu",29,11,4],["Zn",30,12,4],["Ga",31,13,4],["Ge",32,14,4],["As",33,15,4],["Se",34,16,4],["Br",35,17,4],["Kr",36,18,4],
+    ["Rb",37,1,5],["Sr",38,2,5],["Y",39,3,5],["Zr",40,4,5],["Nb",41,5,5],["Mo",42,6,5],["Tc",43,7,5],["Ru",44,8,5],["Rh",45,9,5],["Pd",46,10,5],["Ag",47,11,5],["Cd",48,12,5],["In",49,13,5],["Sn",50,14,5],["Sb",51,15,5],["Te",52,16,5],["I",53,17,5],["Xe",54,18,5],
+    ["Cs",55,1,6],["Ba",56,2,6],["Hf",72,4,6],["Ta",73,5,6],["W",74,6,6],["Re",75,7,6],["Os",76,8,6],["Ir",77,9,6],["Pt",78,10,6],["Au",79,11,6],["Hg",80,12,6],["Tl",81,13,6],["Pb",82,14,6],["Bi",83,15,6],["Po",84,16,6],["At",85,17,6],["Rn",86,18,6],
+    ["Fr",87,1,7],["Ra",88,2,7],["Rf",104,4,7],["Db",105,5,7],["Sg",106,6,7],["Bh",107,7,7],["Hs",108,8,7],["Mt",109,9,7],["Ds",110,10,7],["Rg",111,11,7],["Cn",112,12,7],["Nh",113,13,7],["Fl",114,14,7],["Mc",115,15,7],["Lv",116,16,7],["Ts",117,17,7],["Og",118,18,7],
+    ["La",57,3,9],["Ce",58,4,9],["Pr",59,5,9],["Nd",60,6,9],["Pm",61,7,9],["Sm",62,8,9],["Eu",63,9,9],["Gd",64,10,9],["Tb",65,11,9],["Dy",66,12,9],["Ho",67,13,9],["Er",68,14,9],["Tm",69,15,9],["Yb",70,16,9],["Lu",71,17,9],
+    ["Ac",89,3,10],["Th",90,4,10],["Pa",91,5,10],["U",92,6,10],["Np",93,7,10],["Pu",94,8,10],["Am",95,9,10],["Cm",96,10,10],["Bk",97,11,10],["Cf",98,12,10],["Es",99,13,10],["Fm",100,14,10],["Md",101,15,10],["No",102,16,10],["Lr",103,17,10],
+  ];
+  function renderPeriodicTable() {
+    const grid = document.getElementById('pt-grid');
+    if (grid.childElementCount) return;   // build once
+    PT_ELEMENTS.forEach(([sym, num, g, row]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pt-el';
+      b.style.gridColumn = g;
+      b.style.gridRow = row;
+      b.title = sym + ' (' + num + ')';
+      b.innerHTML = '<span class="pt-num">' + num + '</span>' + sym;
+      b.onclick = () => ptInsert(sym);
+      grid.appendChild(b);
+    });
+  }
+  function togglePeriodicTable() {
+    const p = document.getElementById('pt-panel');
+    const show = !p.classList.toggle('hidden');
+    if (show) renderPeriodicTable();
+  }
+  function ptInsert(sym) {
+    const ta = document.getElementById('input-answer');
+    if (ta) { ta.value += sym; ta.focus(); }
   }
 
   async function detectQuestion(target) {

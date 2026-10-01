@@ -1,10 +1,10 @@
+
 __pycache__/
 *.pyc
 *.pyo
 data/chroma/
 .env
 settings.json
-ecs-task-def.json
 static/dev.html
 .venv/
 .logs/
@@ -12,3 +12,6 @@ training/out/
 training/data/
 data/papers/
 Pictures/
+teacher-flow.html
+
+ecs-task-def.json
