@@ -16,8 +16,10 @@ gunicorn -w 4 --threads 4 --timeout 120 --bind 0.0.0.0:5000 app:app
 `0.0.0.0` = listen on all interfaces (required for other PCs to reach it).
 Wait for the `Listening at: http://0.0.0.0:5000` line.
 
-> Do **not** use `python app.py` — this app has no `app.run()`, so it just
-> imports and exits, leaving nothing listening. Always use gunicorn.
+> `python app.py` works too (it runs Flask's built-in dev server), but that server
+> is **single-threaded** — fine for solo testing, but it will choke with ~20
+> concurrent students. For the lab use **gunicorn** (above) or `./start-lab.sh`.
+> `./start.sh` launches the dev server + Ollama for everyday solo work.
 
 ## Find this machine's LAN IP
 

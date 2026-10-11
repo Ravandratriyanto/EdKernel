@@ -1453,6 +1453,10 @@ def _admin_only():
 def admin_panel():
     return send_from_directory('static', 'admin.html')
 
+@app.route('/admin2')
+def admin_panel_v2():
+    return send_from_directory('static', 'admin2.html')
+
 @app.route('/api/admin/curricula')
 def api_admin_list():
     err = _admin_only()

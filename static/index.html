@@ -2137,6 +2137,13 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAnswer(); }
   }
   let mathTarget = 'input-answer';
+  // One place to drop text into an input box, with an optional leading space.
+  function appendToBox(targetId, text, { space = true } = {}) {
+    const ta = document.getElementById(targetId);
+    if (!ta || !text) return;
+    ta.value += (space && ta.value ? ' ' : '') + text;
+    ta.focus();
+  }
   function toggleMathInput(targetId) {
     mathTarget = targetId || 'input-answer';
     const bar = document.getElementById('math-input-bar');
@@ -2151,12 +2158,7 @@
   function insertMath() {
     const mf = document.getElementById('math-field');
     const latex = (mf.value || '').trim();
-    const ta = document.getElementById(mathTarget);
-    if (latex && ta) {
-      ta.value += (ta.value ? ' ' : '') + '$' + latex + '$';
-      mf.value = '';
-      ta.focus();
-    }
+    if (latex) { appendToBox(mathTarget, '$' + latex + '$'); mf.value = ''; }
     document.getElementById('math-input-bar').classList.add('hidden');
     if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide();
   }
@@ -2176,8 +2178,7 @@
   }
   function calcInsert() {
     const d = document.getElementById('calc-display');
-    const ta = document.getElementById('input-answer');
-    if (d.value && d.value !== 'Error' && ta) { ta.value += (ta.value ? ' ' : '') + d.value; ta.focus(); }
+    if (d.value && d.value !== 'Error') appendToBox('input-answer', d.value);
   }
 
   // Periodic table: [symbol, atomic number, group (1-18), display row].
@@ -2213,10 +2214,7 @@
     const show = !p.classList.toggle('hidden');
     if (show) renderPeriodicTable();
   }
-  function ptInsert(sym) {
-    const ta = document.getElementById('input-answer');
-    if (ta) { ta.value += sym; ta.focus(); }
-  }
+  function ptInsert(sym) { appendToBox('input-answer', sym, { space: false }); }
 
   async function detectQuestion(target) {
     if (!attachment || attachment.type !== 'image') return;
