@@ -25,6 +25,8 @@ from core.llm.client import generate, chat
 from core.rag.retrieve import retrieve
 from core.vision.image_handler import transcribe
 from core.vision.step_checker import check_working
+from core.notes import notes_from_text
+from core.transcripts import fetch_transcript
 import core.misconceptions
 from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns, all_sessions, session_turns_admin, stats
@@ -275,6 +277,46 @@ def api_upload():
         b64 = base64.b64encode(file.read()).decode('utf-8')
         return jsonify({'type': 'image', 'b64': b64, 'name': file.filename})
     return (jsonify({'error': f'Unsupported file type: {ext}'}), 400)
+
+@app.route('/api/notes/pdf', methods=['POST'])
+def api_notes_pdf():
+    err = _check_llm_rate()
+    if err:
+        return err
+    file = request.files.get('file')
+    if not file:
+        return (jsonify({'error': 'No file provided'}), 400)
+    text = _pdf_text(file.read())
+    f = request.form
+    try:
+        notes = notes_from_text(
+            text, source=file.filename,
+            model=f.get('model', 'gemma4'), host=f.get('host', 'http://localhost:11434'),
+            provider=f.get('provider', 'ollama'), api_key=_key(f, 'api_key', 'API_KEY'))
+    except ValueError as e:
+        return (jsonify({'error': str(e)}), 400)
+    return jsonify({'notes': notes, 'name': file.filename})
+
+@app.route('/api/notes/youtube', methods=['POST'])
+def api_notes_youtube():
+    err = _check_llm_rate()
+    if err:
+        return err
+    data = request.json or {}
+    url = (data.get('url') or '').strip()
+    if not url:
+        return (jsonify({'error': 'No URL provided'}), 400)
+    try:
+        text = fetch_transcript(url)
+        notes = notes_from_text(
+            text, source='YouTube video',
+            model=data.get('model', 'gemma4'), host=data.get('host', 'http://localhost:11434'),
+            provider=data.get('provider', 'ollama'), api_key=_key(data, 'api_key', 'API_KEY'))
+    except ValueError as e:
+        return (jsonify({'error': str(e)}), 400)
+    except Exception:
+        return (jsonify({'error': 'Could not fetch that transcript — the video may have captions disabled.'}), 400)
+    return jsonify({'notes': notes, 'url': url})
 
 @app.route('/api/graph', methods=['POST'])
 def api_graph():

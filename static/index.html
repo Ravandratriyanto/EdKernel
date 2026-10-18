@@ -599,7 +599,8 @@
       font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
       color: #dc2626; background: #fef2f2; border: 1px solid #fecaca;
       padding: 4px 10px; border-radius: 6px;
-      #math-input-bar { display: flex; gap: 8px; align-items: center; padding: 8px 0; }
+    }
+    #math-input-bar { display: flex; gap: 8px; align-items: center; padding: 8px 0; }
     #math-input-bar.hidden { display: none; }
     math-field { flex: 1; font-size: 1.1rem; border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 10px; }
     #calc-panel { display: inline-block; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; margin-bottom: 8px; width: 260px; }
@@ -617,9 +618,8 @@
     .pt-el:hover { background: #eef2ff; border-color: #8b5cf6; }
     .pt-num { position: absolute; top: 1px; left: 2px; font-size: 0.5rem; font-weight: 400; color: #9ca3af; }
     /* icon-button captions */
-    .icon-btn:has(.cap) { flex-direction: column; gap: 2px; height: auto; padding: 4px 8px; }
-    .cap { font-size: 0.58rem; color: #6b7280; line-height: 1; }
-    }
+    .icon-btn:has(.cap) { flex-direction: column; gap: 2px; width: auto; min-width: 46px; height: auto; padding: 4px 8px; }
+    .cap { font-size: 0.58rem; color: #6b7280; line-height: 1; white-space: nowrap; }
     .qb-rule {
       border-top: 2px dashed #d1d5db;
       margin: 0 28px;
@@ -823,6 +823,28 @@
       border-radius:20px; padding:3px 12px;
     }
     #quests-panel { max-width:760px; margin:0 auto; padding:8px 4px 24px; }
+    #notes-panel { max-width:760px; margin:0 auto; padding:8px 4px 24px; }
+    .notes-h { margin:4px 0 2px; font-size:20px; }
+    .notes-sub { margin:0 0 16px; color:#9ca3af; font-size:14px; }
+    .notes-sources { display:flex; flex-direction:column; gap:12px; margin-bottom:16px; }
+    .notes-file { display:inline-flex; align-items:center; gap:10px; padding:12px 16px;
+      border:1px dashed #3f3f55; border-radius:10px; cursor:pointer; color:#c7c7d1;
+      background:rgba(16,185,129,0.06); }
+    .notes-file:hover { border-color:#10b981; }
+    .notes-file input { display:none; }
+    .notes-or { color:#6b7280; font-size:12px; text-transform:uppercase; letter-spacing:1px; }
+    .notes-yt-row { display:flex; gap:8px; }
+    .notes-yt-row input { flex:1; padding:11px 14px; border-radius:10px;
+      border:1px solid #30313e; background:#1a1b23; color:#e8e8ec; font-size:14px; }
+    .notes-yt-row input:focus { outline:none; border-color:#10b981; }
+    .notes-go { padding:0 18px; border:none; border-radius:10px; background:#10b981;
+      color:#06281d; font-weight:600; cursor:pointer; }
+    .notes-go:hover { background:#34d399; }
+    .notes-status { color:#9ca3af; font-size:14px; min-height:18px; margin-bottom:8px; }
+    .notes-out { background:#16171f; border:1px solid #26272f; border-radius:12px;
+      padding:4px 20px; line-height:1.6; }
+    .notes-out:empty { display:none; }
+    .notes-out h2 { font-size:18px; margin-top:20px; border-bottom:1px solid #26272f; padding-bottom:4px; }
     .gd-head { display:flex; gap:12px; margin-bottom:8px; }
     .gd-stat { flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; text-align:center; }
     .gd-num { font-size:1.3rem; font-weight:800; color:#1a1a2e; }
@@ -1240,6 +1262,11 @@
         <div class="svc-name">Quests</div>
         <div class="svc-desc">Missions &amp; streak</div>
       </div>
+      <div class="svc-tile" onclick="enterService('notes')">
+        <div class="svc-icon" style="background:rgba(16,185,129,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 2v6h6"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="8" y1="16" x2="10" y2="16"/></svg></div>
+        <div class="svc-name">Notes</div>
+        <div class="svc-desc">From a PDF or video</div>
+      </div>
     </div>
   </div>
 
@@ -1250,6 +1277,25 @@
 
   <div id="quests-panel" style="display:none">
     <div id="gamify-detail"></div>
+  </div>
+
+  <div id="notes-panel" style="display:none">
+    <h3 class="notes-h">Make revision notes</h3>
+    <p class="notes-sub">Drop a PDF or paste a YouTube link — the tutor turns it into structured notes.</p>
+    <div class="notes-sources">
+      <label class="notes-file">
+        <input type="file" id="notes-pdf" accept="application/pdf" onchange="makeNotes('pdf')">
+        <span id="notes-pdf-label">Choose a PDF…</span>
+      </label>
+      <div class="notes-or">or</div>
+      <div class="notes-yt-row">
+        <input type="text" id="notes-yt" placeholder="https://youtube.com/watch?v=…"
+               onkeydown="if(event.key==='Enter')makeNotes('youtube')">
+        <button class="notes-go" onclick="makeNotes('youtube')">Make notes</button>
+      </div>
+    </div>
+    <div id="notes-status" class="notes-status"></div>
+    <div id="notes-out" class="notes-out"></div>
   </div>
 
   <div id="canvas-body" style="display:none">
@@ -3237,9 +3283,60 @@
     } catch (_) {}
   }
 
+  /* ---- Notes (from PDF or YouTube) ---- */
+  function renderNotes(md) {
+    const out = document.getElementById('notes-out');
+    out.innerHTML = marked.parse(normaliseMath(md));
+    renderMathInElement(out, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$',  right: '$',  display: false },
+      ]
+    });
+    restoreDollars(out);
+  }
+
+  async function makeNotes(kind) {
+    const status = document.getElementById('notes-status');
+    const out = document.getElementById('notes-out');
+    const p = { provider, model: model(), host: host(), api_key: apiKey() };
+    try {
+      let data;
+      if (kind === 'pdf') {
+        const file = document.getElementById('notes-pdf').files[0];
+        if (!file) return;
+        document.getElementById('notes-pdf-label').textContent = file.name;
+        status.textContent = 'Reading the PDF and writing notes…';
+        out.innerHTML = '';
+        const fd = new FormData();
+        fd.append('file', file);
+        Object.entries(p).forEach(([k, v]) => fd.append(k, v));
+        data = await (await fetch('/api/notes/pdf', { method: 'POST', body: fd })).json();
+      } else {
+        const url = document.getElementById('notes-yt').value.trim();
+        if (!url) { status.textContent = 'Paste a YouTube link first.'; return; }
+        status.textContent = 'Fetching the transcript and writing notes…';
+        out.innerHTML = '';
+        data = await (await fetch('/api/notes/youtube', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, ...p }),
+        })).json();
+      }
+      if (!data || data.error) {
+        status.textContent = (data && data.error) || 'Something went wrong.';
+        return;
+      }
+      status.textContent = '';
+      renderNotes(data.notes);
+    } catch (e) {
+      status.textContent = 'Something went wrong: ' + e.message;
+    }
+  }
+
   function enterService(type) {
     if (type === 'topics') {
       document.getElementById('quests-panel').style.display = 'none';
+      document.getElementById('notes-panel').style.display = 'none';
       document.getElementById('canvas-tabs').style.display = '';
       document.getElementById('canvas-body').style.display = '';
       showCanvasTab('classwork');
@@ -3247,9 +3344,17 @@
     } else if (type === 'quests') {
       document.getElementById('canvas-tabs').style.display = 'none';
       document.getElementById('canvas-body').style.display = 'none';
+      document.getElementById('notes-panel').style.display = 'none';
       const p = document.getElementById('quests-panel');
       p.style.display = '';
       renderGamify();
+      p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (type === 'notes') {
+      document.getElementById('canvas-tabs').style.display = 'none';
+      document.getElementById('canvas-body').style.display = 'none';
+      document.getElementById('quests-panel').style.display = 'none';
+      const p = document.getElementById('notes-panel');
+      p.style.display = '';
       p.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (type === 'learn') {
       enterTutor();

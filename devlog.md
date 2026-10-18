@@ -4640,3 +4640,177 @@ doesn't support the "helpful model corrects mistakes" thesis either.
   machine). The "3.8× ARM" ratio needs a fresh *paired* x86+ARM run on OpenCV 5.0,
   ideally with `cv2.setNumThreads` pinned, before it can be quoted precisely.
 - **#7 demo video** — the other genuine open deliverable, still not started.
+
+## Session 33 — 2026-10-18
+
+Long multi-day session (work spans ~Sep 24 → Oct 18). Heavy on student-facing UI
+and a big corruption cleanup. **SCHOOL GREEN LIGHT received** for the classroom
+lab — the Impact-validation gap finally has a path.
+
+### Student input tooling — math, chemistry, calculator, periodic table
+A push to make STEM answers enterable and rendered (all in `static/index.html`,
+vanilla, CDN deps — no build step):
+- **LaTeX rendering of tutor replies** — the pipeline (`appendBubble` →
+  `normaliseMath` → KaTeX) already existed; the gap was the tutor never *emitted*
+  `$…$`. Added a **MATH FORMATTING** section to `TUTOR_SYSTEM_PROMPT`
+  (`core/prompts.py`) telling it to wrap maths in `$…$`/`$$…$$`. Mind the
+  f-string braces/backslashes (`\\times`, `{{…}}`).
+- **Chemistry notation** — loaded KaTeX's **mhchem** extension (one CDN script) +
+  a prompt line to emit `\ce{…}`. Engine is subject-agnostic, so chemistry
+  "works" the moment a chem class exists; this just makes the notation render.
+- **Math input (Σ)** — **MathLive** `<math-field>` via CDN: visual editor +
+  symbol keyboard → LaTeX, inserted into the active box. Replaced the free-text
+  topic-row **Start** button with the Σ button (Start kept hidden so the existing
+  `btn-start` JS + quiz auto-start don't null-ref; Enter still starts a lesson).
+- **Calculator** — a keypad panel with a regex-guarded `Function()` eval (digits/
+  operators/parens only — no injection).
+- **Periodic table** — a data-driven 118-element grid (`PT_ELEMENTS`), click →
+  inserts the symbol. Built by Claude (118 entries is data, not hand-type work).
+- **Button captions** — labels under the icon buttons (Attach/Graph/Symbols/Calc/
+  Elements) via `.icon-btn:has(.cap)`. Needs a modern browser for `:has()`.
+- **DRY pass** — three near-identical insert functions collapsed into one
+  `appendToBox(targetId, text, {space})`.
+
+### Side-by-side quiz tutor
+Reused `#main-col` (the full Socratic chat) docked next to `#quiz-panel` in the
+flex `#body-row`: **Ask tutor** toggle, **⇄ Side** swap (CSS `order`), a draggable
+`#tutor-splitter` divider (plain JS, no library — there is no "primitives" skill),
+and **auto-seeding** — opening the tutor during a quiz calls `startTutorForQuestion`
+which hands it the current question so it engages the maths directly instead of
+small-talk. Pre/post graded quizzes stay tutor-free (seeds once, on first open).
+
+### Dev panel — monitoring, pre/post study, secret gate
+`static/dev.html` rebuilt over `sessionlog.py` + `users.py`:
+- `sessionlog`: `all_sessions()`, `session_turns_admin()`, `stats()` (all-user
+  aggregates); `users.study_deltas()` (per student+topic, first vs latest
+  `quiz_attempts` = the pre/post Δ).
+- `/api/dev/{stats,sessions,sessions/<sid>,study}` behind **`_dev_ok()`** — a
+  constant-time key check on `/dev/<key>`; returns **404 not 403** (invisible),
+  gates both page and APIs, independent of `auth_required`. Key in `.env`
+  (`DEV_PANEL_KEY`). The panel reads the key from its own URL and resends it.
+- Seed data: `stubtesting/seed_conversation.py` (6 named students, canned
+  multi-turn chats, no LLM) + `seed_users.py` (admin + 30 students, roster CSV).
+
+### Infra / ops
+- **WAL** on `users.db` (`_connect()` PRAGMA) — concurrent-write safety for 20 kids.
+- **`drive_sync.py`** — optional Google-Drive content adapter (app-layer, HTTP out
+  of `core/`); download half works, live pull blocked on GCP verification. The
+  seam: adapters fill `curricula/<id>/reference/`, ingest is untouched (swappable).
+- **`cmd.md`**, **`start-lab.sh`** (gunicorn, multi-worker, prints LAN URL) and
+  **`start-lab.bat`** (waitress — gunicorn is Unix-only). Corrected cmd.md's wrong
+  "app.py has no app.run()" claim (it does; the dev server is just single-threaded).
+- Flowcharts updated: **Gamification**, **Content Sources**, **Dev Panel**,
+  **Math & Chem Input** diagrams.
+- admin.html palette retune (`:root` — clearer `--surface` vs `--bg` separation).
+
+### Corruption cleanup (the honest, important part)
+Half-saved / deleted-while-open editor buffers wrecked several tracked files; we
+caught it by **reviewing the diff before committing** instead of blind `git add -A`:
+- `core/llm/client.py` — mangled `_groq_chat` (collapsed `import`, `clien t=`,
+  `competitions`→`completions`), a **duplicate** `_groq_chat`, and **lost
+  `temperature=0` + Bedrock**. Restored from HEAD.
+- `static/teacher.html` — the **Class Misconception Map** (`loadMisconceptions`)
+  was deleted. Restored.
+- `devlog.md` — working tree had **lost ~1,858 lines** (old sessions). Restored.
+- `core/prompts.py` — the chem line got **duplicated** and the LaTeX section
+  dropped; restored + re-added cleanly.
+- `pdftext.py` indent, a dropped `<` on the MathLive `<script>` and an
+  answer-row `<div>`, and a self-closed `input-row` (stacked the whole input bar).
+- An **unclosed `.quiz-tab-warn {`** silently swallowed ~20 lines of CSS
+  (math bar, calculator, periodic table, captions all rendered unstyled) — found
+  only because the captions looked broken. Fixed the brace balance.
+- A **live Groq key** sat in `ecs-task-def.json`; the `pre-commit` hook blocked
+  it. Gitignored the file; key rotated. Hook earned its keep.
+
+### admin panel — React experiment (in progress, flagged)
+Started rebuilding `/admin` as React+Tailwind at the user's request, served at
+`/admin2` (new file, old `/admin` kept working). **No build step** — React +
+ReactDOM + **Babel Standalone** (JSX compiled in-browser) + **Tailwind Play CDN**,
+all via `<script>`. Scaffold + sidebar + live curricula list done. Honest caveat:
+Babel-in-browser and Tailwind Play CDN are **dev-only / not production-grade** —
+fine for a low-traffic admin page, never the student path. This is a
+**zero-judging-weight** rebuild of a working page.
+
+### Known issues / honest gaps
+- **"Fun over scored" pattern, again — and now on a clock.** This session piled on
+  input tools, calculator, periodic table, a mascot debate, and an admin React
+  rewrite while the *scored* work (demo video, lab prep) sat. The green light +
+  lab date make this urgent to stop.
+- **Deadline is UNVERIFIED.** CLAUDE.md says "end of 2026"; a planning note implied
+  ~24 days (late Oct). The proposal's lab date was Fri 16 Oct, yet today is 18 Oct
+  — the dates don't reconcile. **Confirm the real OpenCV submission deadline and
+  the lab date from source before planning.** Also: AS-level CS exam in the window.
+- **Lab prep NOT done:** auth still `false`; the 30 accounts aren't seeded on the
+  lab machine; `gcse-maths` quiz bank is only 5 Qs (thin for a pre/post study);
+  no school-network pre-flight; no sibling pilot yet.
+- **Single-point-of-failure hosting** — one gunicorn, one laptop, no auto-restart;
+  the server died repeatedly this session and orphaned gunicorns piled up (killed
+  with `pkill`). Consider a `while true; do ./start-lab.sh; done` supervisor.
+- **`admin2` is half-built** and not production-grade; decide whether it ships or
+  stays post-lab. `/admin` still works as the real panel.
+- **Large uncommitted pile** — user commits themselves (explicit: don't run git
+  without supervision). Includes the CSS fix, input tools, dev panel, start scripts.
+- **`:has()` captions / `drive_sync` live pull / x86 COOL variance** — all still
+  open from prior notes.
+
+## Session 34 — 2026-10-18
+
+Short session, one feature: **revision notes from a PDF or a YouTube video**.
+Prompted by an Indonesian AI-study app (**Pelajarin.ai**) the user saw advertised —
+it summarises PDFs/YouTube into notes + flashcards. The instinct was "we had that
+in the bag." Half true, and worth recording why.
+
+### Notes feature — PDF + YouTube → structured Markdown notes
+- **Already had:** PDF→text. `app.py:_pdf_text()` (via `pdftext.doc_pages`) already
+  extracts PDF text, and `/api/upload` already returns it. So the hard half of the
+  PDF path existed. What did **not** exist: anything that makes *notes* (we only
+  extracted *questions*, `core/questions.py`), and anything YouTube — `core/video/`
+  is a camera-frame single-question transcriber, **not** a lecture ingester.
+- **New, pure `core/`:** `core/notes.py` — `notes_from_text(text, source, **llm)`
+  runs a notes prompt (summary → `##` topics → bullets → "Key things to remember").
+  Uses `.replace("__SRC__"/"__TEXT__")`, **not** an f-string/`.format()`, so LaTeX
+  `$$…$$` braces can't trip the brace landmine this project keeps hitting.
+- **New, app-layer:** `transcripts.py` — fetches YouTube captions with
+  `youtube-transcript-api` (`languages=["en","id"]` for the lab). HTTP lives
+  **outside `core/`** (same rule as `drive_sync.py`); an 11-char video-id regex
+  means we only ever hand YouTube a video id, not an arbitrary URL (not an open
+  SSRF). New dependency — added to `requirements.txt`.
+- **New endpoints:** `POST /api/notes/pdf` (multipart, reuses `_pdf_text`) and
+  `POST /api/notes/youtube` (JSON). Both behind `_check_llm_rate()`.
+- **Frontend (done + verified structurally):** a 6th **Notes** service tile, a
+  `#notes-panel` (PDF picker + YouTube field), and `makeNotes()/renderNotes()`
+  that render through the **same** `normaliseMath → marked.parse →
+  renderMathInElement → restoreDollars` pipeline as tutor bubbles, so KaTeX/mhchem
+  maths renders identically. `enterService('notes')` mirrors the quests pattern;
+  topics/quests branches now also hide the notes panel so views don't stack.
+
+### Split of work
+Frontend (`index.html`) was done by Claude directly at the user's request. The
+backend (`core/notes.py`, `transcripts.py`, the two endpoints, the requirements
+line) was **spec'd for the user to type** — their learning workflow. As of this
+entry the backend is being typed, so the feature is **not yet wired end-to-end.**
+
+### Known issues / honest gaps
+- **NOT VERIFIED END TO END.** The frontend calls two routes that don't exist in
+  the running app yet; until the backend is typed in it 404s. No live PDF or
+  YouTube run has happened. Do not call this "done" — the project's own rule is
+  "run the thing before saying it works," and that hasn't happened here.
+- **`youtube-transcript-api` not installed** — `pip install` hit Arch's PEP 668
+  (externally-managed). Path given: `pip install --user --break-system-packages`
+  to match where gunicorn already lives in `~/.local`. Unconfirmed it's in yet.
+- **YouTube transcripts are fragile in practice** — captions get disabled,
+  auto-caption language varies, and `youtube-transcript-api` breaks when YouTube
+  changes its internals. The endpoint catches it and returns a clean error, but
+  expect this path to be flaky; the PDF path is the reliable one.
+- **Still zero-rubric work — and this is now the pattern, not an exception.** Notes
+  scores nothing on OpenCV (30%), makes us a *follower* of Pelajarin on Innovation
+  (20%), and doesn't touch the Impact lab. Session 33 flagged "fun over scored on a
+  clock"; this session did it again. The one redemption path (unbuilt): generate
+  notes from the GCSE PDFs *for the lab*, and wire a "Practice this" button from
+  notes → the existing question/tutor loop — the integration Pelajarin can't cheaply
+  copy. That wiring was offered and deferred to after the lab.
+- **Lab prep STILL not done** (auth off, 30 accounts unseeded, 5-Q quiz bank) and
+  **demo video still not started** — both unchanged since Session 33, both scored,
+  both now one more session behind.
+- **Deadline still unverified** — Session 33's date reconciliation problem was not
+  resolved this session either.

@@ -122,6 +122,7 @@
   <a href="#llm-client">core/llm/client.py</a>
   <a href="#prompts">core/prompts.py</a>
   <a href="#sources">Content Sources</a>
+  <a href="#notes">Notes (PDF · YouTube)</a>
   <a href="#rag-ingest">core/rag/ingest.py</a>
   <a href="#rag-retrieve">core/rag/retrieve.py</a>
   <a href="#settings">settings.py</a>
@@ -893,6 +894,58 @@ flowchart TD
     style REF    fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
     style DRIVE  fill:#0d1a0d,stroke:#6fdd6f,color:#e8e8e8
     style CHROMA fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Notes ═══════════════════════ -->
+<div class="section color-core" id="notes">
+  <div class="section-header">
+    <h2>Notes — revision notes from a PDF or a YouTube video</h2>
+    <span class="badge badge-core">APP + CORE</span>
+  </div>
+  <div class="section-desc">
+    A student-facing <strong>study-notes generator</strong>: hand it a PDF or a
+    YouTube link, get back structured Markdown notes (summary → <code>##</code>
+    topics → bullets → "key things to remember"), rendered through the same
+    KaTeX/mhchem pipeline as tutor replies. Two input adapters feed one brain. The
+    <strong>text extraction already existed</strong> (<code>_pdf_text</code> for
+    PDFs); the only new engine piece is <code>core/notes.py:notes_from_text()</code>,
+    which is pure — text in, notes out, no HTTP. The YouTube side
+    (<code>transcripts.py</code>, <code>youtube-transcript-api</code>) is the HTTP
+    adapter and stays <strong>app-layer</strong>, same invariant as the Drive
+    adapter. Note vs Pelajarin.ai: the differentiator is not the notes — it is that
+    notes can feed the existing tutor/quiz loop (planned, not yet wired).
+  </div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart TD
+    subgraph IN["Inputs — student picks one"]
+        PDF["PDF upload\nmultipart"]
+        YT["YouTube link\npaste URL"]
+    end
+
+    PDF --> EP1["POST /api/notes/pdf\napp.py · _check_llm_rate"]
+    YT  --> EP2["POST /api/notes/youtube\napp.py · _check_llm_rate"]
+
+    EP1 --> PT["_pdf_text()\npypdf → pdftext.doc_pages\n(already existed)"]
+    EP2 --> TR["transcripts.py\nfetch_transcript()\nyoutube-transcript-api .fetch()\nAPP-LAYER (HTTP)"]
+
+    PT --> NT
+    TR --> NT
+
+    NT["core/notes.py\nnotes_from_text(text, source)\nPURE — no HTTP, &lt;40 chars → ValueError\nprompt via .replace (no f-string braces)"]
+    NT --> LLM["core.llm.generate()\nGroq / Ollama"]
+    LLM --> MD["Markdown notes\n{notes, name|url}"]
+    MD --> UI["index.html #notes-panel\nnormaliseMath → marked → KaTeX/mhchem\n(same render path as tutor bubbles)"]
+
+    FUT["NEXT (unbuilt): 'Practice this'\nnotes → question bank → Socratic tutor\n— the loop Pelajarin can't cheaply copy"]
+    UI -.-> FUT
+
+    style NT  fill:#0d1a0d,stroke:#6fdd6f,color:#e8e8e8
+    style TR  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style PT  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style FUT fill:#2a230d,stroke:#ddc46f,color:#e8e8e8
     </div>
   </div>
 </div>
