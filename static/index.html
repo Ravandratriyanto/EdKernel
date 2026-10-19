@@ -823,28 +823,23 @@
       border-radius:20px; padding:3px 12px;
     }
     #quests-panel { max-width:760px; margin:0 auto; padding:8px 4px 24px; }
-    #notes-panel { max-width:760px; margin:0 auto; padding:8px 4px 24px; }
-    .notes-h { margin:4px 0 2px; font-size:20px; }
-    .notes-sub { margin:0 0 16px; color:#9ca3af; font-size:14px; }
-    .notes-sources { display:flex; flex-direction:column; gap:12px; margin-bottom:16px; }
-    .notes-file { display:inline-flex; align-items:center; gap:10px; padding:12px 16px;
+    #notes-composer { padding:12px 14px; margin-bottom:8px; border:1px solid #30313e;
+      border-radius:12px; background:#16171f; }
+    .notes-c-head { color:#9ca3af; font-size:13px; margin-bottom:10px; }
+    .notes-c-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .notes-file { display:inline-flex; align-items:center; gap:8px; padding:10px 14px;
       border:1px dashed #3f3f55; border-radius:10px; cursor:pointer; color:#c7c7d1;
-      background:rgba(16,185,129,0.06); }
+      background:rgba(16,185,129,0.06); white-space:nowrap; }
     .notes-file:hover { border-color:#10b981; }
     .notes-file input { display:none; }
     .notes-or { color:#6b7280; font-size:12px; text-transform:uppercase; letter-spacing:1px; }
-    .notes-yt-row { display:flex; gap:8px; }
-    .notes-yt-row input { flex:1; padding:11px 14px; border-radius:10px;
+    .notes-c-row input[type=text] { flex:1; min-width:160px; padding:10px 14px; border-radius:10px;
       border:1px solid #30313e; background:#1a1b23; color:#e8e8ec; font-size:14px; }
-    .notes-yt-row input:focus { outline:none; border-color:#10b981; }
-    .notes-go { padding:0 18px; border:none; border-radius:10px; background:#10b981;
+    .notes-c-row input[type=text]:focus { outline:none; border-color:#10b981; }
+    .notes-go { padding:10px 18px; border:none; border-radius:10px; background:#10b981;
       color:#06281d; font-weight:600; cursor:pointer; }
     .notes-go:hover { background:#34d399; }
-    .notes-status { color:#9ca3af; font-size:14px; min-height:18px; margin-bottom:8px; }
-    .notes-out { background:#16171f; border:1px solid #26272f; border-radius:12px;
-      padding:4px 20px; line-height:1.6; }
-    .notes-out:empty { display:none; }
-    .notes-out h2 { font-size:18px; margin-top:20px; border-bottom:1px solid #26272f; padding-bottom:4px; }
+    .notes-status { color:#9ca3af; font-size:13px; min-height:16px; margin-top:8px; }
     .gd-head { display:flex; gap:12px; margin-bottom:8px; }
     .gd-stat { flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; text-align:center; }
     .gd-num { font-size:1.3rem; font-weight:800; color:#1a1a2e; }
@@ -1262,11 +1257,6 @@
         <div class="svc-name">Quests</div>
         <div class="svc-desc">Missions &amp; streak</div>
       </div>
-      <div class="svc-tile" onclick="enterService('notes')">
-        <div class="svc-icon" style="background:rgba(16,185,129,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 2v6h6"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="8" y1="16" x2="10" y2="16"/></svg></div>
-        <div class="svc-name">Notes</div>
-        <div class="svc-desc">From a PDF or video</div>
-      </div>
     </div>
   </div>
 
@@ -1277,25 +1267,6 @@
 
   <div id="quests-panel" style="display:none">
     <div id="gamify-detail"></div>
-  </div>
-
-  <div id="notes-panel" style="display:none">
-    <h3 class="notes-h">Make revision notes</h3>
-    <p class="notes-sub">Drop a PDF or paste a YouTube link — the tutor turns it into structured notes.</p>
-    <div class="notes-sources">
-      <label class="notes-file">
-        <input type="file" id="notes-pdf" accept="application/pdf" onchange="makeNotes('pdf')">
-        <span id="notes-pdf-label">Choose a PDF…</span>
-      </label>
-      <div class="notes-or">or</div>
-      <div class="notes-yt-row">
-        <input type="text" id="notes-yt" placeholder="https://youtube.com/watch?v=…"
-               onkeydown="if(event.key==='Enter')makeNotes('youtube')">
-        <button class="notes-go" onclick="makeNotes('youtube')">Make notes</button>
-      </div>
-    </div>
-    <div id="notes-status" class="notes-status"></div>
-    <div id="notes-out" class="notes-out"></div>
   </div>
 
   <div id="canvas-body" style="display:none">
@@ -1412,6 +1383,20 @@
 <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" class="hidden" onchange="handleFileChange()" />
 
 <div id="learn-panel">
+  <div id="notes-composer" class="hidden">
+    <div class="notes-c-head">Make revision notes — the tutor adds them to the chat, then you can ask about them.</div>
+    <div class="notes-c-row">
+      <label class="notes-file">
+        <input type="file" id="notes-pdf" accept="application/pdf" onchange="makeNotes('pdf')">
+        <span id="notes-pdf-label">Choose a PDF…</span>
+      </label>
+      <span class="notes-or">or</span>
+      <input type="text" id="notes-yt" placeholder="Paste a YouTube link…"
+             onkeydown="if(event.key==='Enter')makeNotes('youtube')">
+      <button class="notes-go" onclick="makeNotes('youtube')">Make notes</button>
+    </div>
+    <div id="notes-status" class="notes-status"></div>
+  </div>
   <div id="math-input-bar" class="hidden">
     <math-field id="math-field"></math-field>
     <button class="send-btn" onclick="insertMath()">Insert</button>
@@ -1465,6 +1450,7 @@
       <button class="icon-btn" title="Insert math" onclick="toggleMathInput('input-answer')" style="font-weight:700;font-size:1.1rem">Σ<span class="cap">Symbols</span></button>
       <button class="icon-btn" title="Calculator" onclick="toggleCalc()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="8" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="16" y1="14" x2="16" y2="18"/></svg><span class="cap">Calc</span></button>
       <button class="icon-btn" title="Periodic table" onclick="togglePeriodicTable()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="cap">Elements</span></button>
+      <button class="icon-btn" title="Make notes from a PDF or YouTube video" onclick="toggleNotes()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 2v6h6"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="8" y1="16" x2="10" y2="16"/></svg><span class="cap">Notes</span></button>
       <textarea id="input-answer" rows="1" placeholder="Type your answer or describe a graph..." onkeydown="answerKeydown(event)"></textarea>
       <button class="send-btn" id="btn-send" onclick="sendAnswer()">Send</button>
     </div>
@@ -2103,7 +2089,10 @@
         return;
       }
       messages = data.messages;
-      appendBubble('tutor', data.response);
+      // Opening a lesson with a YouTube link: show notes instead of the tutor's "go ahead".
+      const yt = topic.match(YT_URL_RE);
+      if (yt) await notesFromYoutube(yt[0]);
+      else appendBubble('tutor', data.response);
       loadSessions();          // the lesson now has log rows — show it in the sidebar
 
       if (data.done) {
@@ -2128,6 +2117,16 @@
     busy = true;
     document.getElementById('btn-send').disabled = true;
     document.getElementById('input-answer').value = '';
+
+    // A YouTube link in the chat becomes notes — the tutor can't watch video.
+    const yt = !attachment && input.match(YT_URL_RE);
+    if (yt) {
+      appendBubble('student', input);
+      await notesFromYoutube(yt[0]);
+      document.getElementById('btn-send').disabled = false;
+      busy = false;
+      return;
+    }
 
     const attach = attachment;
     clearAttachment();
@@ -3283,60 +3282,68 @@
     } catch (_) {}
   }
 
-  /* ---- Notes (from PDF or YouTube) ---- */
-  function renderNotes(md) {
-    const out = document.getElementById('notes-out');
-    out.innerHTML = marked.parse(normaliseMath(md));
-    renderMathInElement(out, {
-      delimiters: [
-        { left: '$$', right: '$$', display: true },
-        { left: '$',  right: '$',  display: false },
-      ]
-    });
-    restoreDollars(out);
+  /* ---- Notes (from PDF or YouTube), inside Learn ---- */
+  // A link the tutor can't read on its own — pasting one in the chat makes notes.
+  const YT_URL_RE = /https?:\/\/\S*(?:youtube\.com|youtu\.be)\/\S*/i;
+
+  function toggleNotes() {
+    const c = document.getElementById('notes-composer');
+    c.classList.toggle('hidden');
+    document.getElementById('notes-status').textContent = '';
+    if (!c.classList.contains('hidden')) document.getElementById('notes-yt').focus();
+  }
+
+  // Both paths render the notes as a tutor bubble AND push them into the
+  // conversation, so the student can immediately ask the tutor about them.
+  function _notesLLM() { return { provider, model: model(), host: host(), api_key: apiKey() }; }
+
+  async function _showNotes(fetchPromise, failMsg) {
+    appendThinking();
+    try {
+      const data = await (await fetchPromise).json();
+      removeThinking();
+      if (!data || data.error) { appendBubble('tutor', (data && data.error) || failMsg); return; }
+      appendBubble('tutor', data.notes);
+      messages.push({ role: 'assistant', content: data.notes });
+      loadSessions();
+    } catch (e) { removeThinking(); appendBubble('tutor', 'Error: ' + e.message); }
+  }
+
+  function notesFromYoutube(url) {
+    return _showNotes(
+      fetch('/api/notes/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, ..._notesLLM() }) }),
+      'Could not make notes from that video — it may have captions disabled.');
+  }
+
+  function notesFromPdf(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    Object.entries(_notesLLM()).forEach(([k, v]) => fd.append(k, v));
+    return _showNotes(fetch('/api/notes/pdf', { method: 'POST', body: fd }),
+      'Could not read that PDF.');
   }
 
   async function makeNotes(kind) {
-    const status = document.getElementById('notes-status');
-    const out = document.getElementById('notes-out');
-    const p = { provider, model: model(), host: host(), api_key: apiKey() };
-    try {
-      let data;
-      if (kind === 'pdf') {
-        const file = document.getElementById('notes-pdf').files[0];
-        if (!file) return;
-        document.getElementById('notes-pdf-label').textContent = file.name;
-        status.textContent = 'Reading the PDF and writing notes…';
-        out.innerHTML = '';
-        const fd = new FormData();
-        fd.append('file', file);
-        Object.entries(p).forEach(([k, v]) => fd.append(k, v));
-        data = await (await fetch('/api/notes/pdf', { method: 'POST', body: fd })).json();
-      } else {
-        const url = document.getElementById('notes-yt').value.trim();
-        if (!url) { status.textContent = 'Paste a YouTube link first.'; return; }
-        status.textContent = 'Fetching the transcript and writing notes…';
-        out.innerHTML = '';
-        data = await (await fetch('/api/notes/youtube', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, ...p }),
-        })).json();
-      }
-      if (!data || data.error) {
-        status.textContent = (data && data.error) || 'Something went wrong.';
-        return;
-      }
-      status.textContent = '';
-      renderNotes(data.notes);
-    } catch (e) {
-      status.textContent = 'Something went wrong: ' + e.message;
+    document.getElementById('notes-composer').classList.add('hidden');
+    if (kind === 'pdf') {
+      const file = document.getElementById('notes-pdf').files[0];
+      if (!file) return;
+      appendBubble('student', 'Make notes from: ' + file.name);
+      document.getElementById('notes-pdf').value = '';
+      await notesFromPdf(file);
+    } else {
+      const url = document.getElementById('notes-yt').value.trim();
+      if (!url) return;
+      appendBubble('student', url);
+      document.getElementById('notes-yt').value = '';
+      await notesFromYoutube(url);
     }
   }
 
   function enterService(type) {
     if (type === 'topics') {
       document.getElementById('quests-panel').style.display = 'none';
-      document.getElementById('notes-panel').style.display = 'none';
       document.getElementById('canvas-tabs').style.display = '';
       document.getElementById('canvas-body').style.display = '';
       showCanvasTab('classwork');
@@ -3344,17 +3351,9 @@
     } else if (type === 'quests') {
       document.getElementById('canvas-tabs').style.display = 'none';
       document.getElementById('canvas-body').style.display = 'none';
-      document.getElementById('notes-panel').style.display = 'none';
       const p = document.getElementById('quests-panel');
       p.style.display = '';
       renderGamify();
-      p.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else if (type === 'notes') {
-      document.getElementById('canvas-tabs').style.display = 'none';
-      document.getElementById('canvas-body').style.display = 'none';
-      document.getElementById('quests-panel').style.display = 'none';
-      const p = document.getElementById('notes-panel');
-      p.style.display = '';
       p.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (type === 'learn') {
       enterTutor();

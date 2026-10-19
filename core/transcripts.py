@@ -14,4 +14,4 @@ def fetch_transcript(url: str) -> str:
     text = " ".join(s.text for s in fetched).strip()
     if not text:
         raise ValueError("That video has no usable captions")
-    return text
+    return text 

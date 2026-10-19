@@ -17,6 +17,6 @@ __TEXT__"""
 def notes_from_text(text: str, source: str = "document", **llm) -> str:
     text = (text or "").strip()
     if len(text) < 40:
-        raise ValueError("Not enough text to make notes from")
+        raise ValueError("NOt enough text to make notes from")
     prompt = NOTES_PROMPT.replace("__SRC__", source).replace("__TEXT__", text[:14000])
     return str(generate(prompt, **llm)).strip() 

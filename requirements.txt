@@ -15,3 +15,4 @@ opencv-python-headless==5.0.0.93
 gunicorn
 python-pptx
 boto3
+youtube-transcript-api
