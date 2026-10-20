@@ -4814,3 +4814,54 @@ entry the backend is being typed, so the feature is **not yet wired end-to-end.*
   both now one more session behind.
 - **Deadline still unverified** — Session 33's date reconciliation problem was not
   resolved this session either.
+
+## Session 35 — 2026-10-20
+
+Short session: verified the YouTube-notes feature end to end against real
+input (not just read the code), then a scoping conversation on what a
+third-party dev would need to build their own LMS on top of the engine.
+Closes with a question-content task queued for next session, not yet started.
+
+### YouTube notes — verified live, one bug fixed, one still open
+Ran `core/transcripts.py` against a real video and called `/api/notes/youtube`
+through a Flask test client (not a structural read):
+- `video_id()` correctly parses `watch?v=`, `youtu.be/`, and `/shorts/` URLs,
+  and `fetch_transcript()` pulled real captions (2,089 chars off a test video).
+  The transcript-fetching half of this feature genuinely works.
+- **Found: `youtube-transcript-api` was never added to `requirements.txt`**,
+  despite Session 34's devlog claiming it was. A clean
+  `pip install -r requirements.txt` would `ModuleNotFoundError` on this route.
+  **Fixed this session** (commit `188c729`).
+- **Found, still open:** `app.py`'s `/api/notes/youtube` wraps
+  `fetch_transcript()` and `notes_from_text()` (the LLM call) in one `try`,
+  with a single `except Exception` that always reports *"the video may have
+  captions disabled."* Tested with no LLM backend reachable (no Groq key, no
+  Ollama running) — the transcript fetch succeeded but `notes_from_text`
+  threw `ConnectionError`, and the student-facing message blamed YouTube
+  captions instead of the real cause. Needs two separate `try` blocks so each
+  failure type gets an honest message. **Not fixed yet.**
+
+### Kernel vs. LMS file split — scoping conversation, no code written
+Discussed what a dev building their *own* LMS on EdKernel actually needs,
+under two conditions: (1) fastest possible setup, (2) full front-end rehaul.
+Conclusion both times: `core/` + `api_v1.py` + the four small app-layer files
+it imports (`users.py`, `curricula.py`, `settings.py`, `ratelimit.py`) +
+`docs/KERNEL_API.md` as the contract — not `app.py`'s HTML routes, `static/`,
+or cookie-session auth, which belong to *our* reference client only. Honest
+gap surfaced: `/v1/` only has 14 endpoints (ping / check / tutor start+reply /
+questions extract / check-working / curricula / progress / keys) — no quiz,
+notes, or gamification. A dev wanting those in their own LMS would be adding
+new `/v1/` endpoints, not pointing at ones that already exist.
+
+### Pending for next session
+- **Cambridge AS Level Pure Mathematics 1, syllabus §3.1 — question content.**
+  User wants quiz/question-bank content built for this syllabus section.
+  **Not started.** Pull the actual current Cambridge syllabus wording for
+  §3.1 first — don't write questions from a remembered topic list; confirm
+  the exact subtopic content against the real syllabus document before
+  generating anything.
+- The `/api/notes/youtube` error-handling bug above.
+
+### Known issues / honest gaps
+- Lab prep, demo video, and the deadline-reconciliation problem are all
+  unchanged from Session 33/34 — untouched this session.
