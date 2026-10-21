@@ -4,7 +4,13 @@
 
 **EdKernel** — Socratic SAT/A-level AI tutor built for the OpenCV AI Competition 2026.
 Submitted grant proposal; competition deadline is end of 2026.
-`devlog.md` is the running history (newest entry at the bottom). Read it at the start of each session.
+`devlog.md` is the running history (newest entry at the bottom). At the start of a
+session read **only the last `## Session` entry** (`grep -n "^## Session" devlog.md`) —
+the file is ~80k tokens, never load it whole. Reference sections (archive, test
+accounts) sit between sessions and aren't "the last entry".
+Older sessions, and the "Features built (as of session N)" history that used to live
+here, are in the devlog (see its "Archive — history moved out of CLAUDE.md" section).
+The devlog records *claims*: verify against the code before acting on one.
 
 Two front ends over the same `core/` package:
 - `app.py` — Flask REST API + `static/index.html` (main product)
@@ -15,12 +21,16 @@ They share `core/llm/`, `core/rag/`, `core/vision/`. Tutor prompts have drifted 
 ## Architecture
 
 ```
-app.py (Flask, 58 routes + /v1/ Blueprint via api_v1.py, Bearer auth)
+app.py (Flask + /v1/ Blueprint via api_v1.py, Bearer auth)
   └─ core/
        ├─ tutor.py         – start() / reply() — the Socratic loop
        ├─ check.py         – run() — one-shot answer check
        ├─ questions.py     – PDF → question list (pypdf + fitz/vision fallback)
        ├─ prompts.py       – TUTOR_SYSTEM_PROMPT, HINT_LADDER, CHECK_SIGNAL, strip_signal()
+       ├─ notes.py         – notes_from_text() — PDF/YouTube text → Markdown revision notes
+       ├─ transcripts.py   – YouTube captions; no-captions fallback via yt-dlp + Whisper + keyframes
+       ├─ keyframes.py     – extract_keyframes() — OpenCV scene dedupe, keeps last frame per scene
+       ├─ misconceptions.py – misconception-map categories
        ├─ rag/
        │    ├─ ingest.py   – build ChromaDB collections from curricula/
        │    └─ retrieve.py – top-k chunk retrieval
@@ -28,11 +38,15 @@ app.py (Flask, 58 routes + /v1/ Blueprint via api_v1.py, Bearer auth)
        │    ├─ preprocess.py   – find_page → rectify → deskew → binarise
        │    ├─ segment.py      – ink mask → line boxes → crops
        │    ├─ step_checker.py – check_working() → steps, boxes, error_index
-       │    └─ image_handler.py – transcribe() / detect_question() via vision LLM
+       │    └─ image_handler.py – transcribe() / detect_question() / read_frame() via vision LLM
        ├─ video/           – frame extraction + question_from_video()
        └─ llm/             – provider adapters (Groq, Ollama, OpenAI-compat)
 api_v1.py    – stateless /v1/ REST Blueprint (Bearer token, 20 calls/min per key)
-users.py     – SQLite auth + sessions + api_keys + progress + quiz_attempts
+users.py     – SQLite auth (scrypt passwords, Google sub, guests) + sessions + api_keys
+               + progress + quiz_attempts
+gamify.py    – XP / streaks / missions / quests rules (app-layer, not core/)
+drive_sync.py – optional Google Drive → curricula/<id>/reference/ adapter
+pdftext.py   – PDF text extraction helper
 quizbank.py  – per-curriculum quiz banks (curricula/<id>/quizzes.json, keys server-side)
 curricula.py – manifest loader   settings.py – feature flags (settings.json)
 sessionlog.py – JSONL lesson log  ratelimit.py – login + LLM rate limits
@@ -42,7 +56,8 @@ flowcharts.html – mermaid diagrams of every subsystem (keep in step with the c
 static/
   index.html   – student SPA (service tiles, tutor, quiz, flashcards)
   teacher.html – teacher upload + ingest status + topic management
-  admin.html   – user management + curriculum management
+  admin.html   – user management + curriculum management (admin2.html = half-built React rewrite)
+  dev.html     – monitoring + pre/post study panel, served at /dev/<DEV_PANEL_KEY> (404 otherwise)
 ```
 
 **Key invariants:**
@@ -62,9 +77,15 @@ git config core.hooksPath hooks
 ```
 
 **Env vars the app reads:**
-- `DB_DIR` — where `users.db` lives (default: `.logs/` next to `users.py`)
-- `CHROMA_DIR` — where ChromaDB lives (default: `data/chroma/`)
-- `GROQ_API_KEY`, `OPENAI_API_KEY`, `TAVILY_API_KEY`
+- `API_KEY` — LLM provider key (Groq / OpenAI-compat). `ingest.py` also accepts `GROQ_API_KEY`
+- `TAVILY_KEY` — past-papers web search. **Bug:** admin auto-research (`app.py`) reads
+  `TAVILY_API_KEY` instead, so it never sees the key in `.env`
+- `DB_DIR` (default `.logs/`), `CHROMA_DIR` (default `data/chroma/`)
+- `DEV_PANEL_KEY` — the secret path segment for `/dev/<key>`
+- `FLASK_SECRET_KEY` — signs the OAuth state cookie; must match across gunicorn workers
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, optional `GOOGLE_ALLOWED_DOMAIN` — Google sign-in
+- `BEHIND_PROXY=1` — only behind the ALB (trusts X-Forwarded-*); `OLLM_HTTPS=1` — only over https
+- `DEV_BYPASS_AUTH` — dev-only auth bypass; must never be set on a deployment
 
 ## Git
 
@@ -74,6 +95,10 @@ Commit and push **only when asked**. Write devlog entries when asked, matching t
 ## How the user likes to work
 
 **Bias toward action, not questions.** When the task is clear, make the reasonable call and do it. Do not pause to ask which approach, which file, or whether to proceed — just go. They will redirect if needed.
+
+**Established split:** Claude does frontend (`static/`) directly; the user types
+backend (`core/`, `app.py`, `users.py`) to learn it — give file + exact change + syntax
+notes. "Just fix it" / "can u just fix it" overrides this for that task only.
 
 **Ask before writing code they might want to type.** They often want to read every line and type it in — that is how they learn. If they say "let me code it", give the file path + exact change to make, not edits to files. If they say "just do it" or "run it", go ahead.
 
@@ -108,241 +133,72 @@ bucket now, so budget the 200k TPD accordingly. Check
 `qwen3.8` also returns transient **503 "over capacity"** under load, which killed
 3-4 cases per run even with backoff. Retries help; luck helps more.
 
-## Features built (as of session 31)
+## Current state (as of 2026-10-21 — REWRITE this section each session, keep it short)
 
-- **Gamification — built & LIVE** (`gamify.py` + `users.py` + `app.py` +
-  `static/index.html`). XP, streaks, daily missions, sidequests. Lives
-  **app-layer, NOT `core/`** (engagement is a distro concern). Tables: `gamify`,
-  `daily_missions`, `quests`. `users.record_activity(uid, event, correct)` fires
-  alongside every `record_progress` site + check_working + `/api/start`;
-  `users.get_gamify(uid)` → `GET /api/gamify`. UI: 5th **Quests** tile + panel +
-  header 🔥/Lv/XP widget (`renderGamify()`). Rules (missions/quests/XP/level) all
-  in `gamify.py`. Verified e2e + on the ALB.
-- **Deploy is CURRENT** — redeployed this session; gamification + the `topic` fix
-  (misconception map now records from real uploads) are live on the ALB. Verified
-  `/v1/ping` 200 + `/api/gamify` 200.
-- **`~/Desktop/photo-db` is a SEPARATE project** (face-recog photo gallery). User
-  considered pivoting the whole competition entry to it — **rejected**: OpenCV is
-  garnish there too (brain = InsightFace/DeepFace), no AWS (edge/RKNN), face-recog
-  ethics flag, 180° off-proposal, discards deployed EdKernel. Don't re-open as a
-  competition pivot; it's a fine standalone product if that's where the heart is.
-- **Honest positioning (reaffirmed):** OpenCV is deterministic *scaffolding*
-  (grounding) + the COOL benchmark, NOT a recognition-beater — don't pitch it as
-  one. Say **"engine" not "kernel"** to judges. Don't pitch error-faithfulness
-  (tested flat). The GCSE tutor is a *distro* of the engine.
-- **Recurring pattern to watch:** features keep getting proposed (animations,
-  photo-db, gamification) while the *scored* remaining work sits idle. Redeploy is
-  now done. **Demo video + user interviews are the top remaining non-code work**
-  (Impact 20% has zero validation; the demo is the last required deliverable).
-- **IN PROGRESS — emoji→SVG swap** (`static/index.html`): user asked to replace
-  all emoji with inline SVGs. Inventory done (🔥, 📄/📊/📝, ✓/✗, 📎, →/←/↗/⬇/🔗/☰/⚠,
-  `&#10003;`), NOT yet executed. Start here next convo.
+Verified against the code on 2026-10-21. History lives in the devlog, not here.
 
-## Features built (as of session 30)
+**Deploy:** AWS ECS Fargate + ALB `edkernel-alb-1135643304.ap-southeast-1.elb.amazonaws.com`.
+Last recorded redeploy: session 31. Everything since (notes, video fallback, Google
+sign-in, input tools, dev panel) is **not deployed**.
 
-- **Class home is tiles-only nav** (`static/index.html`) — header + four tiles:
-  **Topics · Learn · Papers · Quiz**. Nothing renders below by default. Topics
-  reveals a drill-in (topic tile grid → detail with subtopics/objectives +
-  "Learn this topic" / "Practice questions"); checkmark ✓ at ≥80% mastery from
-  the existing `progress` table. `Questions` moved *behind* the Topics tile (its
-  tab), not deleted. **Upload tile removed** — working-check lives in Learn's
-  attach button. Render + drill-in: `loadCanvasClasswork`, `openTopic`,
-  `startTopic`.
-- **Misconception map records from real uploads now** — `basePayload()` never
-  sent `topic`, so the hook `if cid and topic:` never fired; fixed by sending
-  `topic: currentTopic` on both `/api/check_working` calls. **Needs a redeploy to
-  go live.** Categories are coarse + examiner-emitted (`sign`/`arithmetic`/
-  `algebra_step`/`other`); teacher UI carries an "AI-suggested, verify" caveat.
-- **COOL: real Graviton2 benchmark, OpenCV 5.0 on both** — `report.md` §3 +
-  `bench/results/*.json` are real, fair numbers. `HoughLinesP` (1737 ms ARM) is
-  the bottleneck; replaced in the deskew path by a contour estimate
-  (`_contour_estimate` in `preprocess.py`), verified no regression. The old
-  "Graviton wins some ops" table was a 4.5-vs-5.0 artifact — corrected.
-- **Error-faithfulness thesis tested FLAT** (`evals/error_faithfulness.py`, N=3:
-  2/3 vs 2/3). **Do not pitch "we preserve student errors better than frontier"**
-  unless a clean N≥20 run revives it. The categorisation axis is separate and fine.
-- **Positioning / false-ad caution:** the GCSE-maths tutor is a *distro* of the
-  engine (`core/` + `/v1/`). Defensible judge-facing claims: *deterministic
-  spatial grounding on real paper · evidence-derived misconception map ·
-  open/self-hostable*. Say **"engine"** not "kernel" to judges (no LTI, no
-  external adopters → "kernel" invites the "that's not a kernel" flag). Bedrock
-  still pending (AWS escalated, no ETA). **No user interviews yet** — the Impact
-  gap; demo video + a couple of teacher/student interviews are the top remaining
-  non-code work.
+**Auth:** local `settings.json` has `auth_required: false` → every visitor is user #1
+(real admin). `settings.json` is git- and docker-ignored, so the AWS image runs with
+auth ON. Google sign-in (Authlib, OAuth2/OIDC) is built and tested on our side; needs
+`GOOGLE_CLIENT_*` in `.env` and an **https** or `localhost` redirect URI — the lab's
+`http://192.168.x.x` and the plain-http ALB won't work with Google. `password_login`
+flag can switch our own password login off. **Guest mode** is built (`POST /api/guest`,
+`guest_login` flag, off by default) — name-only student accounts for the lab.
 
-## Features built (as of session 29)
+**Lab quiz:** class `cambridge-as-p1` — 10 auto-marked MCQs in `quizzes.json` (from the
+user's 5 coordinate-geometry questions), worked answers in `markscheme.json` (no route
+serves it). Bank quizzes serve the whole bank (≤20) and **hide "Ask tutor"** (tests);
+generated quizzes keep it (practice). Pre/post shows in the dev panel. Lab plan (one
+session vs two) undecided; "rushed attempt" flag proposed, not built.
 
-- **Positioning: kernel, not app.** The differentiator is NOT "reads handwritten
-  maths" (frontier models do that better than our 44%/81%) — it's the
-  education-specific orchestration exposed as a composable kernel. The web UI is
-  one reference client; `/v1/` is the product. Any front end builds on the same
-  API. See `docs/KERNEL_API.md` (the public contract) and the lead diagram in
-  `flowcharts.html`.
-- **Dev sheet** — `docs/KERNEL_API.md` documents every `/v1/` endpoint
-  (request/response, auth, rate limits, curl). Keep it in sync with `api_v1.py`.
-- **`/v1/check-working` renamed to `/v1/check/working`** for path consistency.
-- **Method-marks feedback** — `CHECK_PROMPT` in `step_checker.py` now judges in
-  Cambridge-examiner voice ("does this line earn/keep a method mark?"); the NO
-  explanation names the lost mark. YES/NO mechanism and `error_index` parsing
-  unchanged. Transcribe prompt (`image_handler.py`) is now verbatim +
-  no-fragment, which fixed the v8 silent-correction bug (`x=4` → `x=-4`).
-- **Problem/Impact is now research-grounded** (`report.md` §1) — US / Cambridge
-  method marks / Indonesia PISA, with sources. The Cambridge method-marks wedge
-  is the flagship.
-- **Vision numbers are in flux** — desktop fixed `segment()` clipped crops,
-  laptop added the transcribe/method-marks prompts; neither's measured number is
-  current. Needs a clean re-run on the merged tree (blocked by Groq daily quota).
+**Video notes:** no-captions fallback works end to end (14-min Khan video → notes in
+~2 min). Needs a current yt-dlp (`pip install --user --break-system-packages -U yt-dlp`);
+the pacman copy goes stale and 403s.
 
-## Features built (as of session 27)
+**Open — security:** `[ANSWER: X]` still reaches the browser from `/api/papers` and
+`/api/practice_from_error`; no CSRF anywhere; curricula have no owner (any teacher
+edits any curriculum); API keys minted while auth was off stay valid.
 
-- **Server-marked quizzes (`quiz_attempts` table)**: `POST /api/quiz/start`
-  opens an attempt holding the questions *with* their keys and returns them
-  key-stripped. `POST /api/quiz/submit` compares each letter against the stored
-  row, records progress for **right and wrong**, and returns the review with the
-  keys and worked solutions. `POST /api/quiz/answer` marks a single question
-  (in-chat papers flow); `POST /api/quiz/tab-switch` persists the counter;
-  `GET /api/teacher/curricula/<cid>/attempts` feeds the dashboard. Attempts are
-  scoped by user id, so one student cannot touch another's. Marking is once per
-  question — a resubmit re-renders the review and writes nothing.
-  Replaces `/api/papers/correct`, which took mastery on the client's word.
-- **Quiz bank server-side**: `quizbank.py` reads `curricula/<id>/quizzes.json`.
-  `PREMADE_QUIZZES` is gone from `index.html` — its keys were visible in
-  devtools, and all five answers were `A`.
-- **Dev flags are admin-only**: `/dev`, `GET` and `PUT /api/dev/settings` left
-  `_OPEN_ENDPOINTS`. Anyone who could reach the app could previously
-  `PUT {"auth_required": false}` and be served as admin.
-- **`/v1/` rate limited and actually reachable**: 20 calls/min per key owner,
-  enforced inside `require_auth` so no new route can skip it. Separately,
-  `_load_user` now lets `request.blueprint == "v1"` past the cookie gate — every
-  Bearer caller used to 401 before the blueprint ran, so the API was dead
-  whenever `auth_required` was true.
-- **Flowcharts current**: `flowcharts.html` has 21 diagrams including the
-  OpenCV 5 pipeline, the quiz attempt flow, progress, and AWS deployment.
-- **Annotated vision output** (from the parallel machine's branch): `check_working()`
-  returns `annotated` — a base64 JPEG of the cleaned page with each line boxed
-  (error red, others green, numbered) via `_annotate()` in `step_checker.py`.
-  Frontend shows it directly; drawing on the preprocessed image means boxes line
-  up even after warp/deskew (old client-side overlay kept as fallback).
-- **Error-triggered practice**: when the step checker finds an error, a
-  "Practice this mistake" button calls `POST /api/practice_from_error`
-  (`PRACTICE_FROM_ERROR_PROMPT`, reuses `_parse_questions`/`_format_questions`),
-  loading MCQs into the inline papers flow. Closes the vision → tutor →
-  curriculum loop. Needs a reachable LLM.
-- **Vision eval harness**: `evals/vision.py` + `evals/vision_cases.jsonl`.
-  Populated in session 29 — `evals/vision_samples/v1.jpg`–`v9.jpg`, cropped one
-  problem each out of the two raw papers. See the vision numbers section below
-  for what it actually scores.
+**Open — correctness:** `build_tutor_prompt()` in `core/prompts.py` replaces a sentence
+the prompt no longer contains, so **every class gets the generic "SAT and A-level"
+tutor** (fix given to user, not applied); generated MCQs put every answer on A and can drift off-topic
+silently (`_verify_questions` checks the key, not the topic); notes model makes
+arithmetic slips; admin auto-research Tavily env-name bug (see Env vars).
 
-## Features built (as of session 26)
+**Open — features:** quiz bank has no editing UI (hand-edited JSON only); ingest
+doesn't run on container start; Tavily knowledge-cutoff guardrail; Manim renderer;
+quiz photo grading; `bench/graviton_standalone.py` has its own stale `segment()` —
+re-sync before quoting COOL numbers; measure a smaller upscale than 96px.
 
-- **Gojek-style student home**: after picking a class the student sees a
-  service-tile grid (Learn / Papers / Upload / Quiz), not the tutor directly.
-  `enterService(type)` dispatches; `showChatView()`/`backToCanvas()` restore
-  `#main-col` and stop the quiz watcher so no view stays stuck hidden.
-- **Quiz mode (SAT Bluebook style)**: two-pane layout (problem left, choices
-  right), count-up timer, A/B/C/D circles, "Question X of Y" + Next/Finish.
-  **No live right/wrong** — selecting only records the choice (teacher feedback:
-  live marking spikes exam nerves). On Finish, `finishQuiz()` shows score, time,
-  tab-switch count, and a per-question review with worked solutions.
-  `analyzeQuiz()` sends the attempt to `/api/start` for encouraging AI feedback
-  (degrades gracefully with no LLM). `PREMADE_QUIZZES` holds a static GCSE Maths
-  set (instant, no LLM); other classes fall back to RAG via `/api/papers`.
-  Tab-switch detection uses `visibilitychange` only (not `window blur`, which
-  false-fired on DevTools/focus changes).
-- **COOL benchmark**: `bench/graviton_bench.py` + dependency-free
-  `bench/graviton_standalone.py` time the OpenCV pipeline ops. Ran on t4g.micro
-  (aarch64) vs local x86. Results in `bench/results/{x86,graviton}.json`.
-  HoughLinesP is the bottleneck on both (6.6× worse on Graviton); Graviton wins
-  findContours + ink_mask. Not clean apples-to-apples (OpenCV 4.5 vs 5.0).
-- **Technical report + diagram**: `report.md` (full competition report) and
-  `docs/architecture.png` (generated by `bench/make_diagram.py`).
+**Unverified:** nothing from 2026-10-21 clicked through in a real browser (login screen
+Google/guest buttons, hidden quiz tutor, quiz maths rendering, fullscreen anti-cheat);
+Google sign-in has never done a real round trip (no client ID yet); Bedrock code is
+in `core/llm/client.py` but the AWS account hold (case 178878401900360) status is
+unknown; the notation-pedantry fix in `CHECK_PROMPT` is in place but not re-measured.
 
-## Features built (as of session 25)
+**Top scored work (still not started):** 5-min demo video (required deliverable);
+lab / user interviews (Impact 20% has zero validation); confirm the real submission
+deadline (unreconciled since session 33); lab prep: set `auth_required: true` +
+`guest_login: true` locally, review API keys minted while auth was off.
 
-- **OpenCV 5 pipeline**: rectify → binarise → segment → transcribe → evaluate. Bounding boxes returned to front end and drawn on canvas overlay (green = correct, red = error line).
-- **Step checker inline**: no longer a separate mode — fires automatically when a student attaches an image in Learn mode. `runStepChecker(attach)` called after the tutor bubble renders; bounding-box canvas appears if steps are found; silent if not.
-- **Maths PDF vision path**: `fitz` converts PDF pages to JPEG at 150 DPI; vision LLM transcribes. Auto-fallback triggers when pypdf returns <100 chars OR `_junk_ratio()` > threshold.
-- **Auto-reingest**: uploading a new paper or curriculum triggers background ingest. `_INGEST_STATUS` dict tracks per-curriculum state. Admin and teacher panels poll `GET /api/admin/ingest/<cid>` for live status. **Caveat**: Gunicorn multi-worker means GET may hit a different worker than POST — dict state unreliable; verify by testing the endpoint, not the status.
-- **Progress tracking**: SQLite `progress` table `(user_id, curriculum, topic_id, attempts, correct, last_seen)`. Mastery = correct/attempts: ≥0.8 green dot, >0 yellow, untouched grey. Student sees dots on topic list; "Continue" banner shows recommended next topic.
-- **Hint ladder**: 4-rung escalation. Rung 1 = no mathematical vocabulary, rung 2 = name the concept, rung 3 = explain + apply. **Real score: 3/5** on `evals/learn_cases.jsonl` (deterministic, `temperature=0`, groq `openai/gpt-oss-120b`, session 28). The two failures leak the answer before the final rung (photosynthesis → "chloroplast" at rung 2; percentage → "25%" before rung 3). The old "10/10" claim here was wrong; the proposal's "1/5" is stale. Do not quote a number without re-running.
-- **URL routing**: `openClass()` calls `history.pushState({cid}, '', '/?c=<id>')`. Back button returns to class list. Direct URL `/?c=<id>` auto-opens curriculum after login.
-- **AWS ECS Fargate**: Docker → ECR → ECS Fargate + ALB. Stable URL: `edkernel-alb-1135643304.ap-southeast-1.elb.amazonaws.com`. EFS mounted at `/app/.logs` and `/app/data/chroma` for SQLite + ChromaDB persistence across task replacements. Current task definition: revision 14.
-- **GCSE Mathematics curriculum (PMT)**: 88 revision note PDFs from Physics and Maths Tutor ingested into `gcse_maths` ChromaDB collection (951 chunks). Covers Number, Algebra, Ratio/Proportion, Geometry, Probability, Statistics. PDFs live in `curricula/gcse-maths/reference/` (baked into image via `.dockerignore` rules).
-- **RAG-based MCQ generation**: `/api/papers` falls back to `retrieve(topic, n_results=10, collection_name=collection)` when `TAVILY_API_KEY` is absent. Generates A/B/C/D MCQs from curriculum chunks. Verification (`_verify_questions`) filters with unverified fallback if verifier rejects all.
-- **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
-- **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
+**Already done — don't re-propose:** HoughLinesP → contour deskew; `dev.html` exists;
+emoji → SVG swap (no emoji left in `index.html`); `_fetch_pdf` redirect hole closed;
+`/api/reply` errors show in the chat.
 
-## Vision numbers (as of session 29)
+## Measured numbers (re-run before quoting — stale numbers were corrected 3 times)
 
-Measured on `evals/vision_samples/v1.jpg`–`v9.jpg`, groq
-`openai/gpt-oss-120b` + `qwen/qwen3.8-27b`, `temperature=0`. **Do not quote a
-number without re-running** — the last three sessions each corrected a stale one.
-
-- **Segmentation line counts: 9/9.** Pure OpenCV, no API, fully reproducible.
-  Was 5/9 before the session 29 fixes.
-- **Step checker: 4/5 (80%)** on the best complete run — but only 5 of 9 cases
-  scored; the rest died on quota/503.
-- **Transcription: 13/16 lines (81%)**, 3/5 whole problems read cleanly.
-- **Verdict given a faithful read: 3/3.** The decomposition is sound; reading
-  the handwriting is the bottleneck.
-- **`error located`: 3/3 (session 32, 2026-09-23).** v7, v8, v9 — the three
-  cases that contain an error — **all completed in one run and all localised to
-  the exact line** (`--only v7,v8,v9 --pause 20`, groq `openai/gpt-oss-120b` +
-  `qwen/qwen3.8-27b`, temp 0). The number the feature exists to produce now
-  exists. Caveats that keep it honest: **N=3**, and this run read **10/10 lines
-  faithfully**, so the feared box-count shift on the repeated/scribbled lines
-  (v7's scribble, v8/v9's repeated line 0) did NOT bite — these are genuine
-  reasoning hits, not lucky index shifts. But box-count robustness on messy/real
-  pages is untested and remains the fragility. Reproduce before quoting.
-
-Sample set is nine photos, one student, one pen, two lighting conditions. Treat
-these as "no longer obviously broken", not as validated accuracy.
-
-## Pending (as of session 29)
-
-- ~~**Run v7, v8, v9** for the `error located` number~~ — **DONE (session 32): 3/3.**
-- **Notation pedantry is a false-positive mode.** On v4 the student wrote
-  `x^2-5x+6` then `(x-2)(x-3)=0` and the checker flagged *"incorrectly
-  introduced '= 0'"*. Defensible mathematically, wrong for a tutor — crying
-  wolf on correct work is the worst failure this system has. Prompt fix, not a
-  vision fix. (Found by replaying hand-written idealised transcriptions, since
-  v4 503'd every run — real but unconfirmed on live input.)
-- **`bench/graviton_standalone.py` has its own copy of `segment()`** and is now
-  out of step with the real one, so `bench/results/` measures the old algorithm.
-  Re-sync before quoting the COOL numbers again.
-- **Measure a smaller upscale target than 96px** — it directly sets how many
-  eval runs a day's quota buys.
-
-## Pending (as of session 27)
-
-- **AWS Bedrock provider** in `core/llm/client.py` — blocked on account
-  verification hold (`ValidationException: Operation not allowed`, case
-  178878401900360). Fargate hold cleared session 26; Bedrock still open.
-- **Quiz bank has no editing UI** — `curricula/<cid>/quizzes.json` is read by
-  `quizbank.py` and only `gcse-maths` has one. Teachers cannot add or generate
-  quiz questions from the panel yet; the file has to be edited by hand.
-- **The in-chat papers flow still ships answer keys to the browser.** Marking
-  goes through `/api/quiz/answer` now, so progress is server-derived, but
-  `/api/papers` still returns `[ANSWER: X]` in its wire format, so a student
-  reading the network tab can see the key. Quiz mode does not.
-- **Replace HoughLinesP deskew** with a contour-based rotation estimate (COOL
-  benchmark showed it is the pipeline bottleneck, 6.6× worse on Graviton).
-- **Quiz upload grading** — `handleQuizImage()` OCRs the photo but does not
-  grade a handwritten/doodled answer against the key.
-- **Live bounding boxes** in step checker UI (backend returns boxes; frontend does not draw overlay on the canvas)
-- **Tavily web search fallback** — knowledge-cutoff guardrail is currently a prompt workaround; Tavily key is already in env
-- **Manim video renderer** — LLM writes Manim Python → renders MP4 → served in chat
-- **5-minute demo video** (required for competition submission)
-- **Ingest auto-trigger on container start** — currently must be re-run manually after each ECS task replacement
-- Frontend error toast for `/api/reply` 500s (spinner hangs silently on model error)
-- **`_fetch_pdf` follows redirects** — `_allowed_paper_host()` only checks the
-  original URL, so an allowlisted domain can redirect the server anywhere. Blind
-  (the body must start with `%PDF`), but `allow_redirects=False` is a one-liner.
-- **No CSRF token** on cookie-authenticated state-changing routes; `samesite="Lax"`
-  is partial cover only.
-- **Curricula have no owner** — `/api/teacher/...` is role-gated but any teacher
-  can edit any curriculum. A data-model decision, not a missing check.
-- **`/dev` serves `static/dev.html`, which does not exist** — the route 404s (admin-only since session 27); the flags it edits still work through `settings.json` directly
+Groq `openai/gpt-oss-120b` + `qwen/qwen3.8-27b`, temp 0, nine photos
+(`evals/vision_samples/v1–v9`, one student, one pen). "Not obviously broken", not validated.
+- Segmentation line counts **9/9** (pure OpenCV, reproducible).
+- Step checker **4/5** — only 5 of 9 cases scored (rest died on quota/503).
+- Transcription **13/16 lines**; verdict given a faithful read **3/3**.
+- Error located **3/3** (v7–v9, session 32, N=3).
+- Hint ladder **3/5** (`evals/learn_cases.jsonl`, session 28) — two leak the answer early.
+- Error-faithfulness thesis tested **flat** (2/3 vs 2/3) — do not pitch it.
 
 ## Things that keep biting
 
@@ -446,4 +302,12 @@ these as "no longer obviously broken", not as validated accuracy.
 - COOL Award ($1,000): Graviton EC2 benchmark showing ARM advantage
 - Agentic Vision Award: perception → decision → action loop (our pipeline qualifies)
 
-Architecture gap to fix before final submission: EdKernel is a monolithic Flask app, not an LTI-compatible "kernel". The grant proposal calls it a kernel — avoid repeating that framing to judges without explaining it.
+**Positioning (judge-facing):** say **"engine"**, not "kernel" (no LTI, no external
+adopters). The GCSE tutor is a *distro* of the engine (`core/` + `/v1/`). OpenCV is
+deterministic spatial grounding + the COOL benchmark, **not** a recognition-beater —
+frontier models read handwriting better. Defensible claims: deterministic grounding
+on real paper · evidence-derived misconception map · open/self-hostable.
+`~/Desktop/photo-db` (face-recognition gallery) was considered as a pivot and
+**rejected** — don't reopen it as the competition entry.
+**Pattern to watch:** new features (animations, notes, gamification, admin rewrite)
+keep landing while the scored work above sits idle. Say so when it happens.

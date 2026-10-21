@@ -1,0 +1,20 @@
+[
+ {
+  "name": "Coordinate geometry",
+  "subtopics": [
+   "straight lines",
+   "perpendicular lines",
+   "equation of a circle",
+   "tangents to a circle",
+   "line-circle intersection"
+  ],
+  "objectives": [
+   "Find the centre and radius of a circle by completing the square",
+   "Use the discriminant to find when a line is a tangent to a circle",
+   "Use gradients to show lines are perpendicular",
+   "Find the equation of a circle through three points (right angle in a semicircle)",
+   "Find where a line meets a circle, and the length of the chord",
+   "Find the perpendicular distance from a point to a line"
+  ]
+ }
+]

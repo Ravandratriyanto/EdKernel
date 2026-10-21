@@ -1,0 +1,47 @@
+[
+  {
+    "id": "39867a6ba12f7e3a",
+    "text": "Q1 [6]\nThe circle $C$ has equation $x^2 + y^2 - 4x + 6y - 12 = 0$.\n\n(a) Find the centre and radius of $C$. [2]\n(b) The line $y = 2x + k$ is a tangent to $C$. Find the possible values of $k$. [4]",
+    "answer": "",
+    "marks": 6,
+    "topic": "Coordinate geometry",
+    "image": "",
+    "author": "manual"
+  },
+  {
+    "id": "49091633b38a24b7",
+    "text": "Q2 [7]\nPoints $A(1,1)$, $B(5,3)$ and $C(3,7)$.\n\n(a) Show that angle $ABC = 90^\\circ$. [2]\n(b) Find the equation of the circle passing through $A$, $B$ and $C$. [3]\n(c) Find the area of triangle $ABC$. [2]",
+    "answer": "",
+    "marks": 7,
+    "topic": "Coordinate geometry",
+    "image": "",
+    "author": "manual"
+  },
+  {
+    "id": "5aee7f017c2be567",
+    "text": "Q3 [7]\nThe circle has equation $(x-3)^2 + (y+1)^2 = 25$ and the line $l$ has equation $y = x + 1$.\n\n(a) Find the coordinates of the points where $l$ meets the circle. [3]\n(b) Find the length of the chord. [2]\n(c) Find the distance from the centre to $l$. [2]",
+    "answer": "",
+    "marks": 7,
+    "topic": "Coordinate geometry",
+    "image": "",
+    "author": "manual"
+  },
+  {
+    "id": "5e00c9205a60668f",
+    "text": "Q4 [5]\nA circle touches the $x$-axis at $(4, 0)$ and passes through $(0, 2)$.\n\n(a) Find the radius of the circle. [3]\n(b) Write down its equation. [2]",
+    "answer": "",
+    "marks": 5,
+    "topic": "Coordinate geometry",
+    "image": "",
+    "author": "manual"
+  },
+  {
+    "id": "899e41ee89f9a94d",
+    "text": "Q5 [8]\nThe line $l_1$ has equation $3x + y = 7$. The line $l_2$ passes through $P(2,3)$ and is perpendicular to $l_1$. $l_2$ meets the $x$-axis at $A$ and the $y$-axis at $B$. $O$ is the origin.\n\n(a) Find the equation of $l_2$. [2]\n(b) Find the coordinates of $A$ and $B$. [2]\n(c) Find the area of triangle $OAB$. [2]\n(d) Find the equation of the circle through $O$, $A$ and $B$. [2]",
+    "answer": "",
+    "marks": 8,
+    "topic": "Coordinate geometry",
+    "image": "",
+    "author": "manual"
+  }
+]

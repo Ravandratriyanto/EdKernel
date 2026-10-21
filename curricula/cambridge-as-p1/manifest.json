@@ -1,0 +1,13 @@
+{
+  "id": "cambridge-as-p1",
+  "name": "Cambridge AS Pure Mathematics 1",
+  "level": "AS Level",
+  "subjects": [
+    "coordinate geometry"
+  ],
+  "tutor_style": "Socratic",
+  "prompt_flavour": "Cambridge International AS Level Mathematics (9709) Pure Mathematics 1 exam preparation",
+  "collection": "cambridge_as_p1",
+  "reference_dir": "curricula/cambridge-as-p1/reference",
+  "papers_dir": "curricula/cambridge-as-p1/reference"
+}

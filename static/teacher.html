@@ -145,6 +145,7 @@
   <div id="gate-box">
     <p id="gate-msg" style="margin-bottom:16px"></p>
     <div id="login-form">
+      <a class="btn" id="gate-google" href="/auth/google?next=/teacher" style="display:none;width:100%;margin-bottom:14px;justify-content:center;text-decoration:none">Sign in with Google</a>
       <div class="modal-field">
         <label>Username</label>
         <input id="gate-username" autocomplete="username" spellcheck="false">
@@ -285,6 +286,9 @@
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   async function init() {
+    fetch("/api/auth/config").then(r => r.json()).then(cfg => {
+      if (cfg.google) document.getElementById("gate-google").style.display = "flex";
+    }).catch(() => {});
     const res = await fetch("/api/me");
     const { user } = await res.json();
     if (!user) {

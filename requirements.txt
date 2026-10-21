@@ -16,3 +16,5 @@ gunicorn
 python-pptx
 boto3
 youtube-transcript-api
+yt-dlp
+authlib

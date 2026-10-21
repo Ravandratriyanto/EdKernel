@@ -1091,7 +1091,7 @@
       padding: 9px 11px; border: 1px solid #cbd5e1;
       border-radius: 7px; font-size: 0.9rem;
     }
-    #auth-submit {
+    #auth-submit, #guest-submit {
       width: 100%; padding: 10px; border: none; border-radius: 7px;
       background: #2563eb; color: white; font-size: 0.9rem; cursor: pointer;
     }
@@ -1105,6 +1105,15 @@
       background: #fef2f2; border: 1px solid #fecaca;
       border-radius: 6px; padding: 7px 9px;
     }
+    #auth-google {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; box-sizing: border-box; padding: 9px; margin-bottom: 4px;
+      border: 1px solid #cbd5e1; border-radius: 7px; background: white;
+      color: #1f2937; font-size: 0.9rem; text-decoration: none;
+    }
+    #auth-google:hover { background: #f8fafc; }
+    #auth-google svg { width: 18px; height: 18px; }
+    #auth-or, #auth-or2 { margin: 10px 0; text-align: center; font-size: 0.75rem; color: #94a3b8; }
     #whoami { font-size: 0.78rem; color: rgba(255,255,255,0.75); margin-right: 4px; }
     
 .q-mode-bar {
@@ -1205,6 +1214,16 @@
     <h2 id="auth-title">Log in</h2>
     <p id="auth-sub">Your lessons are private to your account.</p>
     <p id="auth-error" class="hidden"></p>
+    <form id="auth-guest" class="hidden" onsubmit="submitGuest(event)">
+      <input id="guest-name" type="text" placeholder="Your name" maxlength="30" required>
+      <button id="guest-submit" type="submit">Start</button>
+    </form>
+    <p id="auth-or2" class="hidden">or</p>
+    <a id="auth-google" class="hidden" href="/auth/google">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </a>
+    <p id="auth-or" class="hidden">or</p>
     <form id="auth-form" onsubmit="submitAuth(event)">
       <input id="auth-username" type="text" placeholder="Username"
              autocomplete="username" required>
@@ -2917,6 +2936,27 @@
     }
   }
 
+  async function submitGuest(event) {
+    event.preventDefault();
+    const btn = document.getElementById('guest-submit');
+    btn.disabled = true;
+    document.getElementById('auth-error').classList.add('hidden');
+    try {
+      const res = await fetch('/api/guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: document.getElementById('guest-name').value }),
+      });
+      const data = await res.json();
+      if (!res.ok) { authError(data.error || 'Could not start.'); return; }
+      enterApp(data.user);
+    } catch (e) {
+      authError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function enterApp(user) {
     document.getElementById('whoami').textContent = user.username;
     document.getElementById('auth-gate').classList.add('hidden');
@@ -3551,6 +3591,12 @@
           'No questions available for this class yet.';
         return;
       }
+      // A hand-written bank quiz is a test (e.g. the lab pre/post quiz): no tutor
+      // help while it runs, or the score measures the tutor, not the student.
+      // Generated practice quizzes keep the side tutor.
+      const isTest = data.source === 'bank';
+      document.querySelector('.qb-top-right').classList.toggle('hidden', isTest);
+      if (isTest && document.getElementById('body-row').classList.contains('with-tutor')) toggleQuizTutor();
       quizIndex = 0;
       startQuizTimer();
       showQuizQuestion();
@@ -3955,6 +4001,28 @@
     document.getElementById('q-img-thumb').src = '';
     document.getElementById('q-img-preview').style.display = 'none';
     document.getElementById('q-file-input').value = '';
+  }
+
+  // Which sign-in options the server offers. Password login can be switched
+  // off in settings, leaving Google as the only way in.
+  fetch('/api/auth/config')
+    .then(r => r.json())
+    .then(cfg => {
+      document.getElementById('auth-google').classList.toggle('hidden', !cfg.google);
+      document.getElementById('auth-or').classList.toggle('hidden', !(cfg.google && cfg.password));
+      document.getElementById('auth-form').classList.toggle('hidden', !cfg.password);
+      document.getElementById('auth-switch').classList.toggle('hidden', !cfg.password);
+      document.getElementById('auth-guest').classList.toggle('hidden', !cfg.guest);
+      document.getElementById('auth-or2').classList.toggle('hidden', !(cfg.guest && (cfg.google || cfg.password)));
+    })
+    .catch(() => {});
+
+  // The Google callback sends failures back as /?auth_error=... — show it once,
+  // then drop it from the address bar so a refresh doesn't show it again.
+  const _authErr = new URLSearchParams(location.search).get('auth_error');
+  if (_authErr) {
+    authError(_authErr);
+    history.replaceState(history.state, '', location.pathname);
   }
 
   fetch('/api/me')

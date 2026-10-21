@@ -4980,3 +4980,448 @@ inconsistent and this hasn't been run through any of them.
   human topic-check, not just the existing answer-verifier.
 - Lab prep, demo video, and the deadline-reconciliation problem remain
   unchanged — still open from Session 33.
+
+## Archive — history moved out of CLAUDE.md (2026-10-21)
+
+These sections used to sit in CLAUDE.md, which is loaded on every turn. They are
+history, so they now live here, copied verbatim. Some lines are **stale** (e.g. the
+HoughLinesP replacement and the missing `dev.html` were both done later) — the
+current state is in CLAUDE.md's "Current state" section, not here.
+
+### Features built (as of session 31)
+
+- **Gamification — built & LIVE** (`gamify.py` + `users.py` + `app.py` +
+  `static/index.html`). XP, streaks, daily missions, sidequests. Lives
+  **app-layer, NOT `core/`** (engagement is a distro concern). Tables: `gamify`,
+  `daily_missions`, `quests`. `users.record_activity(uid, event, correct)` fires
+  alongside every `record_progress` site + check_working + `/api/start`;
+  `users.get_gamify(uid)` → `GET /api/gamify`. UI: 5th **Quests** tile + panel +
+  header 🔥/Lv/XP widget (`renderGamify()`). Rules (missions/quests/XP/level) all
+  in `gamify.py`. Verified e2e + on the ALB.
+- **Deploy is CURRENT** — redeployed this session; gamification + the `topic` fix
+  (misconception map now records from real uploads) are live on the ALB. Verified
+  `/v1/ping` 200 + `/api/gamify` 200.
+- **`~/Desktop/photo-db` is a SEPARATE project** (face-recog photo gallery). User
+  considered pivoting the whole competition entry to it — **rejected**: OpenCV is
+  garnish there too (brain = InsightFace/DeepFace), no AWS (edge/RKNN), face-recog
+  ethics flag, 180° off-proposal, discards deployed EdKernel. Don't re-open as a
+  competition pivot; it's a fine standalone product if that's where the heart is.
+- **Honest positioning (reaffirmed):** OpenCV is deterministic *scaffolding*
+  (grounding) + the COOL benchmark, NOT a recognition-beater — don't pitch it as
+  one. Say **"engine" not "kernel"** to judges. Don't pitch error-faithfulness
+  (tested flat). The GCSE tutor is a *distro* of the engine.
+- **Recurring pattern to watch:** features keep getting proposed (animations,
+  photo-db, gamification) while the *scored* remaining work sits idle. Redeploy is
+  now done. **Demo video + user interviews are the top remaining non-code work**
+  (Impact 20% has zero validation; the demo is the last required deliverable).
+- **IN PROGRESS — emoji→SVG swap** (`static/index.html`): user asked to replace
+  all emoji with inline SVGs. Inventory done (🔥, 📄/📊/📝, ✓/✗, 📎, →/←/↗/⬇/🔗/☰/⚠,
+  `&#10003;`), NOT yet executed. Start here next convo.
+
+### Features built (as of session 30)
+
+- **Class home is tiles-only nav** (`static/index.html`) — header + four tiles:
+  **Topics · Learn · Papers · Quiz**. Nothing renders below by default. Topics
+  reveals a drill-in (topic tile grid → detail with subtopics/objectives +
+  "Learn this topic" / "Practice questions"); checkmark ✓ at ≥80% mastery from
+  the existing `progress` table. `Questions` moved *behind* the Topics tile (its
+  tab), not deleted. **Upload tile removed** — working-check lives in Learn's
+  attach button. Render + drill-in: `loadCanvasClasswork`, `openTopic`,
+  `startTopic`.
+- **Misconception map records from real uploads now** — `basePayload()` never
+  sent `topic`, so the hook `if cid and topic:` never fired; fixed by sending
+  `topic: currentTopic` on both `/api/check_working` calls. **Needs a redeploy to
+  go live.** Categories are coarse + examiner-emitted (`sign`/`arithmetic`/
+  `algebra_step`/`other`); teacher UI carries an "AI-suggested, verify" caveat.
+- **COOL: real Graviton2 benchmark, OpenCV 5.0 on both** — `report.md` §3 +
+  `bench/results/*.json` are real, fair numbers. `HoughLinesP` (1737 ms ARM) is
+  the bottleneck; replaced in the deskew path by a contour estimate
+  (`_contour_estimate` in `preprocess.py`), verified no regression. The old
+  "Graviton wins some ops" table was a 4.5-vs-5.0 artifact — corrected.
+- **Error-faithfulness thesis tested FLAT** (`evals/error_faithfulness.py`, N=3:
+  2/3 vs 2/3). **Do not pitch "we preserve student errors better than frontier"**
+  unless a clean N≥20 run revives it. The categorisation axis is separate and fine.
+- **Positioning / false-ad caution:** the GCSE-maths tutor is a *distro* of the
+  engine (`core/` + `/v1/`). Defensible judge-facing claims: *deterministic
+  spatial grounding on real paper · evidence-derived misconception map ·
+  open/self-hostable*. Say **"engine"** not "kernel" to judges (no LTI, no
+  external adopters → "kernel" invites the "that's not a kernel" flag). Bedrock
+  still pending (AWS escalated, no ETA). **No user interviews yet** — the Impact
+  gap; demo video + a couple of teacher/student interviews are the top remaining
+  non-code work.
+
+### Features built (as of session 29)
+
+- **Positioning: kernel, not app.** The differentiator is NOT "reads handwritten
+  maths" (frontier models do that better than our 44%/81%) — it's the
+  education-specific orchestration exposed as a composable kernel. The web UI is
+  one reference client; `/v1/` is the product. Any front end builds on the same
+  API. See `docs/KERNEL_API.md` (the public contract) and the lead diagram in
+  `flowcharts.html`.
+- **Dev sheet** — `docs/KERNEL_API.md` documents every `/v1/` endpoint
+  (request/response, auth, rate limits, curl). Keep it in sync with `api_v1.py`.
+- **`/v1/check-working` renamed to `/v1/check/working`** for path consistency.
+- **Method-marks feedback** — `CHECK_PROMPT` in `step_checker.py` now judges in
+  Cambridge-examiner voice ("does this line earn/keep a method mark?"); the NO
+  explanation names the lost mark. YES/NO mechanism and `error_index` parsing
+  unchanged. Transcribe prompt (`image_handler.py`) is now verbatim +
+  no-fragment, which fixed the v8 silent-correction bug (`x=4` → `x=-4`).
+- **Problem/Impact is now research-grounded** (`report.md` §1) — US / Cambridge
+  method marks / Indonesia PISA, with sources. The Cambridge method-marks wedge
+  is the flagship.
+- **Vision numbers are in flux** — desktop fixed `segment()` clipped crops,
+  laptop added the transcribe/method-marks prompts; neither's measured number is
+  current. Needs a clean re-run on the merged tree (blocked by Groq daily quota).
+
+### Features built (as of session 27)
+
+- **Server-marked quizzes (`quiz_attempts` table)**: `POST /api/quiz/start`
+  opens an attempt holding the questions *with* their keys and returns them
+  key-stripped. `POST /api/quiz/submit` compares each letter against the stored
+  row, records progress for **right and wrong**, and returns the review with the
+  keys and worked solutions. `POST /api/quiz/answer` marks a single question
+  (in-chat papers flow); `POST /api/quiz/tab-switch` persists the counter;
+  `GET /api/teacher/curricula/<cid>/attempts` feeds the dashboard. Attempts are
+  scoped by user id, so one student cannot touch another's. Marking is once per
+  question — a resubmit re-renders the review and writes nothing.
+  Replaces `/api/papers/correct`, which took mastery on the client's word.
+- **Quiz bank server-side**: `quizbank.py` reads `curricula/<id>/quizzes.json`.
+  `PREMADE_QUIZZES` is gone from `index.html` — its keys were visible in
+  devtools, and all five answers were `A`.
+- **Dev flags are admin-only**: `/dev`, `GET` and `PUT /api/dev/settings` left
+  `_OPEN_ENDPOINTS`. Anyone who could reach the app could previously
+  `PUT {"auth_required": false}` and be served as admin.
+- **`/v1/` rate limited and actually reachable**: 20 calls/min per key owner,
+  enforced inside `require_auth` so no new route can skip it. Separately,
+  `_load_user` now lets `request.blueprint == "v1"` past the cookie gate — every
+  Bearer caller used to 401 before the blueprint ran, so the API was dead
+  whenever `auth_required` was true.
+- **Flowcharts current**: `flowcharts.html` has 21 diagrams including the
+  OpenCV 5 pipeline, the quiz attempt flow, progress, and AWS deployment.
+- **Annotated vision output** (from the parallel machine's branch): `check_working()`
+  returns `annotated` — a base64 JPEG of the cleaned page with each line boxed
+  (error red, others green, numbered) via `_annotate()` in `step_checker.py`.
+  Frontend shows it directly; drawing on the preprocessed image means boxes line
+  up even after warp/deskew (old client-side overlay kept as fallback).
+- **Error-triggered practice**: when the step checker finds an error, a
+  "Practice this mistake" button calls `POST /api/practice_from_error`
+  (`PRACTICE_FROM_ERROR_PROMPT`, reuses `_parse_questions`/`_format_questions`),
+  loading MCQs into the inline papers flow. Closes the vision → tutor →
+  curriculum loop. Needs a reachable LLM.
+- **Vision eval harness**: `evals/vision.py` + `evals/vision_cases.jsonl`.
+  Populated in session 29 — `evals/vision_samples/v1.jpg`–`v9.jpg`, cropped one
+  problem each out of the two raw papers. See the vision numbers section below
+  for what it actually scores.
+
+### Features built (as of session 26)
+
+- **Gojek-style student home**: after picking a class the student sees a
+  service-tile grid (Learn / Papers / Upload / Quiz), not the tutor directly.
+  `enterService(type)` dispatches; `showChatView()`/`backToCanvas()` restore
+  `#main-col` and stop the quiz watcher so no view stays stuck hidden.
+- **Quiz mode (SAT Bluebook style)**: two-pane layout (problem left, choices
+  right), count-up timer, A/B/C/D circles, "Question X of Y" + Next/Finish.
+  **No live right/wrong** — selecting only records the choice (teacher feedback:
+  live marking spikes exam nerves). On Finish, `finishQuiz()` shows score, time,
+  tab-switch count, and a per-question review with worked solutions.
+  `analyzeQuiz()` sends the attempt to `/api/start` for encouraging AI feedback
+  (degrades gracefully with no LLM). `PREMADE_QUIZZES` holds a static GCSE Maths
+  set (instant, no LLM); other classes fall back to RAG via `/api/papers`.
+  Tab-switch detection uses `visibilitychange` only (not `window blur`, which
+  false-fired on DevTools/focus changes).
+- **COOL benchmark**: `bench/graviton_bench.py` + dependency-free
+  `bench/graviton_standalone.py` time the OpenCV pipeline ops. Ran on t4g.micro
+  (aarch64) vs local x86. Results in `bench/results/{x86,graviton}.json`.
+  HoughLinesP is the bottleneck on both (6.6× worse on Graviton); Graviton wins
+  findContours + ink_mask. Not clean apples-to-apples (OpenCV 4.5 vs 5.0).
+- **Technical report + diagram**: `report.md` (full competition report) and
+  `docs/architecture.png` (generated by `bench/make_diagram.py`).
+
+### Features built (as of session 25)
+
+- **OpenCV 5 pipeline**: rectify → binarise → segment → transcribe → evaluate. Bounding boxes returned to front end and drawn on canvas overlay (green = correct, red = error line).
+- **Step checker inline**: no longer a separate mode — fires automatically when a student attaches an image in Learn mode. `runStepChecker(attach)` called after the tutor bubble renders; bounding-box canvas appears if steps are found; silent if not.
+- **Maths PDF vision path**: `fitz` converts PDF pages to JPEG at 150 DPI; vision LLM transcribes. Auto-fallback triggers when pypdf returns <100 chars OR `_junk_ratio()` > threshold.
+- **Auto-reingest**: uploading a new paper or curriculum triggers background ingest. `_INGEST_STATUS` dict tracks per-curriculum state. Admin and teacher panels poll `GET /api/admin/ingest/<cid>` for live status. **Caveat**: Gunicorn multi-worker means GET may hit a different worker than POST — dict state unreliable; verify by testing the endpoint, not the status.
+- **Progress tracking**: SQLite `progress` table `(user_id, curriculum, topic_id, attempts, correct, last_seen)`. Mastery = correct/attempts: ≥0.8 green dot, >0 yellow, untouched grey. Student sees dots on topic list; "Continue" banner shows recommended next topic.
+- **Hint ladder**: 4-rung escalation. Rung 1 = no mathematical vocabulary, rung 2 = name the concept, rung 3 = explain + apply. **Real score: 3/5** on `evals/learn_cases.jsonl` (deterministic, `temperature=0`, groq `openai/gpt-oss-120b`, session 28). The two failures leak the answer before the final rung (photosynthesis → "chloroplast" at rung 2; percentage → "25%" before rung 3). The old "10/10" claim here was wrong; the proposal's "1/5" is stale. Do not quote a number without re-running.
+- **URL routing**: `openClass()` calls `history.pushState({cid}, '', '/?c=<id>')`. Back button returns to class list. Direct URL `/?c=<id>` auto-opens curriculum after login.
+- **AWS ECS Fargate**: Docker → ECR → ECS Fargate + ALB. Stable URL: `edkernel-alb-1135643304.ap-southeast-1.elb.amazonaws.com`. EFS mounted at `/app/.logs` and `/app/data/chroma` for SQLite + ChromaDB persistence across task replacements. Current task definition: revision 14.
+- **GCSE Mathematics curriculum (PMT)**: 88 revision note PDFs from Physics and Maths Tutor ingested into `gcse_maths` ChromaDB collection (951 chunks). Covers Number, Algebra, Ratio/Proportion, Geometry, Probability, Statistics. PDFs live in `curricula/gcse-maths/reference/` (baked into image via `.dockerignore` rules).
+- **RAG-based MCQ generation**: `/api/papers` falls back to `retrieve(topic, n_results=10, collection_name=collection)` when `TAVILY_API_KEY` is absent. Generates A/B/C/D MCQs from curriculum chunks. Verification (`_verify_questions`) filters with unverified fallback if verifier rejects all.
+- **Flashcard system**: Questions tab has Browse/Flashcards toggle. Flashcards mode: flip animation (CSS 3D), No idea/Nearly/Got it rating buttons, end screen with score. Spaced repetition via `localStorage` — weak cards surface first next session.
+- **Auth disabled for dev**: `settings.json` with `auth_required: false` bypasses all login. `#auth-gate` starts hidden; no env var needed. Network access on `0.0.0.0:5000` — accessible at `192.168.100.30:5000`.
+
+### Vision numbers (as of session 29)
+
+Measured on `evals/vision_samples/v1.jpg`–`v9.jpg`, groq
+`openai/gpt-oss-120b` + `qwen/qwen3.8-27b`, `temperature=0`. **Do not quote a
+number without re-running** — the last three sessions each corrected a stale one.
+
+- **Segmentation line counts: 9/9.** Pure OpenCV, no API, fully reproducible.
+  Was 5/9 before the session 29 fixes.
+- **Step checker: 4/5 (80%)** on the best complete run — but only 5 of 9 cases
+  scored; the rest died on quota/503.
+- **Transcription: 13/16 lines (81%)**, 3/5 whole problems read cleanly.
+- **Verdict given a faithful read: 3/3.** The decomposition is sound; reading
+  the handwriting is the bottleneck.
+- **`error located`: 3/3 (session 32, 2026-09-23).** v7, v8, v9 — the three
+  cases that contain an error — **all completed in one run and all localised to
+  the exact line** (`--only v7,v8,v9 --pause 20`, groq `openai/gpt-oss-120b` +
+  `qwen/qwen3.8-27b`, temp 0). The number the feature exists to produce now
+  exists. Caveats that keep it honest: **N=3**, and this run read **10/10 lines
+  faithfully**, so the feared box-count shift on the repeated/scribbled lines
+  (v7's scribble, v8/v9's repeated line 0) did NOT bite — these are genuine
+  reasoning hits, not lucky index shifts. But box-count robustness on messy/real
+  pages is untested and remains the fragility. Reproduce before quoting.
+
+Sample set is nine photos, one student, one pen, two lighting conditions. Treat
+these as "no longer obviously broken", not as validated accuracy.
+
+### Pending (as of session 29)
+
+- ~~**Run v7, v8, v9** for the `error located` number~~ — **DONE (session 32): 3/3.**
+- **Notation pedantry is a false-positive mode.** On v4 the student wrote
+  `x^2-5x+6` then `(x-2)(x-3)=0` and the checker flagged *"incorrectly
+  introduced '= 0'"*. Defensible mathematically, wrong for a tutor — crying
+  wolf on correct work is the worst failure this system has. Prompt fix, not a
+  vision fix. (Found by replaying hand-written idealised transcriptions, since
+  v4 503'd every run — real but unconfirmed on live input.)
+- **`bench/graviton_standalone.py` has its own copy of `segment()`** and is now
+  out of step with the real one, so `bench/results/` measures the old algorithm.
+  Re-sync before quoting the COOL numbers again.
+- **Measure a smaller upscale target than 96px** — it directly sets how many
+  eval runs a day's quota buys.
+
+### Pending (as of session 27)
+
+- **AWS Bedrock provider** in `core/llm/client.py` — blocked on account
+  verification hold (`ValidationException: Operation not allowed`, case
+  178878401900360). Fargate hold cleared session 26; Bedrock still open.
+- **Quiz bank has no editing UI** — `curricula/<cid>/quizzes.json` is read by
+  `quizbank.py` and only `gcse-maths` has one. Teachers cannot add or generate
+  quiz questions from the panel yet; the file has to be edited by hand.
+- **The in-chat papers flow still ships answer keys to the browser.** Marking
+  goes through `/api/quiz/answer` now, so progress is server-derived, but
+  `/api/papers` still returns `[ANSWER: X]` in its wire format, so a student
+  reading the network tab can see the key. Quiz mode does not.
+- **Replace HoughLinesP deskew** with a contour-based rotation estimate (COOL
+  benchmark showed it is the pipeline bottleneck, 6.6× worse on Graviton).
+- **Quiz upload grading** — `handleQuizImage()` OCRs the photo but does not
+  grade a handwritten/doodled answer against the key.
+- **Live bounding boxes** in step checker UI (backend returns boxes; frontend does not draw overlay on the canvas)
+- **Tavily web search fallback** — knowledge-cutoff guardrail is currently a prompt workaround; Tavily key is already in env
+- **Manim video renderer** — LLM writes Manim Python → renders MP4 → served in chat
+- **5-minute demo video** (required for competition submission)
+- **Ingest auto-trigger on container start** — currently must be re-run manually after each ECS task replacement
+- Frontend error toast for `/api/reply` 500s (spinner hangs silently on model error)
+- **`_fetch_pdf` follows redirects** — `_allowed_paper_host()` only checks the
+  original URL, so an allowlisted domain can redirect the server anywhere. Blind
+  (the body must start with `%PDF`), but `allow_redirects=False` is a one-liner.
+- **No CSRF token** on cookie-authenticated state-changing routes; `samesite="Lax"`
+  is partial cover only.
+- **Curricula have no owner** — `/api/teacher/...` is role-gated but any teacher
+  can edit any curriculum. A data-model decision, not a missing check.
+- **`/dev` serves `static/dev.html`, which does not exist** — the route 404s (admin-only since session 27); the flags it edits still work through `settings.json` directly
+
+
+## Test accounts (reference — checked 2026-10-21)
+
+Made by `python -m stubtesting.seed_users` (re-runnable; existing accounts are
+left alone). Printable roster: `stubtesting/test_accounts.csv`. All 31 logins
+below were checked working against `.logs/users.db` on the dev laptop on
+2026-10-21 — a fresh machine or the AWS deploy has **none** of them until the
+script is run there.
+
+| Account | Username | Password | Role |
+|---|---|---|---|
+| Admin | `admin@test.edkernel` | `edkerneladmin` | admin |
+| Student 1 | `student01@test.edkernel` | `edkernel01` | student |
+| Student 2 | `student02@test.edkernel` | `edkernel02` | student |
+| … | `studentNN@test.edkernel` | `edkernelNN` | student |
+| Student 30 | `student30@test.edkernel` | `edkernel30` | student |
+
+Pattern: student number `NN` is two digits (01–30) and appears in both the
+username and the password.
+
+**Also available without accounts:** guest mode (name only) when
+`settings.json` has `"guest_login": true` (built 2026-10-21, after the Session 36
+entry — not written up in a session entry yet).
+
+**These only matter with auth ON.** With `auth_required: false` every visitor is
+user #1 (the real admin) and these logins are ignored.
+
+**Known issues / honest gaps**
+- **The passwords are guessable and live in tracked files** (`seed_users.py` and
+  the CSV). Fine on a private repo and a private lab, but **change the admin
+  password** (or don't seed it) on any server students or judges can reach, and
+  before the repo or this devlog is ever made public — anyone who has read this
+  table can log in as admin.
+- Student passwords follow the pattern, so a student can log in as a classmate
+  by changing two digits. Acceptable for a supervised lab session; not for
+  anything that's graded or kept. Guest mode or Google sign-in avoids it.
+
+## Session 37 — 2026-10-21
+
+Long session, same day as Session 36. Took the untested YouTube fallback through
+a real run (it was broken in four ways), reviewed and replaced how people log
+in, cleaned up CLAUDE.md, and built the lab quiz. One instruction from the user
+shaped the whole auth half: *"I don't believe in self-made auth."*
+
+### YouTube no-captions fallback — run for real, four bugs fixed
+Session 36 shipped this as "imports clean, never run". Running it found:
+- **Every download 403'd.** The pacman `yt-dlp` (2026.07.04) was too old for
+  YouTube. Upgraded with `pip install --user --break-system-packages -U yt-dlp`
+  (2026.08.19). `yt-dlp` was also **missing from `requirements.txt`** — the same
+  slip as `youtube-transcript-api` in Session 35. Added.
+- **The download format broke at random.** `'worst[ext=mp4]/worst'` needs a
+  combined audio+video stream, which YouTube only sometimes offers — the same
+  call worked once, then failed three times. Now two downloads: original-language
+  m4a audio (~49 kbps, ~7 MB per 20 min, well under Whisper's 25 MB) and ≤480p
+  H.264 video (OpenCV can't decode the AV1/VP9 streams `worst` picked).
+- **Frames were read with the handwriting prompt**, so every frame came back
+  "There is no handwritten mathematics in this image" — non-empty, so it went into
+  the notes as junk. New `read_frame()` in `image_handler.py` reads on-screen
+  text and answers `NO_TEXT` for talking heads. Frame calls now go through
+  `_with_retry`, so Groq's 7k ITPM 429s wait instead of silently dropping frames.
+- **Keyframes kept the emptiest boards.** On a Khan-style whiteboard video the
+  mean frame difference stays <0.5 for minutes and jumps to ~25 only on a wipe,
+  so the old code kept the frame *just after* each wipe. `extract_keyframes()` now
+  keeps the **last** frame of each scene (compare to scene start, save the frame
+  before the jump). Contact sheet confirmed full worked derivations.
+- **Whisper transcribed an AI dub.** YouTube attaches dubbed tracks; `worstaudio`
+  sorts language preference backwards and took the *Indonesian* dub of an English
+  video — which dropped the minus signs, so the notes said 10x² **+** 30x **+** 8.
+  The audio selector now asks for the `original` track first.
+
+Verified: "Me at the zoo" (19 s) → correct Whisper text, all 5 frames `NO_TEXT`.
+Khan "completing the square" (14 min) → 114 s to source text (11k chars audio +
+2.6k chars board), notes in 4 s, Example 2 correct (10x² − 30x − 8).
+`biBxMKhQg8Q`, the "no-captions test video", is a **3 h 40 min audiobook over a
+black screen** — the 20-minute guard correctly refuses it, so it can't test the
+pipeline.
+
+### Auth — reviewed, then Google sign-in added
+**Review of the existing login:** it is self-made, but every security-critical
+piece is stdlib — `hashlib.scrypt` (16-byte salt), `secrets.compare_digest`,
+`secrets.token_urlsafe(32)` tokens stored as SHA-256, a dummy hash for unknown
+usernames, `?` placeholders everywhere. The risk is the glue: auth switched off,
+no CSRF, rate limits keyed on `request.remote_addr` (the ALB behind AWS),
+first-account-is-admin.
+
+**Google sign-in (OAuth2 / OpenID Connect) via Authlib** — the library does
+state, nonce, the code exchange and the ID-token signature check:
+- `GET /auth/google`, `GET /auth/google/callback`, `GET /api/auth/config`.
+  Requires `email_verified`; optional `GOOGLE_ALLOWED_DOMAIN` lock.
+- `users.user_for_google()` links on Google's stable `sub`, **never on email** —
+  otherwise a password account named `victim@gmail.com` would be handed the
+  victim's sign-ins. Google accounts get `password_hash = '!oauth'`, which
+  `_verify_password` can't parse, so they can't be logged into with a password.
+- `settings.password_login` (default true) turns our own password login and
+  registration off entirely (403) once Google works.
+- `FLASK_SECRET_KEY` (added to `.env`) signs the OAuth state cookie — must be
+  the same on every gunicorn worker. `BEHIND_PROXY=1` turns on `ProxyFix` behind
+  the ALB, which also fixes the rate-limit IP problem. Off by default, because
+  without a proxy clients could forge X-Forwarded-For.
+- `authlib` added to `requirements.txt`; blank keys added to `.env.example`.
+
+Tests: 20/20 on a temp DB (redirect params, forged state rejected, unverified
+email rejected, `//evil.com` and `/\evil.com` open redirects blocked, an email
+that matches a password account is NOT merged, domain lock, password switch).
+Migration run on a copy of the real `users.db`: all 42 users kept.
+
+### Is "auth off" safe to ship?
+Checked: `settings.json` is in both `.gitignore` and `.dockerignore`, so **the
+AWS image always runs with auth ON**. Locally and in the lab it's off — and off
+means every visitor *is* user #1, the real admin: `/admin`, role changes,
+settings, and **API keys minted then stay valid after auth is turned back on**.
+It also puts every tester in one account, which would make the pre/post study
+data useless.
+
+### Guest mode (for the lab)
+Name only, no password → a normal **student** account (`'Budi Santoso #a3f9'`),
+`password_hash = '!guest'`. `POST /api/guest`, off unless
+`settings.guest_login`, limited to 5 new accounts per device per hour. The user
+typed the `users.py` part; two bugs fixed before it could run: `''.join` (which
+glues "Budi Santoso" into "BudiSantoso" — needs `' '.join`), and everything after
+`raise` indented under `if not name:` (unreachable, plus a `try:` with no body, so
+the file didn't parse and the app wouldn't start). Claude did the rest. Tests: 15
+checks pass — student role, blocked from `/api/admin` and `/api/dev`, no password
+login, 30-char cap, per-device limit, logged-out visitors still 401.
+
+### CLAUDE.md cleanup
+449 → ~300 lines (~8.4k → ~5.3k tokens on every turn). The six "Features built
+(as of session N)" sections, the old vision numbers and the two old Pending
+lists moved here verbatim (see "Archive — history moved out of CLAUDE.md").
+New: a short, code-verified **Current state** section to be *rewritten* each
+session; the agent reads only the last `## Session` entry of this file. Fixed
+stale claims: HoughLinesP replacement (done in S30), `dev.html` missing (exists),
+emoji→SVG "in progress" (done), env var names (`API_KEY`, not `GROQ_API_KEY`).
+
+### Lab quiz — Cambridge AS Pure Mathematics 1
+- New class `curricula/cambridge-as-p1/` (manifest, one topic "Coordinate
+  geometry", empty `reference/`).
+- The user's 5 structured questions (33 marks) are in `questions.json` **without
+  answers**; worked answers are in `markscheme.json`, which no route serves.
+  Before this, the Questions tab printed `A: <answer>`, flashcards showed it, and
+  the tutor was handed the first 20 questions *with answers*.
+- **Quiz:** each part became an MCQ with realistic wrong options (sign slips, r²
+  for r, missing ½, parallel instead of perpendicular). Started at 14; cut to
+  **10** at the user's request (weaker students, 40-minute test). Dropped the four
+  hardest: Q1(b) tangent condition, Q3(c) point-to-line distance, Q5(c), Q5(d).
+  Correct letters spread A×3 B×3 C×2 D×2. Every correct answer and every
+  distractor checked numerically.
+- **Quiz mode took only the first 5** from any bank — now serves the whole bank
+  (≤20); `n_questions` only sizes the generated fallback.
+- **"Ask tutor" was open during tests** and is handed the current question, so
+  it could answer the quiz. Now hidden for bank quizzes (tests), kept for
+  generated ones (practice).
+- End-to-end: guest student takes it twice → server marks 3/10 then 8/10 → the
+  dev panel's pre/post shows exactly 3/10 → 8/10. No keys before submit.
+
+### Also
+- Test accounts (admin + 30 students) written up as a reference section above.
+- `flowcharts.html`: quiz mode (test vs practice gate), curricula (mark scheme,
+  quiz bank), settings (new flags, dev routes are key-gated, not "no auth"),
+  image_handler (was still naming the decommissioned `qwen3.6`), users (guest),
+  route map, prompts (flavour bug). All 25 diagrams parse (checked in headless
+  Chrome — one was broken by this session's edit and fixed).
+
+### Known issues / honest gaps
+- **Nothing here has been clicked through in a real browser**: the Google and
+  guest buttons on the login screen, the hidden tutor button, maths rendering in
+  the new quiz options, and Session 36's fullscreen anti-cheat. All verified
+  through the Flask test client and a JS parse only.
+- **Google sign-in has never done a real round trip** — no client ID exists yet.
+  It also needs **https** (or `localhost`): the lab's `http://192.168.x.x` and the
+  plain-http ALB will not work with Google.
+- **The tutor ignores which class it is teaching — every class.**
+  `build_tutor_prompt()` replaces `'You are a Socratic SAT/A-level tutor.'`, but
+  the Session 19 rewrite changed that opening line, so `.replace()` silently does
+  nothing and GCSE students get the "SAT and A-level" tutor. One-line fix in
+  `core/prompts.py` given to the user to type; **not fixed**. Needs a live Groq
+  turn after.
+- **Admin auto-research reads `TAVILY_API_KEY`**; `.env` has `TAVILY_KEY`. Never
+  finds the key. Not fixed.
+- **The lab plan is undecided:** pre and post in one hour leaves no time to learn
+  in between. Two sessions (pre-test now, tutor + post-test later) gives the only
+  clean result. A "rushed attempt" flag for the dev panel was proposed, not built.
+- **Lab prep still not done:** `auth_required` is still `false` locally — with it
+  off, guest mode and the pre/post data are meaningless. Turn it on and set
+  `guest_login: true` before the lab. Shared lab PCs keep a guest logged in for 30
+  days unless students log out.
+- **Test-account passwords are guessable and live in tracked files**; students can
+  log in as classmates by changing two digits. Change the admin password before
+  any public deploy or making the repo public.
+- **API keys minted while auth was off are still valid** — review
+  `/api/admin/api-keys` before the lab.
+- The **GCSE quiz is now tutor-free too** (it's also a hand-written bank) — a side
+  effect of the test/practice rule.
+- The 14-question version of the lab quiz only exists in a temporary scratchpad.
+- The video fallback is slow (~2 min for 14 min of video, mostly vision rate-limit
+  waits); the `yt-dlp` copy will go stale again; the notes model still makes small
+  arithmetic slips ("a = −2" for a = 2).
+- Still open from earlier sessions: answer keys reach the browser from
+  `/api/papers` and `/api/practice_from_error`; no CSRF; **demo video not
+  started; submission deadline still not confirmed.**
+- **Nothing committed** this session.

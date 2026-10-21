@@ -37,6 +37,13 @@ def init() -> None:
             conn.execute('\n                CREATE TABLE IF NOT EXISTS daily_missions (\n                    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,\n                    date       TEXT NOT NULL,\n                    mission_id TEXT NOT NULL,\n                    count      INTEGER NOT NULL DEFAULT 0,\n                    PRIMARY KEY (user_id, date, mission_id)\n                )\n            ')
             conn.execute('\n                CREATE TABLE IF NOT EXISTS quests (\n                    user_id  INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,\n                    quest_id TEXT NOT NULL,\n                    progress INTEGER NOT NULL DEFAULT 0,\n                    done     INTEGER NOT NULL DEFAULT 0,\n                    PRIMARY KEY (user_id, quest_id)\n                )\n            ')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_misconceptions_curric ON misconceptions (curriculum, topic, category)')
+        try:
+            with conn:
+                conn.execute('ALTER TABLE users ADD COLUMN google_sub TEXT')
+        except sqlite3.OperationalError:
+            pass
+        with conn:
+            conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users (google_sub)')
             try:
                 conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'student'")
                 conn.execute("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)")
@@ -84,6 +91,32 @@ def create_user(username: str, password: str, role: str='student') -> int:
         return cur.lastrowid
     except sqlite3.IntegrityError:
         raise UserError('That username is taken.')
+    finally:
+        conn.close()
+
+# Stored instead of a password hash for Google accounts. _verify_password can't
+# parse it, so these accounts can never be logged into with a password.
+_NO_PASSWORD = '!oauth'
+
+def user_for_google(sub: str, email: str) -> int:
+    # Find the account by Google's stable user id ('sub'), never by email: an
+    # existing password account named after someone's email must not be taken
+    # over (or handed over) just because the names match.
+    conn = _connect()
+    try:
+        row = conn.execute('SELECT id FROM users WHERE google_sub = ?', (sub,)).fetchone()
+        if row:
+            return row['id']
+        count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        role = 'admin' if count == 0 else 'student'
+        for username in (email, f'{email}#{sub[-6:]}'):
+            try:
+                with conn:
+                    cur = conn.execute('INSERT INTO users (username, password_hash, created_at, role, google_sub) VALUES (?, ?, ?, ?, ?)', (username, _NO_PASSWORD, int(time.time()), role, sub))
+                return cur.lastrowid
+            except sqlite3.IntegrityError:
+                continue
+        raise UserError('Could not create an account for that Google user.')
     finally:
         conn.close()
 
@@ -377,3 +410,21 @@ def get_misconceptions(curriculum: str) -> list[dict]:
     finally:
         conn.close()
     return [dict(r) for r in rows]
+
+def create_guest(name: str) -> tuple[int, str]:
+    name = ' '.join((name or '').split())[:30]
+    if not name:
+        raise UserError('Type your name to start.')
+    conn = _connect()
+    try:
+        for _ in range(5):
+            username = f'{name} #{secrets.token_hex(2)}'
+            try:
+                with conn:
+                    cur = conn.execute('INSERT INTO users (username, password_hash, created_at, role) VALUES (?, ?, ?, ?)', (username, '!guest', int(time.time()), 'student'))
+                return cur.lastrowid, username
+            except sqlite3.IntegrityError:
+                continue
+        raise UserError('Could not create a guest account. Try again.')
+    finally:
+        conn.close()

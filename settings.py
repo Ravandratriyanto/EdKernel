@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 _PATH = Path(__file__).parent / 'settings.json'
-DEFAULTS: dict = {'auth_required': True, 'stub_testing': True, 'rate_limiting': True}
+DEFAULTS: dict = {'auth_required': True, 'stub_testing': True, 'rate_limiting': True, 'password_login': True, 'guest_login': False}
 
 def load() -> dict:
     if not _PATH.exists():

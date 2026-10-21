@@ -1,0 +1,242 @@
+[
+ {
+  "id": "p1-q1a",
+  "text": "The circle \\(C\\) has equation \\(x^2+y^2-4x+6y-12=0\\). Find the centre and radius of \\(C\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Centre \\((-2,3)\\), radius \\(5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Centre \\((2,-3)\\), radius \\(5\\)"
+   },
+   {
+    "letter": "C",
+    "text": "Centre \\((2,-3)\\), radius \\(\\sqrt{12}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "Centre \\((2,-3)\\), radius \\(25\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "Complete the square: \\((x-2)^2+(y+3)^2=12+4+9=25\\). Centre \\((2,-3)\\), radius \\(\\sqrt{25}=5\\)."
+ },
+ {
+  "id": "p1-q2a",
+  "text": "Points \\(A(1,1)\\), \\(B(5,3)\\) and \\(C(3,7)\\). Which working correctly shows that angle \\(ABC=90^\\circ\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(m_{AB}=2\\), \\(m_{BC}=-\\tfrac12\\), and \\(2\\times(-\\tfrac12)=-1\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(AB=BC=\\sqrt{20}\\), so the angle at \\(B\\) is \\(90^\\circ\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(m_{AB}=\\tfrac12\\), \\(m_{BC}=2\\), and \\(\\tfrac12\\times2=1\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(m_{AB}=\\tfrac12\\), \\(m_{BC}=-2\\), and \\(\\tfrac12\\times(-2)=-1\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\(m_{AB}=\\frac{3-1}{5-1}=\\frac12\\), \\(m_{BC}=\\frac{7-3}{3-5}=-2\\). Product \\(=-1\\), so \\(AB\\perp BC\\). (Equal lengths alone do not prove a right angle.)"
+ },
+ {
+  "id": "p1-q2b",
+  "text": "Points \\(A(1,1)\\), \\(B(5,3)\\) and \\(C(3,7)\\). Angle \\(ABC=90^\\circ\\). Find the equation of the circle through \\(A\\), \\(B\\) and \\(C\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((x-2)^2+(y-4)^2=40\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((x-2)^2+(y-4)^2=10\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((x-3)^2+(y-2)^2=10\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((x+2)^2+(y+4)^2=10\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "Right angle at \\(B\\) \\(\\Rightarrow AC\\) is a diameter. Centre = midpoint of \\(AC=(2,4)\\); \\(r^2=\\frac{(3-1)^2+(7-1)^2}{4}=10\\)."
+ },
+ {
+  "id": "p1-q2c",
+  "text": "Points \\(A(1,1)\\), \\(B(5,3)\\) and \\(C(3,7)\\). Angle \\(ABC=90^\\circ\\). Find the area of triangle \\(ABC\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(20\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(10\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(5\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(2\\sqrt5\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "\\(AB=BC=\\sqrt{20}\\). Area \\(=\\frac12\\times\\sqrt{20}\\times\\sqrt{20}=10\\)."
+ },
+ {
+  "id": "p1-q3a",
+  "text": "The circle \\((x-3)^2+(y+1)^2=25\\) and the line \\(l: y=x+1\\). Find the coordinates of the points where \\(l\\) meets the circle.",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((3,4)\\) and \\((-2,-1)\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((-3,-2)\\) and \\((2,3)\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((3,4)\\) and \\((-2,1)\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((4,5)\\) and \\((-3,-2)\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "Substitute \\(y=x+1\\): \\((x-3)^2+(x+2)^2=25 \\Rightarrow x^2-x-6=0 \\Rightarrow x=3\\) or \\(x=-2\\). Points \\((3,4)\\), \\((-2,-1)\\)."
+ },
+ {
+  "id": "p1-q3b",
+  "text": "The circle \\((x-3)^2+(y+1)^2=25\\) and the line \\(l: y=x+1\\). \\(l\\) meets the circle at \\((3,4)\\) and \\((-2,-1)\\). Find the length of the chord.",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(5\\sqrt2\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(10\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(50\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(5\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "Chord \\(=\\sqrt{(3-(-2))^2+(4-(-1))^2}=\\sqrt{50}=5\\sqrt2\\)."
+ },
+ {
+  "id": "p1-q4a",
+  "text": "A circle touches the \\(x\\)-axis at \\((4,0)\\) and passes through \\((0,2)\\). Find the radius of the circle.",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(4\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(2\\sqrt5\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(5\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(10\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "Touching the \\(x\\)-axis at \\((4,0)\\) \\(\\Rightarrow\\) centre \\((4,r)\\). Then \\(4^2+(2-r)^2=r^2 \\Rightarrow 20-4r=0 \\Rightarrow r=5\\)."
+ },
+ {
+  "id": "p1-q4b",
+  "text": "A circle touches the \\(x\\)-axis at \\((4,0)\\) and passes through \\((0,2)\\). Its radius is \\(5\\). Write down its equation.",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((x-4)^2+(y-5)^2=5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((x+4)^2+(y+5)^2=25\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((x-4)^2+(y-5)^2=25\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((x-5)^2+(y-4)^2=25\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "Centre \\((4,5)\\), radius \\(5\\): \\((x-4)^2+(y-5)^2=25\\)."
+ },
+ {
+  "id": "p1-q5a",
+  "text": "The line \\(l_1\\) is \\(3x+y=7\\). The line \\(l_2\\) passes through \\(P(2,3)\\) and is perpendicular to \\(l_1\\). \\(l_2\\) meets the \\(x\\)-axis at \\(A\\) and the \\(y\\)-axis at \\(B\\). \\(O\\) is the origin. Find the equation of \\(l_2\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(3x+y-9=0\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(x+3y-11=0\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(x-3y-7=0\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(x-3y+7=0\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "Gradient of \\(l_1\\) is \\(-3\\), so gradient of \\(l_2\\) is \\(\\frac13\\): \\(y-3=\\frac13(x-2) \\Rightarrow x-3y+7=0\\)."
+ },
+ {
+  "id": "p1-q5b",
+  "text": "The line \\(l_1\\) is \\(3x+y=7\\). The line \\(l_2\\) passes through \\(P(2,3)\\) and is perpendicular to \\(l_1\\). \\(l_2\\) meets the \\(x\\)-axis at \\(A\\) and the \\(y\\)-axis at \\(B\\). \\(O\\) is the origin. \\(l_2\\) is \\(x-3y+7=0\\). Find the coordinates of \\(A\\) and \\(B\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(A(-7,0)\\), \\(B\\left(0,\\tfrac73\\right)\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(A(7,0)\\), \\(B\\left(0,-\\tfrac73\\right)\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(A(-7,0)\\), \\(B(0,7)\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(A\\left(\\tfrac73,0\\right)\\), \\(B(0,-7)\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "\\(y=0 \\Rightarrow x=-7\\), so \\(A(-7,0)\\). \\(x=0 \\Rightarrow y=\\frac73\\), so \\(B\\left(0,\\frac73\\right)\\)."
+ }
+]

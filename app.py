@@ -17,7 +17,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, send_from_directory, send_file, g
+from flask import Flask, request, jsonify, send_from_directory, send_file, g, redirect, session, url_for
+from urllib.parse import quote
+from authlib.integrations.flask_client import OAuth
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from pypdf import PdfReader
@@ -39,6 +42,19 @@ from ratelimit import RateLimiter, SlidingWindowLimiter
 from core.prompts import build_check_prompt, tutor_reply as _tutor_reply, TUTOR_SYSTEM_PROMPT, hint_note
 load_dotenv()
 app = Flask(__name__, static_folder='static')
+# Signs Flask's own session cookie, which only carries the OAuth state/nonce
+# between /auth/google and its callback. Must be the same on every gunicorn
+# worker, so it comes from .env — a random fallback breaks sign-in whenever the
+# callback lands on a different worker.
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', '').strip() or secrets.token_hex(32)
+if not os.environ.get('FLASK_SECRET_KEY', '').strip():
+    print('WARNING: FLASK_SECRET_KEY not set — Google sign-in will fail under multiple workers.')
+# Behind the AWS ALB, trust its X-Forwarded-* headers so request.remote_addr is
+# the student (rate limits) and url_for(_external=True) builds the https://
+# callback Google expects. Off by default: without a proxy, a client could
+# forge these headers.
+if os.environ.get('BEHIND_PROXY', '').strip().lower() in {'1', 'true', 'yes'}:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 users.init()
 app.register_blueprint(v1)
 users.purge_expired()
@@ -65,9 +81,20 @@ def _http_version_not_supported(e):
     return (jsonify({'error': 'HTTP version not supported.THIS IS NOT OUR FAULT'}), 505)
 SESSION_COOKIE = 'ollm_session'
 COOKIE_SECURE = os.environ.get('OLLM_HTTPS', '').strip().lower() in {'1', 'true', 'yes'}
+app.config.update(SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=COOKIE_SECURE)
+# Google sign-in (OAuth2 / OpenID Connect) via Authlib. Authlib does the
+# protocol: state + nonce checks, the code-for-token exchange, and verifying
+# the ID token's signature against Google's published keys. Off unless both
+# values are in .env.
+_oauth = OAuth(app)
+GOOGLE_ENABLED = bool(os.environ.get('GOOGLE_CLIENT_ID', '').strip() and os.environ.get('GOOGLE_CLIENT_SECRET', '').strip())
+GOOGLE_ALLOWED_DOMAIN = os.environ.get('GOOGLE_ALLOWED_DOMAIN', '').strip().lower()
+if GOOGLE_ENABLED:
+    _oauth.register('google', client_id=os.environ['GOOGLE_CLIENT_ID'].strip(), client_secret=os.environ['GOOGLE_CLIENT_SECRET'].strip(), server_metadata_url='https://accounts.google.com/.well-known/openid-configuration', client_kwargs={'scope': 'openid email profile'})
 _login_limiter = RateLimiter(max_failures=8, window_seconds=15 * 60)
 _INGEST_STATUS: dict = {}
 _llm_limiter = SlidingWindowLimiter(max_calls=20, window_seconds=60)
+_guest_limiter = SlidingWindowLimiter(max_calls=5, window_seconds=60 * 60)
 
 def _check_llm_rate() -> object:
     if not _settings.load()['rate_limiting']:
@@ -82,7 +109,7 @@ def _check_llm_rate() -> object:
 
 def _login_keys(username: str) -> tuple:
     return (f'ip:{request.remote_addr}', f"user:{(username or '').strip().lower()}")
-_OPEN_ENDPOINTS = {'index', 'static', 'api_register', 'api_login', 'api_logout', 'api_me', 'admin_panel', 'teacher_panel'}
+_OPEN_ENDPOINTS = {'index', 'static', 'api_register', 'api_login', 'api_logout', 'api_me', 'admin_panel', 'teacher_panel', 'api_auth_config', 'auth_google', 'auth_google_callback', 'api_guest'}
 _DEV_USER = {'id': 1, 'username': 'dev', 'role': 'admin'}
 
 @app.before_request
@@ -108,6 +135,8 @@ def _auth_response(user: dict, token: str):
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
+    if not _settings.load()['password_login']:
+        return (jsonify({'error': 'Password accounts are turned off. Sign in with Google.'}), 403)
     data = request.json or {}
     ip_key = f'register-ip:{request.remote_addr}'
     wait = _login_limiter.retry_after(ip_key)
@@ -126,6 +155,8 @@ def api_register():
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
+    if not _settings.load()['password_login']:
+        return (jsonify({'error': 'Password login is turned off. Sign in with Google.'}), 403)
     data = request.json or {}
     username = (data.get('username') or '').strip()
     keys = _login_keys(username)
@@ -152,6 +183,66 @@ def api_logout():
 @app.route('/api/me')
 def api_me():
     return jsonify({'user': g.user})
+
+@app.route('/api/auth/config')
+def api_auth_config():
+    cfg = _settings.load()
+    return jsonify({'google': GOOGLE_ENABLED, 'password': cfg['password_login'], 'guest': cfg['guest_login']})
+
+@app.route('/api/guest', methods=['POST'])
+def api_guest():
+    if not _settings.load()['guest_login']:
+        return (jsonify({'error': 'Guest access is turned off.'}), 403)
+    wait = _guest_limiter.check_and_record(f'guest-ip:{request.remote_addr}')
+    if wait:
+        resp = jsonify({'error': 'Too many guest accounts from this device. Try again later.'})
+        resp.headers['Retry-After'] = str(wait)
+        return (resp, 429)
+    try:
+        uid, username = users.create_guest((request.json or {}).get('name', ''))
+    except users.UserError as e:
+        return (jsonify({'error': str(e)}), 400)
+    return _auth_response({'id': uid, 'username': username}, users.create_session(uid))
+
+def _safe_next(path: str) -> str:
+    # Only same-site paths: '//evil.com' and '/\evil.com' are read by browsers
+    # as other hosts, which would make this an open redirect.
+    path = path or '/'
+    if not path.startswith('/') or path.startswith('//') or '\\' in path:
+        return '/'
+    return path
+
+def _auth_fail(msg: str):
+    return redirect(f"/?auth_error={quote(msg)}")
+
+@app.route('/auth/google')
+def auth_google():
+    if not GOOGLE_ENABLED:
+        return _auth_fail('Google sign-in is not set up on this server.')
+    session['auth_next'] = _safe_next(request.args.get('next', '/'))
+    return _oauth.google.authorize_redirect(url_for('auth_google_callback', _external=True))
+
+@app.route('/auth/google/callback')
+def auth_google_callback():
+    if not GOOGLE_ENABLED:
+        return _auth_fail('Google sign-in is not set up on this server.')
+    try:
+        token = _oauth.google.authorize_access_token()
+    except Exception:
+        return _auth_fail('Google sign-in did not complete. Please try again.')
+    info = token.get('userinfo') or {}
+    if not info.get('sub') or not info.get('email') or not info.get('email_verified'):
+        return _auth_fail('That Google account has no verified email.')
+    if GOOGLE_ALLOWED_DOMAIN and (info.get('hd') or '').lower() != GOOGLE_ALLOWED_DOMAIN:
+        return _auth_fail(f'Please sign in with your {GOOGLE_ALLOWED_DOMAIN} school account.')
+    try:
+        uid = users.user_for_google(info['sub'], info['email'])
+    except users.UserError as e:
+        return _auth_fail(str(e))
+    users.purge_expired()
+    resp = redirect(_safe_next(session.pop('auth_next', '/')))
+    resp.set_cookie(SESSION_COOKIE, users.create_session(uid), max_age=users.SESSION_TTL_SECONDS, httponly=True, samesite='Lax', secure=COOKIE_SECURE)
+    return resp
 
 def _key(data: dict, field: str, env_var: str) -> str:
     return (data.get(field) or '').strip() or os.environ.get(env_var, '').strip()
@@ -867,7 +958,9 @@ def api_quiz_start():
     if not cid:
         return (jsonify({'error': 'No curriculum given'}), 400)
     source = 'bank'
-    questions = _attempt_questions(quizbank.pick(cid, n))
+    # A hand-written bank is a whole test (e.g. the 14-part lab quiz), so serve
+    # all of it (capped at 20). n only sizes the generated fallback below.
+    questions = _attempt_questions(quizbank.load(cid)[:20])
     if not questions:
         err = _check_llm_rate()
         if err:
