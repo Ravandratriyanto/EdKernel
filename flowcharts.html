@@ -455,7 +455,7 @@ flowchart TD
     <h2>Student Home &amp; Quiz Mode</h2>
     <span class="badge badge-arch">OVERVIEW</span>
   </div>
-  <div class="section-desc">Picking a class opens a Gojek-style service-tile grid, not the tutor. Quiz mode copies the Digital SAT Bluebook layout and deliberately shows no live right/wrong — teacher feedback was that live marking spikes exam nerves. The answer key never reaches the browser: the server opens an attempt, sends key-stripped questions, and marks the whole thing at submit.</div>
+  <div class="section-desc">Picking a class opens a Gojek-style service-tile grid, not the tutor. Quiz mode copies the Digital SAT Bluebook layout and deliberately shows no live right/wrong — teacher feedback was that live marking spikes exam nerves. The answer key never reaches the browser: the server opens an attempt, sends key-stripped questions, and marks the whole thing at submit. Anti-cheat is two layers on one counter: tab-switch detection (<code>visibilitychange</code>) plus a forced-fullscreen layer (session 36) — fullscreen can't block Alt+Tab/Cmd+Tab, no webpage can, but it hides everything else so a casual peek isn't a click away, and leaving it (Esc, or the OS auto-exiting on an app switch) trips the same counter, de-duped so one real switch isn't counted twice.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -487,6 +487,9 @@ flowchart TD
     RESULT --> AI["analyzeQuiz()\nbuilt from the server review\nPOST /api/start"]
 
     WATCH["startQuizWatch()\nvisibilitychange only\nwindow blur false-fired on DevTools"] --> BADGE["TAB SWITCH DETECTED (n)"]
+    FS["requestFullscreen() on quiz start\nfullscreenchange listener"] -->|"left fullscreen\n+ still visible (Esc)"| BADGE
+    FS -.->|"left fullscreen\n+ tab hidden too"| DEDUPE["already counted by WATCH\nskip, no double-count"]
+    FS --> OVERLAY["#fullscreen-resume overlay\nclick to re-enter\n(new gesture required)"]
     BADGE -->|"POST /api/quiz/tab-switch"| ATT
 
     style PANEL  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
@@ -494,6 +497,7 @@ flowchart TD
     style ATT    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
     style MARK   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style SENT   fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style FS     fill:#2a1a3a,stroke:#b36fdd,color:#e8e8e8
     </div>
   </div>
 </div>
@@ -911,11 +915,20 @@ flowchart TD
     KaTeX/mhchem pipeline as tutor replies. Two input adapters feed one brain. The
     <strong>text extraction already existed</strong> (<code>_pdf_text</code> for
     PDFs); the only new engine piece is <code>core/notes.py:notes_from_text()</code>,
-    which is pure — text in, notes out, no HTTP. The YouTube side
-    (<code>transcripts.py</code>, <code>youtube-transcript-api</code>) is the HTTP
-    adapter and stays <strong>app-layer</strong>, same invariant as the Drive
-    adapter. Note vs Pelajarin.ai: the differentiator is not the notes — it is that
-    notes can feed the existing tutor/quiz loop (planned, not yet wired).
+    which is pure — text in, notes out, no HTTP.
+    <strong>Architecture note (session 36):</strong> <code>transcripts.py</code>
+    does HTTP (<code>youtube-transcript-api</code>, <code>yt-dlp</code>) and was
+    meant to be app-layer like the Drive adapter — it actually lives at
+    <code>core/transcripts.py</code>, so that invariant has already drifted;
+    flagged here rather than quietly left wrong.
+    <strong>Session 36 added a fallback</strong> for videos with captions
+    disabled: download the video, dedupe near-identical frames with real OpenCV
+    (<code>cv2.VideoCapture</code> + grayscale <code>absdiff</code>, not ffmpeg's
+    <code>mpdecimate</code>), transcribe spoken audio via Groq Whisper and each
+    kept frame via the existing vision <code>transcribe()</code>, then combine
+    both into one source text. Note vs Pelajarin.ai: the differentiator is not
+    the notes — it is that notes can feed the existing tutor/quiz loop (planned,
+    not yet wired).
   </div>
   <div class="chart-area">
     <div class="mermaid">
@@ -929,10 +942,22 @@ flowchart TD
     YT  --> EP2["POST /api/notes/youtube\napp.py · _check_llm_rate"]
 
     EP1 --> PT["_pdf_text()\npypdf → pdftext.doc_pages\n(already existed)"]
-    EP2 --> TR["transcripts.py\nfetch_transcript()\nyoutube-transcript-api .fetch()\nAPP-LAYER (HTTP)"]
+    EP2 --> TR["fetch_transcript()\nyoutube-transcript-api .fetch()\ncore/transcripts.py — does HTTP despite the name"]
+
+    TR -->|captions disabled| FB
+
+    subgraph FB["Fallback — session 36, no captions"]
+        DL["yt-dlp: probe duration\n(reject &gt; 20 min) then download\nlowest-quality combined mp4"]
+        DL --> KF["core/keyframes.py\nextract_keyframes()\ncv2.VideoCapture, sample every 4s\ngrayscale + absdiff vs last KEPT frame\nreal OpenCV dedupe, not ffmpeg mpdecimate"]
+        DL --> WHISPER["core.llm.client.transcribe_audio()\nGroq whisper-large-v3-turbo\n25MB cap, fails silently → frames-only"]
+        KF --> VFRAME["vision.image_handler.transcribe()\nper kept frame — REUSED, not new"]
+        VFRAME --> COMBINE["combine: ## Spoken content\n+ ## On-screen content"]
+        WHISPER --> COMBINE
+    end
 
     PT --> NT
-    TR --> NT
+    TR -->|has captions| NT
+    COMBINE --> NT
 
     NT["core/notes.py\nnotes_from_text(text, source)\nPURE — no HTTP, &lt;40 chars → ValueError\nprompt via .replace (no f-string braces)"]
     NT --> LLM["core.llm.generate()\nGroq / Ollama"]
@@ -945,6 +970,8 @@ flowchart TD
     style NT  fill:#0d1a0d,stroke:#6fdd6f,color:#e8e8e8
     style TR  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
     style PT  fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style KF  fill:#2a1a3a,stroke:#b36fdd,color:#e8e8e8
+    style WHISPER fill:#2a1a3a,stroke:#b36fdd,color:#e8e8e8
     style FUT fill:#2a230d,stroke:#ddc46f,color:#e8e8e8
     </div>
   </div>

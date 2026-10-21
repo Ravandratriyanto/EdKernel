@@ -26,7 +26,7 @@ from core.rag.retrieve import retrieve
 from core.vision.image_handler import transcribe
 from core.vision.step_checker import check_working
 from core.notes import notes_from_text
-from core.transcripts import fetch_transcript
+from core.transcripts import fetch_transcript, transcribe_video 
 import core.misconceptions
 from diagram_shots import shot_messages
 from sessionlog import log_turn, attachment_meta, list_sessions, session_turns, all_sessions, session_turns_admin, stats
@@ -306,18 +306,25 @@ def api_notes_youtube():
     url = (data.get('url') or '').strip()
     if not url:
         return (jsonify({'error': 'No URL provided'}), 400)
+    llm_kwargs = dict(
+        model=data.get('model', 'gemma4'), host=data.get('host', 'http://localhost:11434'),
+        provider=data.get('provider', 'ollama'), api_key=_key(data, 'api_key', 'API_KEY'))
     try:
         text = fetch_transcript(url)
-        notes = notes_from_text(
-            text, source='YouTube video',
-            model=data.get('model', 'gemma4'), host=data.get('host', 'http://localhost:11434'),
-            provider=data.get('provider', 'ollama'), api_key=_key(data, 'api_key', 'API_KEY'))
+    except Exception:
+        try:
+            text = transcribe_video(url, **llm_kwargs)
+        except ValueError as e:
+            return (jsonify({'error': str(e)}), 400)
+        except Exception:
+            return (jsonify({'error': 'Captions are off and the video could not be downloaded or read.'}), 400)
+    try:
+        notes = notes_from_text(text, source='YouTube video', **llm_kwargs)
     except ValueError as e:
         return (jsonify({'error': str(e)}), 400)
-    except Exception:
-        return (jsonify({'error': 'Could not fetch that transcript — the video may have captions disabled.'}), 400)
+    except Exception as e:
+        return (jsonify({'error': f'Note generation failed: {e}'}), 500)
     return jsonify({'notes': notes, 'url': url})
-
 @app.route('/api/graph', methods=['POST'])
 def api_graph():
     err = _check_llm_rate()
@@ -722,10 +729,8 @@ def _fetch_pdf(url: str) -> bytes | None:
     if not _allowed_paper_host(url):
         return None
     try:
-        with requests.get(url, timeout=20, stream=True) as resp:
-            resp.raise_for_status()
-            ctype = resp.headers.get('Content-Type', '').lower()
-            if 'pdf' not in ctype and (not url.lower().endswith('.pdf')):
+        with requests.get(url, timeout=20, stream=True, allow_redirects=False) as resp:
+            if resp.status_code >= 300:
                 return None
             chunks, total = ([], 0)
             for chunk in resp.iter_content(64 * 1024):

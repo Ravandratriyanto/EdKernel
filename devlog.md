@@ -4865,3 +4865,118 @@ new `/v1/` endpoints, not pointing at ones that already exist.
 ### Known issues / honest gaps
 - Lab prep, demo video, and the deadline-reconciliation problem are all
   unchanged from Session 33/34 — untouched this session.
+
+## Session 36 — 2026-10-21
+
+Long session: one security fix landed, two are still open, a real coordinate-
+geometry test run, and the big build — a video-transcription fallback for
+YouTube videos with no captions, plus a fullscreen anti-cheat layer for quizzes.
+
+### Security — one of three fixed, two still open
+From the Session 35 audit: **`_fetch_pdf`'s SSRF-via-redirect hole is fixed**
+(`app.py`) — `allow_redirects=False` + an explicit `status_code >= 300` check,
+typed by the user, one indentation typo fixed by Claude along the way. **Still
+open, not touched this session:** the plaintext `[ANSWER: X]` leak in
+`/api/papers` and `/api/practice_from_error` (the attempt-storage plumbing
+already exists via `create_attempt`, so this is "stop also sending the key,"
+not new infra), and no CSRF token anywhere in the codebase. Don't let these
+slide — they were real when found and nothing has changed.
+
+### Cambridge AS §3.1 — one real, verified batch of questions
+Ran `/api/papers` live (Groq + Tavily, restricted to the allow-listed exam
+domains) for "coordinate geometry." Got 5 genuine MCQs grounded in real PMT
+Core-1 content; hand-checked the maths — all correct. Usable for §3.1.
+Two honest findings from the same test run:
+- **Every correct answer landed on A.** Not a parsing bug — the maths really
+  is right each time — but the model isn't randomizing option order. Anything
+  that reuses this batch should know the key is guessable by pattern alone.
+- **Topic-drift failure mode, silent.** Tightening the query to
+  "Cambridge 9709 Pure Mathematics 1 coordinate geometry" made Tavily surface
+  the syllabus PDF plus unrelated topical papers (quadratics, circular
+  measure) instead — and the system generated 5 real, correct, **completely
+  off-topic** questions with a 200 and no error. `_verify_questions` only
+  checks "is the stated answer correct," never "does this match the
+  requested topic." A generated batch can be internally consistent and still
+  not be what was asked for — check the topic, not just the answer key,
+  before trusting unattended generation.
+
+### YouTube videos with no captions — a real transcription fallback
+Confirmed live (not assumed) that `core/transcripts.py:fetch_transcript()`
+only reads captions YouTube already has — it doesn't listen to the audio.
+Tested against a real no-captions video (`biBxMKhQg8Q`): `TranscriptsDisabled`,
+exactly as expected.
+
+Built a fallback, reusing as much existing machinery as possible rather than
+duplicating it:
+- **`core/keyframes.py`** (new) — `extract_keyframes()`: real OpenCV dedupe
+  (`cv2.VideoCapture`, grayscale + `cv2.absdiff` against the last **kept**
+  frame, not the last sampled one, so a slow fade doesn't sneak past). This
+  replaces `core/video/frame_extractor.py`'s ffmpeg `mpdecimate` for this path
+  — and matters beyond rubric points: fewer near-duplicate slides sent to the
+  vision LLM directly protects the Groq vision quota this project is already
+  tight on.
+- **`core/llm/client.py`** — added `transcribe_audio()`, Groq
+  `whisper-large-v3-turbo`, 25MB cap. Groq-only by design — Whisper isn't
+  something Ollama runs, so this ignores whatever chat `provider` is
+  configured and always talks to Groq; fails silently and falls back to
+  frame-text-only if there's no Groq key configured.
+  Supporting `generate()`/`chat()` directly.
+- **`core/transcripts.py`** — `transcribe_video()`: probes duration via
+  `yt-dlp` first (rejects anything over 20 min, before downloading), downloads
+  lowest-quality combined mp4, runs both the audio and the keyframe paths,
+  combines into one source text. **Reuses** `vision.image_handler.transcribe()`
+  per frame — no new vision logic.
+- **`app.py`** — `/api/notes/youtube` now tries captions first, falls back to
+  `transcribe_video()`, and — as a side effect of finally touching this route
+  — the two-sessions-old error-handling bug is fixed too: transcript-acquisition
+  failures and notes-generation failures now get their own `try`/message
+  instead of one catch-all that blamed YouTube captions for everything.
+
+**Debugging note, for the pattern as much as the fixes:** user typed the
+backend (established split — Claude does frontend, user types backend to
+learn it); static analysis alone caught a real `SyntaxError` in `keyframes.py`
+(`everyL` missing its colon), a file-placement bug (`transcribe_audio` got
+written into a new `core/client.py` instead of the existing `core/llm/client.py`
+the import already pointed at — two broken/duplicate lines in there too,
+including a call to undefined `ath.basename`), and in `core/transcripts.py` a
+truncated import statement, an import-alias typo (`trasncribe_frame` vs the
+`transcribe_frame` the code called), and two smaller typos (`'quite'`
+→`'quiet'`, `ext4`→`ext`). All four touched files now parse and import clean,
+including a full `app.py` import test confirming the route registers.
+**NOT yet run against a real video end-to-end** — static analysis catches
+syntax and name errors, not whether `yt-dlp` actually downloads, Whisper
+actually transcribes, or `DIFF_THRESHOLD`/`VIDEO_MAX_SECONDS` are sane values
+rather than untested guesses. Same lesson as `MIN_INK_FRAC` in the vision
+pipeline: validate against a real video before trusting it.
+
+### Quiz fullscreen anti-cheat
+Pure frontend (`static/index.html`), reuses the existing `/api/quiz/tab-switch`
+endpoint and counter rather than building parallel infra. `startQuizWatch()`
+now also calls `requestFullscreen()` (same user-gesture context as the
+service-tile click that starts the quiz), and listens for `fullscreenchange`
+alongside the existing `visibilitychange`. Leaving fullscreen shows a blocking
+`#fullscreen-resume` overlay and counts as a switch — **de-duped** against the
+existing tab-switch handler, since losing focus usually drops fullscreen at
+the same instant, and without the de-dupe one real switch would count twice.
+Honest framing, confirmed with the user: this cannot block Alt+Tab/Cmd+Tab —
+no webpage can — it just hides everything else so a casual glance isn't a
+click away; only a student who already knows an OS-level app-switch shortcut
+gets out, and even they trip the counter the moment they do. **Not yet tested
+in a real browser** — Safari/mobile fullscreen support is known to be
+inconsistent and this hasn't been run through any of them.
+
+### Known issues / honest gaps
+- **Two of three security holes from Session 35 are still open**: the
+  answer-key leak in `/api/papers` + `/api/practice_from_error`, and no CSRF
+  anywhere. Only the SSRF one got fixed this session.
+- **The YouTube video fallback has never run end-to-end.** Everything verified
+  so far is "it imports without crashing," not "it works." `DIFF_THRESHOLD`,
+  `SAMPLE_EVERY_SEC`, and `VIDEO_MAX_SECONDS` are unvalidated guesses.
+- **Fullscreen anti-cheat has never run in a real browser.** No dev-server
+  click-through happened this session — code was written and read, not tested.
+- **Cambridge AS §3.1 question bank is still just 5 questions** (one verified
+  `/api/papers` run). The session-35 task to build real §3.1 content is barely
+  started, and the topic-drift failure mode above means future batches need a
+  human topic-check, not just the existing answer-verifier.
+- Lab prep, demo video, and the deadline-reconciliation problem remain
+  unchanged — still open from Session 33.

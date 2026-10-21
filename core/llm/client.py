@@ -1,3 +1,4 @@
+import os
 import sys
 from ollama import Client as OllamaClient
 _warned_no_usage = False
@@ -65,3 +66,14 @@ def _bedrock_chat(messages: list[dict], model: str, region: str='us-east-1', tem
     text = r['output']['message']['content'][0]['text']
     u = r.get('usage', {})
     return LLMText(text, {'prompt': u.get('inputTokens', 0), 'completion': u.get('outputTokens', 0)})
+
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
+def transcribe_audio(path: str, model: str='whisper-large-v3-turbo', api_key: str='') -> str:
+    if os.path.getsize(path) > MAX_AUDIO_BYTES:
+        raise ValueError('Video file is too large for Whisper (25MB limit)')
+    from groq import Groq
+    client = Groq(api_key=api_key, timeout=120.0, max_retries=0)
+    with open(path, 'rb') as f:
+        r = client.audio.transcriptions.create(model=model, file=(os.path.basename(path), f.read()))
+    return r.text.strip()
