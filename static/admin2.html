@@ -4,15 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EdKernel Admin</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Pin exact versions. Unpinned, unpkg rolled @babel/standalone to 8.x, whose
+       preset-react defaults to the automatic JSX runtime — that emits an `import`
+       statement, which a classic script cannot run, and the page rendered blank. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
 </head>
 <body class="bg-[#121218] text-[#e8e8ec]" style="font-family:Inter,sans-serif">
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
+    /* @jsxRuntime classic */
+    /* @jsx React.createElement */
     const { useState, useEffect } = React;
 
     // Small inline-SVG icon helper (Feather style).
@@ -82,16 +87,80 @@
       );
     }
 
+    function LoginGate({ onLoggedIn }) {
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [busy, setBusy] = useState(false);
+
+      const submit = (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError('');
+        fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            setBusy(false);
+            if (!ok) { setError(data.error || 'Login failed.'); return; }
+            onLoggedIn();
+          })
+          .catch(() => { setBusy(false); setError('Could not reach the server.'); });
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <form onSubmit={submit} className="w-80 bg-[#20212b] border border-[#30313e] rounded-lg p-6">
+            <h1 className="text-sm font-bold text-[#6c63ff] tracking-wide mb-4">EdKernel Admin</h1>
+            <input
+              value={username} onChange={e => setUsername(e.target.value)}
+              placeholder="Username" autoFocus
+              className="w-full mb-2 bg-[#121218] border border-[#30313e] rounded-md px-3 py-2 text-sm text-[#e8e8ec] placeholder-[#8d8d9c] focus:outline-none focus:border-[#6c63ff]"
+            />
+            <input
+              value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="Password" type="password"
+              className="w-full mb-3 bg-[#121218] border border-[#30313e] rounded-md px-3 py-2 text-sm text-[#e8e8ec] placeholder-[#8d8d9c] focus:outline-none focus:border-[#6c63ff]"
+            />
+            {error && <div className="text-xs text-red-400 mb-3">{error}</div>}
+            <button type="submit" disabled={busy}
+              className="w-full bg-[#6c63ff] hover:bg-[#837cff] disabled:opacity-50 text-white text-sm font-medium rounded-md py-2">
+              {busy ? 'Logging in…' : 'Log in'}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
     function App() {
       const [curricula, setCurricula] = useState([]);
       const [selected, setSelected] = useState(null);
+      const [checking, setChecking] = useState(true);
+      const [isAdmin, setIsAdmin] = useState(false);
+
+      const checkSession = () => {
+        fetch('/api/me')
+          .then(r => r.json())
+          .then(data => setIsAdmin(!!(data.user && data.user.role === 'admin')))
+          .catch(() => setIsAdmin(false))
+          .finally(() => setChecking(false));
+      };
+
+      useEffect(() => { checkSession(); }, []);
 
       useEffect(() => {
+        if (!isAdmin) return;
         fetch('/api/admin/curricula')
           .then(r => r.json())
           .then(list => setCurricula(Array.isArray(list) ? list : []))
           .catch(() => setCurricula([]));
-      }, []);
+      }, [isAdmin]);
+
+      if (checking) return null;
+      if (!isAdmin) return <LoginGate onLoggedIn={() => { setChecking(true); checkSession(); }} />;
 
       return (
         <div className="flex">

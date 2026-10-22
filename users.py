@@ -120,10 +120,35 @@ def user_for_google(sub: str, email: str) -> int:
     finally:
         conn.close()
 
-def authenticate(username: str, password: str) -> int | None:
+ENV_ADMIN_USERNAME = '4dmin'
+
+def _authenticate_env_admin(password: str) -> int | None:
+    """Username '4dmin' never touches the DB's password hash — it checks
+    straight against the ADPASS env var, which only the person who deploys
+    this instance sets. Auto-provisions the admin row on first successful
+    login so there's nothing to seed by hand."""
+    import hmac
+    expected = os.environ.get('ADPASS', '')
+    if not expected or not hmac.compare_digest(password or '', expected):
+        return None
     conn = _connect()
     try:
-        row = conn.execute('SELECT id, password_hash FROM users WHERE username = ?', ((username or '').strip(),)).fetchone()
+        row = conn.execute('SELECT id FROM users WHERE username = ?', (ENV_ADMIN_USERNAME,)).fetchone()
+        if row:
+            return row['id']
+        with conn:
+            cur = conn.execute('INSERT INTO users (username, password_hash, created_at, role) VALUES (?, ?, ?, ?)', (ENV_ADMIN_USERNAME, '!env', int(time.time()), 'admin'))
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+def authenticate(username: str, password: str) -> int | None:
+    username = (username or '').strip()
+    if username == ENV_ADMIN_USERNAME:
+        return _authenticate_env_admin(password or '')
+    conn = _connect()
+    try:
+        row = conn.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,)).fetchone()
     finally:
         conn.close()
     if row is None:
@@ -411,12 +436,37 @@ def get_misconceptions(curriculum: str) -> list[dict]:
         conn.close()
     return [dict(r) for r in rows]
 
+def guest_for_name(name: str) -> dict | None:
+    """The existing guest account for this name, if there is one."""
+    name = ' '.join((name or '').split())[:30]
+    if not name:
+        return None
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT id, username FROM users WHERE username = ? AND password_hash = '!guest'", (name,)).fetchone()
+    finally:
+        conn.close()
+    return {'id': row['id'], 'username': row['username']} if row else None
+
 def create_guest(name: str) -> tuple[int, str]:
     name = ' '.join((name or '').split())[:30]
     if not name:
         raise UserError('Type your name to start.')
+    existing = guest_for_name(name)
+    if existing:
+        # One test-taker, one account: typing the same name again resumes it, so
+        # everything they say stays together instead of splitting across a new
+        # '#a3f9' account each login. Only guest rows are ever matched, so this
+        # can never hand someone a password or Google account that shares a name.
+        return existing['id'], existing['username']
     conn = _connect()
     try:
+        try:
+            with conn:
+                cur = conn.execute('INSERT INTO users (username, password_hash, created_at, role) VALUES (?, ?, ?, ?)', (name, '!guest', int(time.time()), 'student'))
+            return cur.lastrowid, name
+        except sqlite3.IntegrityError:
+            pass    # a real account already owns this name — suffix instead of touching it
         for _ in range(5):
             username = f'{name} #{secrets.token_hex(2)}'
             try:

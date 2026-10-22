@@ -36,6 +36,11 @@ if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
     exit 1
 fi
 
+# Print the real resolved IP, not the 0.0.0.0 bind address — a browser can't
+# connect to 0.0.0.0 (ERR_ADDRESS_INVALID). start-lab.bat hit this twice: once
+# by only logging the waitress bind address, and once because its placeholder
+# used literal <> characters, which cmd.exe parses as redirection and silently
+# ate the whole line ("The system cannot find the file specified").
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "──────────────────────────────────────────────────────────"
 echo " EdKernel LAB server — gunicorn ${WORKERS}w × ${THREADS}t"

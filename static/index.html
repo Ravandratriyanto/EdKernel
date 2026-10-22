@@ -5,18 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EdKernel</title>
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+  <!-- Served from this machine, not a CDN: 20 lab PCs on school Wi-Fi were
+       waiting on jsdelivr for ~1.1MB (MathLive alone is 824KB), and a blocked
+       or slow CDN would take the whole lesson down. Mermaid stays remote but
+       is now loaded on demand (see loadMermaid), so it costs nothing up front. -->
+  <link rel="stylesheet" href="/static/vendor/katex/katex.min.css" />
+  <script defer src="/static/vendor/katex/katex.min.js"></script>
+  <script defer src="/static/vendor/katex/contrib/mhchem.min.js"></script>
+  <script defer src="/static/vendor/katex/contrib/auto-render.min.js"
     onload="renderMathInPage()"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathlive"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
-  <script type="module">
-    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({ startOnLoad: false, theme: 'neutral', suppressErrorRendering: true });
-    window.__mermaid = mermaid;
-  </script>
+  <script defer src="/static/vendor/mathlive.js"></script>
+  <script src="/static/vendor/marked.min.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -637,6 +636,23 @@
     /* icon-button captions */
     .icon-btn:has(.cap) { flex-direction: column; gap: 2px; width: auto; min-width: 46px; height: auto; padding: 4px 8px; }
     .cap { font-size: 0.58rem; color: #6b7280; line-height: 1; white-space: nowrap; }
+
+    /* tools dropdown (Graph/Symbols/Calc/Elements/Notes bundled behind one button) */
+    .tools-dropdown { position: relative; flex-shrink: 0; }
+    .tools-menu {
+      position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 20;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12); padding: 6px; min-width: 160px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .tools-menu.hidden { display: none; }
+    .tools-menu button {
+      display: flex; align-items: center; gap: 10px; background: none; border: none;
+      text-align: left; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      font-size: 0.85rem; font-family: inherit; color: #1a1a2e;
+    }
+    .tools-menu button:hover { background: #eef2ff; color: #4f46e5; }
+    .tools-menu .ico { width: 18px; height: 18px; flex-shrink: 0; }
     .qb-rule {
       border-top: 2px dashed #d1d5db;
       margin: 0 28px;
@@ -1399,7 +1415,7 @@
     <button id="btn-bedrock" onclick="setProvider('bedrock')">Bedrock</button>
   </div>
   <label>Model</label>
-  <input id="input-model" value="gemma4" oninput="savePrefs()" />
+  <input id="input-model" value="openai/gpt-oss-120b" oninput="savePrefs()" />
   <span id="host-group">
     <label id="host-label">Host</label>
     <input id="input-host" value="http://localhost:11434" oninput="savePrefs()" />
@@ -1482,11 +1498,16 @@
     <div id="answer-detect-banner" class="detect-banner hidden"></div>
     <div class="input-row">
       <button class="icon-btn" title="Attach file (or paste an image)" onclick="openFilePicker('answer')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><span class="cap">Attach</span></button>
-      <button class="icon-btn" title="Generate graph" onclick="requestGraph()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="cap">Graph</span></button>
-      <button class="icon-btn" title="Insert math" onclick="toggleMathInput('input-answer')" style="font-weight:700;font-size:1.1rem">Σ<span class="cap">Symbols</span></button>
-      <button class="icon-btn" title="Calculator" onclick="toggleCalc()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="8" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="16" y1="14" x2="16" y2="18"/></svg><span class="cap">Calc</span></button>
-      <button class="icon-btn" title="Periodic table" onclick="togglePeriodicTable()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="cap">Elements</span></button>
-      <button class="icon-btn" title="Make notes from a PDF or YouTube video" onclick="toggleNotes()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 2v6h6"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="8" y1="16" x2="10" y2="16"/></svg><span class="cap">Notes</span></button>
+      <div class="tools-dropdown">
+        <button class="icon-btn" title="More tools" onclick="toggleToolsMenu(event)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="cap">Tools</span></button>
+        <div id="tools-menu" class="tools-menu hidden">
+          <button onclick="closeToolsMenu(); requestGraph()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Graph</button>
+          <button onclick="closeToolsMenu(); toggleMathInput('input-answer')"><span class="ico" style="font-weight:700;text-align:center">&Sigma;</span>Symbols</button>
+          <button onclick="closeToolsMenu(); toggleCalc()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="8" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="16" y1="14" x2="16" y2="18"/></svg>Calc</button>
+          <button onclick="closeToolsMenu(); togglePeriodicTable()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Elements</button>
+          <button onclick="closeToolsMenu(); toggleNotes()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 2v6h6"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="8" y1="16" x2="10" y2="16"/></svg>Notes</button>
+        </div>
+      </div>
       <textarea id="input-answer" rows="1" placeholder="Type your answer or describe a graph..." onkeydown="answerKeydown(event)"></textarea>
       <button class="send-btn" id="btn-send" onclick="sendAnswer()">Send</button>
     </div>
@@ -1564,7 +1585,7 @@
       <div class="qb-score" id="quiz-score"></div>
       <div id="quiz-review"></div>
       <div class="qb-results-actions">
-        <button class="qb-ai-btn" id="quiz-ai-btn" onclick="analyzeQuiz()">Get AI feedback</button>
+        <button class="qb-ai-btn" id="quiz-ai-btn" onclick="analyzeQuiz()">Get some Feedback</button>
       </div>
       <div id="quiz-ai-feedback"></div>
     </div>
@@ -1604,7 +1625,9 @@
   let busy = false;
   let attachment = null;
   let filePicker_target = '';
-  let provider = 'ollama';
+  // Groq by default: the lab runs ~20 students off one laptop, and the local
+  // Ollama can't serve that (a single gemma4 call measured 90s+ here).
+  let provider = 'groq';
   let wrongStreak = 0;
   let paperTimer = null;
   let sessionId = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now());
@@ -1640,7 +1663,10 @@
     if (prefs.host)       document.getElementById('input-host').value       = prefs.host;
     if (prefs.api_key)    document.getElementById('input-api-key').value    = prefs.api_key;
     if (prefs.tavily_key) document.getElementById('input-tavily-key').value = prefs.tavily_key;
-    if (prefs.provider && prefs.provider !== 'ollama') setProvider(prefs.provider);
+    // Always sync the UI to the effective provider — this used to skip 'ollama'
+    // back when that was the default, which left the buttons and the key/host
+    // fields showing the wrong provider.
+    setProvider(prefs.provider || provider);
   }
 
   loadPrefs();
@@ -1701,7 +1727,7 @@
     document.getElementById('btn-papers').disabled = false;
   }
 
-  function model()      { return document.getElementById('input-model').value.trim() || 'gemma4'; }
+  function model()      { return document.getElementById('input-model').value.trim() || 'openai/gpt-oss-120b'; }
   function host()       { return document.getElementById('input-host').value.trim()  || 'http://localhost:11434'; }
   function apiKey()     { return document.getElementById('input-api-key').value.trim(); }
   function tavilyKey()  { return document.getElementById('input-tavily-key').value.trim(); }
@@ -2252,6 +2278,15 @@
   }
 
   function toggleCalc() { document.getElementById('calc-panel').classList.toggle('hidden'); }
+  function toggleToolsMenu(e) {
+    e.stopPropagation();
+    document.getElementById('tools-menu').classList.toggle('hidden');
+  }
+  function closeToolsMenu() { document.getElementById('tools-menu').classList.add('hidden'); }
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('tools-menu');
+    if (menu && !menu.classList.contains('hidden') && !e.target.closest('.tools-dropdown')) closeToolsMenu();
+  });
   function calcKey(k) { const d = document.getElementById('calc-display'); if (d.value === 'Error') d.value = ''; d.value += k; }
   function calcClear() { document.getElementById('calc-display').value = ''; }
   function calcBack() { const d = document.getElementById('calc-display'); d.value = d.value.slice(0, -1); }
@@ -2484,10 +2519,27 @@
   function renderMathInPage() { /* KaTeX onload hook — nothing needed at page load */ }
 
   /* ---- mermaid ---- */
+  // Fetched the first time a reply actually contains a diagram, so the ~500KB
+  // of mermaid chunks never land on the critical path of a normal lesson.
+  let _mermaidPromise = null;
+  function loadMermaid() {
+    if (!_mermaidPromise) {
+      _mermaidPromise = import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then(mod => {
+          const mermaid = mod.default;
+          mermaid.initialize({ startOnLoad: false, theme: 'neutral', suppressErrorRendering: true });
+          return mermaid;
+        })
+        .catch(() => null);
+    }
+    return _mermaidPromise;
+  }
+
   async function renderMermaidIn(bubble) {
-    const mermaid = window.__mermaid;
-    if (!mermaid) return;
     const blocks = bubble.querySelectorAll('pre code.language-mermaid');
+    if (!blocks.length) return;
+    const mermaid = await loadMermaid();
+    if (!mermaid) return;
     for (const block of blocks) {
       const code = block.textContent;
       const pre  = block.parentElement;
@@ -3591,12 +3643,8 @@
           'No questions available for this class yet.';
         return;
       }
-      // A hand-written bank quiz is a test (e.g. the lab pre/post quiz): no tutor
-      // help while it runs, or the score measures the tutor, not the student.
-      // Generated practice quizzes keep the side tutor.
-      const isTest = data.source === 'bank';
-      document.querySelector('.qb-top-right').classList.toggle('hidden', isTest);
-      if (isTest && document.getElementById('body-row').classList.contains('with-tutor')) toggleQuizTutor();
+      // The lab is testing how much the tutor can help, not raw unaided score,
+      // so "Ask tutor" stays available during every quiz, bank or generated.
       quizIndex = 0;
       startQuizTimer();
       showQuizQuestion();
@@ -3779,7 +3827,7 @@
     // Built from the server's marking, not from anything this page decided.
     if (!quizReview.length) {
       out.textContent = 'Finish the quiz first — there is nothing marked to review yet.';
-      btn.textContent = 'Get AI feedback';
+      btn.textContent = 'Get some Feedback';
       btn.disabled = false;
       return;
     }
@@ -3806,7 +3854,7 @@
     } catch (e) {
       out.textContent = 'AI feedback unavailable right now. Your worked solutions are above.';
     }
-    btn.textContent = 'Get AI feedback';
+    btn.textContent = 'Get some Feedback';
     btn.disabled = false;
   }
 

@@ -109,7 +109,7 @@ def _check_llm_rate() -> object:
 
 def _login_keys(username: str) -> tuple:
     return (f'ip:{request.remote_addr}', f"user:{(username or '').strip().lower()}")
-_OPEN_ENDPOINTS = {'index', 'static', 'api_register', 'api_login', 'api_logout', 'api_me', 'admin_panel', 'teacher_panel', 'api_auth_config', 'auth_google', 'auth_google_callback', 'api_guest'}
+_OPEN_ENDPOINTS = {'index', 'static', 'api_register', 'api_login', 'api_logout', 'api_me', 'admin_panel', 'admin_panel_v2', 'chats_panel', 'teacher_panel', 'api_auth_config', 'auth_google', 'auth_google_callback', 'api_guest'}
 _DEV_USER = {'id': 1, 'username': 'dev', 'role': 'admin'}
 
 @app.before_request
@@ -155,10 +155,12 @@ def api_register():
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    if not _settings.load()['password_login']:
-        return (jsonify({'error': 'Password login is turned off. Sign in with Google.'}), 403)
     data = request.json or {}
     username = (data.get('username') or '').strip()
+    # The env admin is a separate door: it stays open when student password
+    # login is switched off for a lab, so the panels stay reachable.
+    if not _settings.load()['password_login'] and username != users.ENV_ADMIN_USERNAME:
+        return (jsonify({'error': 'Password login is turned off. Sign in with Google.'}), 403)
     keys = _login_keys(username)
     wait = _login_limiter.retry_after(*keys)
     if wait:
@@ -193,13 +195,17 @@ def api_auth_config():
 def api_guest():
     if not _settings.load()['guest_login']:
         return (jsonify({'error': 'Guest access is turned off.'}), 403)
-    wait = _guest_limiter.check_and_record(f'guest-ip:{request.remote_addr}')
-    if wait:
-        resp = jsonify({'error': 'Too many guest accounts from this device. Try again later.'})
-        resp.headers['Retry-After'] = str(wait)
-        return (resp, 429)
+    name = (request.json or {}).get('name', '')
+    # Only brand-new accounts count against the cap. Resuming a name is what a
+    # test-taker does when they log back in, and it must never lock them out.
+    if not users.guest_for_name(name):
+        wait = _guest_limiter.check_and_record(f'guest-ip:{request.remote_addr}')
+        if wait:
+            resp = jsonify({'error': 'Too many guest accounts from this device. Try again later.'})
+            resp.headers['Retry-After'] = str(wait)
+            return (resp, 429)
     try:
-        uid, username = users.create_guest((request.json or {}).get('name', ''))
+        uid, username = users.create_guest(name)
     except users.UserError as e:
         return (jsonify({'error': str(e)}), 400)
     return _auth_response({'id': uid, 'username': username}, users.create_session(uid))
@@ -1593,8 +1599,15 @@ def _admin_only():
 def admin_panel():
     return send_from_directory('static', 'admin.html')
 
-@app.route('/admin2')
-def admin_panel_v2():
+@app.route('/admin2/<key>')
+def admin_panel_v2(key):
+    # No login check here on purpose — the key is the gate (same idea as
+    # /dev/<key>), and the page itself has a login form. _OPEN_ENDPOINTS lets
+    # this load before the global before_request hook can demand a session.
+    import hmac
+    expected = os.environ.get('ADMIN_PANEL_KEY', '')
+    if not (expected and hmac.compare_digest(key, expected)):
+        return 'Not Found', 404
     return send_from_directory('static', 'admin2.html')
 
 @app.route('/api/admin/curricula')
@@ -1758,14 +1771,27 @@ def api_admin_revoke_key(key_id: int):
     return jsonify({'ok': True})
 
 def _dev_ok() -> bool:
-    """True only if the request carries the DEV_PANEL_KEY. The panel is served at
-    /dev/<key>; its API calls resend the key as an X-Dev-Key header. Constant-time,
-    denies outright if the key is unset. Hides the whole /api/dev surface behind an
-    unguessable path, independent of the auth_required flag."""
+    """Gate for the /api/dev surface. Passes either way:
+    - a signed-in admin (the plain /chats door), or
+    - a request carrying DEV_PANEL_KEY (the unguessable /dev/<key> door, which
+      works even when auth_required is off).
+    Every /api/dev route calls _admin_only() as well, so the key is extra
+    obscurity on top of the role check, never a replacement for it."""
     import hmac
+    if (g.get('user') or {}).get('role') == 'admin':
+        return True
     expected = os.environ.get('DEV_PANEL_KEY', '')
     provided = request.headers.get('X-Dev-Key') or request.args.get('k', '')
     return bool(expected) and hmac.compare_digest(provided, expected)
+
+
+@app.route('/chats')
+def chats_panel():
+    """Plain door to the same panel: no key in the URL, just its own login form.
+    It is a separate login page from the students' one, which is the only thing
+    it needs to be — the page is harmless until someone signs in, because every
+    /api/dev route still requires an admin role."""
+    return send_from_directory('static', 'dev.html')
 
 
 @app.route('/dev/<key>')
@@ -1829,8 +1855,6 @@ def api_dev_stats():
     if err:
         return err
     return jsonify(stats())
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5000, use_reloader=False)
 
 @app.route('/api/dev/study')
 def api_dev_study():
@@ -1840,4 +1864,8 @@ def api_dev_study():
     if err:
         return err
     return jsonify({'study': users.study_deltas()})
+
+# Must stay last: app.run() blocks, so any route defined below it never registers.
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', debug=True, port=5000, use_reloader=False)
     
