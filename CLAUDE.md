@@ -47,6 +47,7 @@ users.py     – SQLite auth (scrypt passwords, Google sub, guests) + sessions +
 gamify.py    – XP / streaks / missions / quests rules (app-layer, not core/)
 drive_sync.py – optional Google Drive → curricula/<id>/reference/ adapter
 pdftext.py   – PDF text extraction helper
+lab_setup.py – lab pre-flight run by start-lab.sh/.bat (keys, lab flags, ADPASS check)
 quizbank.py  – per-curriculum quiz banks (curricula/<id>/quizzes.json, keys server-side)
 curricula.py – manifest loader   settings.py – feature flags (settings.json)
 sessionlog.py – JSONL lesson log  ratelimit.py – login + LLM rate limits
@@ -82,6 +83,7 @@ git config core.hooksPath hooks
   `TAVILY_API_KEY` instead, so it never sees the key in `.env`
 - `DB_DIR` (default `.logs/`), `CHROMA_DIR` (default `data/chroma/`)
 - `DEV_PANEL_KEY` — the secret path segment for `/dev/<key>`
+- `ADPASS` — password for the `4dmin` admin login (no stored hash); `ADMIN_PANEL_KEY` — path segment for `/admin2/<key>`. Neither is in `.env.example` yet
 - `FLASK_SECRET_KEY` — signs the OAuth state cookie; must match across gunicorn workers
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, optional `GOOGLE_ALLOWED_DOMAIN` — Google sign-in
 - `BEHIND_PROXY=1` — only behind the ALB (trusts X-Forwarded-*); `OLLM_HTTPS=1` — only over https
@@ -133,61 +135,54 @@ bucket now, so budget the 200k TPD accordingly. Check
 `qwen3.8` also returns transient **503 "over capacity"** under load, which killed
 3-4 cases per run even with backoff. Retries help; luck helps more.
 
-## Current state (as of 2026-10-21 — REWRITE this section each session, keep it short)
+## Current state (as of 2026-10-22 — REWRITE this section each session, keep it short)
 
-Verified against the code on 2026-10-21. History lives in the devlog, not here.
+Verified against the code on 2026-10-22. History lives in the devlog, not here.
 
 **Deploy:** AWS ECS Fargate + ALB `edkernel-alb-1135643304.ap-southeast-1.elb.amazonaws.com`.
-Last recorded redeploy: session 31. Everything since (notes, video fallback, Google
-sign-in, input tools, dev panel) is **not deployed**.
+Last recorded redeploy: session 31. Everything since is **not deployed**.
 
-**Auth:** local `settings.json` has `auth_required: false` → every visitor is user #1
-(real admin). `settings.json` is git- and docker-ignored, so the AWS image runs with
-auth ON. Google sign-in (Authlib, OAuth2/OIDC) is built and tested on our side; needs
-`GOOGLE_CLIENT_*` in `.env` and an **https** or `localhost` redirect URI — the lab's
-`http://192.168.x.x` and the plain-http ALB won't work with Google. `password_login`
-flag can switch our own password login off. **Guest mode** is built (`POST /api/guest`,
-`guest_login` flag, off by default) — name-only student accounts for the lab.
+**Lab setup:** `start-lab.sh` / `start-lab.bat` run `lab_setup.py`, which writes
+`auth_required: true`, `guest_login: true`, `stub_testing: false` into `settings.json`
+(so after a lab run, local login stays ON). Students: guest sign-in at
+`http://<LAN IP>:5000`. Admin: log in as `4dmin` (password = `ADPASS` env, **still
+empty in `.env`**) at `localhost`, then `/chats` — a dev panel that shows many chats
+side by side, live. **`static/dev.html` is gitignored** — a fresh clone has no
+`/chats` page. Only one class is live: `cambridge-as-p1`, named **Math**; the GCSE
+classes are in `curricula_archive/`. Lab quiz = 10 MCQs (user's 8 straight-line + 2
+circle); the tutor/Questions tab still use the old 5 circle questions. Tutor avatar is
+the user's character — smiles when the student is right.
 
-**Lab quiz:** class `cambridge-as-p1` — 10 auto-marked MCQs in `quizzes.json` (from the
-user's 5 coordinate-geometry questions), worked answers in `markscheme.json` (no route
-serves it). Bank quizzes serve the whole bank (≤20) and **hide "Ask tutor"** (tests);
-generated quizzes keep it (practice). Pre/post shows in the dev panel. Lab plan (one
-session vs two) undecided; "rushed attempt" flag proposed, not built.
+**Auth:** Google sign-in built, never round-tripped (no client ID; needs https or
+localhost). Guest mode: same name **resumes** the same account — two students with
+one name share it. With auth off, `/chats` + `/api/dev` are open to the network.
+`4dmin` can be registered as a student first. API keys minted while auth was off are
+still valid.
 
-**Video notes:** no-captions fallback works end to end (14-min Khan video → notes in
-~2 min). Needs a current yt-dlp (`pip install --user --break-system-packages -U yt-dlp`);
-the pacman copy goes stale and 403s.
-
-**Open — security:** `[ANSWER: X]` still reaches the browser from `/api/papers` and
-`/api/practice_from_error`; no CSRF anywhere; curricula have no owner (any teacher
-edits any curriculum); API keys minted while auth was off stay valid.
+**Open — security:** `[ANSWER: X]` reaches the browser from `/api/papers` and
+`/api/practice_from_error`; no CSRF; curricula have no owner.
 
 **Open — correctness:** `build_tutor_prompt()` in `core/prompts.py` replaces a sentence
 the prompt no longer contains, so **every class gets the generic "SAT and A-level"
-tutor** (fix given to user, not applied); generated MCQs put every answer on A and can drift off-topic
-silently (`_verify_questions` checks the key, not the topic); notes model makes
-arithmetic slips; admin auto-research Tavily env-name bug (see Env vars).
+tutor** (fix given to user, not applied); admin auto-research reads `TAVILY_API_KEY`
+(see Env vars); generated MCQs put every answer on A; notes model makes arithmetic
+slips; `sessionlog.LOG_DIR` ignores `DB_DIR` (tests write to the real log).
 
-**Open — features:** quiz bank has no editing UI (hand-edited JSON only); ingest
-doesn't run on container start; Tavily knowledge-cutoff guardrail; Manim renderer;
-quiz photo grading; `bench/graviton_standalone.py` has its own stale `segment()` —
-re-sync before quoting COOL numbers; measure a smaller upscale than 96px.
+**Open — features:** quiz bank has no editing UI; ingest doesn't run on container
+start; Manim renderer; quiz photo grading; `bench/graviton_standalone.py` has a stale
+`segment()` — re-sync before quoting COOL numbers.
 
-**Unverified:** nothing from 2026-10-21 clicked through in a real browser (login screen
-Google/guest buttons, hidden quiz tutor, quiz maths rendering, fullscreen anti-cheat);
-Google sign-in has never done a real round trip (no client ID yet); Bedrock code is
-in `core/llm/client.py` but the AWS account hold (case 178878401900360) status is
-unknown; the notation-pedantry fix in `CHECK_PROMPT` is in place but not re-measured.
+**Unverified:** `start-lab.bat` on Windows; a full `start-lab.sh` launch; the happy
+face after a live Groq `[CORRECT]`; quiz maths + guest button in a real browser;
+Bedrock (AWS hold case 178878401900360); the `CHECK_PROMPT` notation fix.
 
 **Top scored work (still not started):** 5-min demo video (required deliverable);
 lab / user interviews (Impact 20% has zero validation); confirm the real submission
-deadline (unreconciled since session 33); lab prep: set `auth_required: true` +
-`guest_login: true` locally, review API keys minted while auth was off.
+deadline (unreconciled since session 33).
 
 **Already done — don't re-propose:** HoughLinesP → contour deskew; `dev.html` exists;
-emoji → SVG swap (no emoji left in `index.html`); `_fetch_pdf` redirect hole closed;
-`/api/reply` errors show in the chat.
+emoji → SVG swap; `_fetch_pdf` redirect hole closed; `/api/reply` errors show in the
+chat; multi-chat dev panel; lab launchers set the flags.
 
 ## Measured numbers (re-run before quoting — stale numbers were corrected 3 times)
 

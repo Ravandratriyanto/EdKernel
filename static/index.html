@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EdKernel</title>
+  <link rel="preload" as="image" href="/static/img/tutor-happy.webp">
 
   <!-- Served from this machine, not a CDN: 20 lab PCs on school Wi-Fi were
        waiting on jsdelivr for ~1.1MB (MathLive alone is 824KB), and a blocked
@@ -127,7 +128,11 @@
       flex-shrink: 0;
     }
 
-    .avatar.tutor-av   { background: #4f46e5; color: white; }
+    /* Tutor avatar: her normal face; .happy swaps in the smile when the student is right.
+       font-size: 0 hides the old 'T' letter that some callers still set. */
+    .avatar.tutor-av   { width: 64px; height: 64px; font-size: 0; border-radius: 0;
+                         background: url('/static/img/tutor-normal.webp') center / contain no-repeat; }
+    .avatar.tutor-av.happy { background-image: url('/static/img/tutor-happy.webp'); }
     .avatar.student-av { background: #10b981; color: white; }
 
     .bubble {
@@ -1915,7 +1920,7 @@
     }
   }
 
-  function appendBubble(role, text, attach, onOptionSelect, verdict) {
+  function appendBubble(role, text, attach, onOptionSelect, verdict, happy) {
     const area = document.getElementById('chat-area');
     const row  = document.createElement('div');
     row.className = `bubble-row ${role === 'tutor' ? 'tutor' : 'student'}`;
@@ -1923,6 +1928,7 @@
     const av = document.createElement('div');
     av.className = `avatar ${role === 'tutor' ? 'tutor-av' : 'student-av'}`;
     av.textContent = role === 'tutor' ? 'T' : 'S';
+    if (role === 'tutor' && happy) av.classList.add('happy');
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
@@ -2079,7 +2085,7 @@
       data.turns.forEach(t => {
   if (t.event !== 'start') appendBubble('student', t.input);
   appendBubble('tutor', t.output, null, null,
-      t.event === 'check' ? t.correct : undefined);
+      t.event === 'check' ? t.correct : undefined, t.correct === true);
   });
 
       document.getElementById('topic-row').classList.add('hidden');
@@ -2226,7 +2232,7 @@
       messages = data.messages;
       if (data.correct === true)  wrongStreak = 0;
       if (data.correct === false) wrongStreak += 1;
-      appendBubble('tutor', data.response);
+      appendBubble('tutor', data.response, null, null, undefined, data.correct === true);
       if (attach && attach.type === 'image') runStepChecker(attach);
       loadSessions();          // turn count and timestamp just changed
       if (data.papers && data.papers.length) showPapers(data.papers, null, 0);
@@ -2802,7 +2808,7 @@
       wrongStreak = 0;
       paperIndex++;
       const msg = paperIndex < paperQuestions.length ? 'Correct! Here is the next one.' : 'Correct!';
-      appendBubble('tutor', msg);
+      appendBubble('tutor', msg, null, null, undefined, true);
       // paperIndex was just incremented, so it is the 1-based id of the
       // question that was answered. The server re-checks the letter against its
       // own key before anything reaches the progress table.

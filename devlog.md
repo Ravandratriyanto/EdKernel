@@ -5425,3 +5425,148 @@ emoji→SVG "in progress" (done), env var names (`API_KEY`, not `GROQ_API_KEY`).
   `/api/papers` and `/api/practice_from_error`; no CSRF; **demo video not
   started; submission deadline still not confirmed.**
 - **Nothing committed** this session.
+
+## Session 38 — 2026-10-22
+
+Lab-readiness day. Started by checking the devlog against git and found the
+user's own commit `4981199` ("Please be ready") written up nowhere — it is
+recorded below, then a review of it. The rest was lab prep the user asked for
+while testing as a student: several chats at once in the dev panel, the lab quiz,
+one class only, a face for the tutor, and launchers that set the lab up.
+
+### The user's commit `4981199` (not previously logged)
+- **`4dmin` login** (`users.py`): username `4dmin` never touches a stored hash —
+  `_authenticate_env_admin()` compares against the `ADPASS` env var in constant
+  time and makes the admin row (`password_hash = '!env'`) on first login. It
+  stays open when `password_login` is off, so the panels stay reachable in a lab.
+- **`/admin2/<ADMIN_PANEL_KEY>`** — the half-built React admin is now key-gated
+  (404 without the key), same idea as `/dev/<key>`.
+- **`/chats`** — a second, key-less door to `dev.html`. `_dev_ok()` now also
+  passes any signed-in admin; every `/api/dev` route still calls `_admin_only()`.
+- **Guests resume by name**: `guest_for_name()` — typing the same name again
+  returns the same guest account; only brand-new names count against the
+  per-device limiter. A name owned by a real account gets a `#a3f9` suffix.
+- **A real bug fixed:** `if __name__ == '__main__': app.run()` sat *above*
+  `/api/dev/study`, and `app.run()` blocks — so under `python app.py` the pre/post
+  study route never registered. Moved to the end of `app.py` with a comment.
+- Start scripts: `start-lab.bat` prints the real LAN IP (PowerShell);
+  `start.bat` waits for Ollama/Flask ports instead of fixed sleeps; `waitress`
+  added to `requirements.txt`. KaTeX, mathlive, marked and mermaid vendored into
+  `static/vendor/` so the lab works without a CDN.
+
+### Review of that commit (checked with the Flask test client, temp DB)
+1. **With auth off, the dev panel is open to the whole network.** `/chats` and
+   `/api/dev/study` returned 200 with no key — auth off makes everyone admin, and
+   `_dev_ok()` now waves admins through. Before, the key gated it even with auth
+   off. Harmless once `auth_required` is on (which the lab launchers now force).
+2. **Same name = same account.** "Budi Santoso" on a second device, and
+   "budi  santoso", both opened account #1. Two students with one name will mix
+   their pre/post data, and anyone can open a classmate's account by typing it.
+3. **`4dmin` can be registered as a student** (`/api/register` → 200). If that
+   happens before the first ADPASS login, the admin login lands in that student
+   row. Fix: reserve the name, or check `password_hash = '!env'`.
+4. `/chats`' docstring says it has "its own login form"; `dev.html` has none —
+   the admin must log in on the main page first, in the same browser.
+5. `ADPASS` and `ADMIN_PANEL_KEY` are empty in `.env` and missing from
+   `.env.example`. None of 1–5 were changed this session; reported to the user.
+
+### Dev panel — several chats at once
+The session drill-in was one box at the bottom of the page; opening a chat
+replaced the last one. Now (`static/dev.html`): clicking a session row opens it
+**beside** the others in a grid (click again to close; open rows highlighted),
+**open all** / **close all**, each pane scrolls on its own and starts at the
+newest turn, and **live** (default on) refreshes the list, stats and every open
+pane every 10 s — without yanking the view if you've scrolled up. Page widened
+980 → 1400 px. Verified in headless Chrome over CDP: 6 seeded students → open
+all → 6 panes with the right names; a turn appended to billy's log appeared in
+his open pane within 10 s, still pinned to the bottom.
+
+### Testing as a student
+Ran `stubtesting/seed_conversation.py` and a lab-mode test server against a
+throwaway DB + session log in the scratchpad (the seed and `sessionlog` write to
+the real `.logs/` otherwise — `sessionlog.LOG_DIR` is hardcoded, it ignores
+`DB_DIR`). Lab mode = auth on + guests on + `4dmin` with a throwaway ADPASS.
+Bound to `127.0.0.1` first, which is why the user's phone "can't be reached";
+rebound to `0.0.0.0` and it answered on the LAN IP.
+
+### Lab quiz — the user's 8 questions
+The user supplied 8 straight-line MCQs (midpoint, length, gradient, parallel,
+perpendicular, perpendicular bisector, triangle area, intercepts). They replace
+8 of the 10; kept two circle questions (p1-q1a centre/radius, p1-q2a "show
+angle ABC = 90°"). Every key checked numerically — all 8 correct. **Q8 had two
+equal options** (C √84 and D 2√21, both ≈ 9.17); D is now √29 (√116 mis-simplified).
+`$…$` converted to `\(…\)` to match the bank. Test server, guest: 10 questions
+served, no key or working in the payload, all-correct submit → 10/10.
+
+### One class only: "Math"
+`cambridge-as-p1` renamed to **Math** in its manifest (id unchanged, so attempts
+and progress line up). `gcse-maths` and `gcse-maths-test` moved with `git mv` to
+`curricula_archive/` — not deleted; all 176 reference files went with them. The
+real DB still has 15 progress + 18 quiz-attempt rows for `gcse-maths`; kept,
+just not shown.
+
+### Tutor avatar — her face
+The purple "T" circle is now the user's character (`static/img/tutor-normal.webp`,
+`tutor-happy.webp`, cropped from the user's background-removed images, head only,
+160–192 px, ~9 KB each), shown at 64 px. **Smiling face when the student is
+right**: `appendBubble(..., happy)` — set from `data.correct === true` on
+`/api/reply`, a correct Papers MCQ, and `t.correct === true` when an old lesson is
+replayed. Everything else keeps the normal face; the happy image is preloaded.
+CSS hides the leftover "T" (`font-size: 0`) so the thinking dots and step-checker
+bubbles get the face too. Checked in headless Chrome (correct → happy, wrong →
+normal, no JS errors). Took three crops to get right (first too wide, then too
+tight on the hair).
+
+### Lab launchers do the setup
+New `lab_setup.py`, run by both `start-lab.sh` and `start-lab.bat`: prints key
+status, **writes the lab flags into `settings.json`** (auth on, guests on, demo
+class off; nothing else touched) and says whether `ADPASS` is set — set/not set
+only, since that window may be on a projector. Both launchers now check the
+needed packages first, print the student URL plus the admin steps (log in as
+`4dmin` at `localhost`, then `/chats`). `start-lab.sh`: **`hostname` doesn't
+exist on this Arch machine**, so it always printed `<this-machine-ip>`; now falls
+back to `ip -4 route get 1.1.1.1`. `start-lab.bat`: port-in-use check, firewall
+tip, `pause` on errors, CRLF kept. Tested `lab_setup.py` on a copy of
+`settings.json` (idempotent on a second run) and the IP line (192.168.100.30).
+
+### Flowcharts
+Route map (4dmin, guest resume, `/chats`, `/admin2/<key>`, the dev gate), settings
+(`lab_setup.py`, only Math), users (env admin, guest resume), curricula, student
+flow (avatar), architecture (dev panel). **Also fixed a diagram that was already
+broken:** `image_handler.py` held raw `<think>` / `</think>`, which the browser
+parses as tags — one diagram showed "Syntax error in text", and its labels lost
+the tag text. Now uses Mermaid's `#lt;`/`#gt;`. Session 37's "25/25 parse" missed
+it — that check must have parsed source text, not what the browser renders. This
+time: rendered in headless Chrome, 25/25 with no syntax-error SVGs, labels read.
+
+### Known issues / honest gaps
+- **`static/dev.html` is gitignored.** The new side-by-side panel — and the page
+  behind `/chats` and `/dev/<key>` — is not in git. A fresh clone or the lab PC
+  (if it pulls from GitHub) has no `dev.html`, and `/chats` will 404. Copy it over
+  by hand or un-ignore it before the lab.
+- **`ADPASS` is still empty** in `.env` — nobody can log in as `4dmin` yet.
+- Review points 1–4 above are unfixed (auth-off dev panel, same-name guests,
+  `4dmin` registrable, no login form on `/chats`).
+- **The tutor and Questions tab still use the old 5 circle questions**
+  (`questions.json`); only the quiz has the new straight-line set. The class
+  still says level "AS Level".
+- After a lab run, local `settings.json` keeps **login on**; plain
+  `python app.py` then asks for a login until switched off in the dev panel.
+- `start-lab.bat` never run on Windows; `start-lab.sh` never launched end to end
+  (it would flip the real settings and hold port 5000). `waitress` isn't
+  installed here, so `python -m waitress` couldn't be checked — the bat keeps
+  `waitress-serve`.
+- **Not seen in a real lesson:** the happy face after a live Groq `[CORRECT]`,
+  the new quiz maths in a real browser, the guest button clicked by a person.
+- `sessionlog.LOG_DIR` ignores `DB_DIR` — any test that logs a turn writes to the
+  real `.logs/sessions.jsonl` unless patched.
+- The user's source images (`*-removebg-preview.webp`) sit untracked in the
+  project root.
+- Still open: tutor-flavour bug (`core/prompts.py:10`), Tavily env name
+  (`app.py:1344`), answer keys from `/api/papers` + `/api/practice_from_error`,
+  no CSRF. **Demo video not started; user interviews not started; submission
+  deadline still not confirmed.**
+- Pattern: another day of lab polish (panel, avatar) while the scored deliverables
+  sit idle. The lab itself *is* Impact evidence, so this time it's closer to the
+  point — but the demo video is still at zero.
+- **Nothing committed** this session.

@@ -24,9 +24,17 @@ if [[ -z "${GUNICORN:-}" ]]; then
     exit 1
 fi
 
-# Verify required keys (Groq etc.) before students show up.
+# Packages the server needs. Fail now, not when the first student logs in.
+if ! "$PYTHON" -c "import flask, authlib, dotenv" 2>/dev/null; then
+    echo "Some Python packages are missing. Install them:" >&2
+    echo "    $PYTHON -m pip install -r requirements.txt" >&2
+    exit 1
+fi
+
+# Keys, lab settings (login ON, guests ON, demo class OFF) and the admin
+# password — shared with start-lab.bat so the two can't drift apart.
 echo
-"$PYTHON" keycheck.py
+"$PYTHON" lab_setup.py
 echo
 
 # Bail if something already holds the port.
@@ -41,12 +49,25 @@ fi
 # by only logging the waitress bind address, and once because its placeholder
 # used literal <> characters, which cmd.exe parses as redirection and silently
 # ate the whole line ("The system cannot find the file specified").
-IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+# `hostname` isn't installed on every distro (Arch ships without it), so fall
+# back to asking the kernel which address it would use to reach the internet.
+IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+if [[ -z "$IP" ]]; then
+    IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)
+fi
 echo "──────────────────────────────────────────────────────────"
 echo " EdKernel LAB server — gunicorn ${WORKERS}w × ${THREADS}t"
 echo " Students connect to:  http://${IP:-<this-machine-ip>}:$PORT"
-echo " Tips: wire this machine in by Ethernet; turn auth ON in settings.json;"
-echo "       keep this window open; Ctrl+C to stop."
+echo "   (they pick the guest option and type their name)"
+echo
+echo " Watch the chats (on this machine):"
+echo "   1. open http://localhost:$PORT and log in as 4dmin"
+echo "   2. then open http://localhost:$PORT/chats"
+echo "   Use localhost, not the IP, so a student login in another tab"
+echo "   doesn't replace yours."
+echo
+echo " The IP changes when you switch networks — read it off this box"
+echo " each time. Wire in by Ethernet; keep this window open; Ctrl+C to stop."
 echo "──────────────────────────────────────────────────────────"
 echo
 
