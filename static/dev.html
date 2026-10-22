@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dev Panel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      background: #0d0f14; color: #c9d1d9; min-height: 100vh;
+      padding: 32px 16px; line-height: 1.5;
+    }
+    .wrap { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    .card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px 24px;
+    }
+    h1 { font-size: 16px; letter-spacing: 0.06em; color: #e6edf3; }
+    h2 {
+      font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #8b949e;
+      margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #30363d;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .btn {
+      font: inherit; font-size: 11px; background: #21262d; color: #c9d1d9;
+      border: 1px solid #30363d; border-radius: 6px; padding: 4px 10px; cursor: pointer;
+    }
+    .btn:hover { border-color: #8b949e; }
+
+    /* monitoring stat tiles */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+    .stat { background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 12px 14px; }
+    .stat-num { font-size: 22px; color: #e6edf3; }
+    .stat-lbl { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+    .stat-num.good { color: #3fb950; } .stat-num.bad { color: #f85149; }
+    .events { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .pill { font-size: 11px; background: #0d1117; border: 1px solid #21262d; border-radius: 20px; padding: 3px 10px; color: #8b949e; }
+    .pill b { color: #c9d1d9; }
+
+    /* sessions table */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; color: #8b949e; font-weight: normal; font-size: 10px;
+         text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid #30363d; }
+    td { padding: 7px 8px; border-bottom: 1px solid #21262d; color: #c9d1d9; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #1c2128; }
+    .muted { color: #6e7681; }
+
+    tbody tr.on { background: #1f2a37; }
+    tbody tr.on td:nth-child(2) { color: #79c0ff; }
+
+    /* open chats: several side by side */
+    #chats-card { display: none; }
+    .chats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+    .pane { border: 1px solid #30363d; border-radius: 8px; background: #0d1117; display: flex; flex-direction: column; min-width: 0; }
+    .pane-head { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                 padding: 8px 10px; border-bottom: 1px solid #21262d; font-size: 12px; }
+    .pane-head b { color: #e6edf3; }
+    .pane-body { padding: 10px; height: 460px; overflow-y: auto; scrollbar-color: #30363d transparent; }
+    .pane .turn { padding: 8px 10px; margin-bottom: 8px; background: #161b22; }
+    .head-tools { display: flex; gap: 8px; align-items: center; text-transform: none; letter-spacing: 0; }
+    .live { font-size: 11px; color: #8b949e; display: flex; gap: 4px; align-items: center; cursor: pointer; }
+
+    /* turns detail */
+    .turn { border: 1px solid #21262d; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: #0d1117; }
+    .turn-head { font-size: 11px; color: #8b949e; margin-bottom: 8px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .tag { padding: 1px 7px; border-radius: 4px; border: 1px solid #30363d; }
+    .tag.ok { color: #3fb950; border-color: #238636; }
+    .tag.no { color: #f85149; border-color: #6e2b26; }
+    .msg { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; margin-top: 6px; }
+    .msg-in  { color: #79c0ff; }
+    .msg-out { color: #c9d1d9; }
+    .msg-lbl { color: #6e7681; font-size: 10px; text-transform: uppercase; }
+
+    /* feature flags */
+    .flag { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #21262d; }
+    .flag:last-of-type { border-bottom: none; }
+    .flag-name { font-size: 13px; color: #e6edf3; }
+    .flag-desc { font-size: 11px; color: #8b949e; margin-top: 3px; }
+    .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; margin-left: 20px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .track { position: absolute; inset: 0; background: #30363d; border-radius: 12px; cursor: pointer; transition: background 0.2s; }
+    .switch input:checked + .track { background: #238636; }
+    .track::after { content: ""; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; left: 3px; top: 3px; transition: transform 0.2s; }
+    .switch input:checked + .track::after { transform: translateX(20px); }
+    #status { margin-top: 14px; font-size: 12px; min-height: 16px; text-align: right; }
+    #status.ok { color: #3fb950; } #status.err { color: #f85149; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EdKernel — Dev Panel</h1>
+
+  <!-- Monitoring -->
+  <div class="card">
+    <h2>Monitoring <button class="btn" onclick="loadStats()">refresh</button></h2>
+    <div class="stats" id="stats"><span class="muted">loading…</span></div>
+    <div class="events" id="events"></div>
+  </div>
+
+  <!-- Study: pre/post understanding -->
+  <div class="card">
+    <h2>Study — pre/post understanding <button class="btn" onclick="loadStudy()">refresh</button></h2>
+    <table>
+      <thead><tr><th>student</th><th>topic</th><th>pre</th><th>post</th><th>Δ</th><th>attempts</th></tr></thead>
+      <tbody id="study"><tr><td colspan="6" class="muted">loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Sessions -->
+  <div class="card">
+    <h2>Sessions — all users
+      <span class="head-tools">
+        <button class="btn" onclick="openAll()">open all</button>
+        <button class="btn" onclick="loadSessions()">refresh</button>
+      </span>
+    </h2>
+    <table>
+      <thead><tr><th>updated</th><th>user</th><th>mode</th><th>title</th><th>turns</th></tr></thead>
+      <tbody id="sessions"><tr><td colspan="5" class="muted">loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Open chats, side by side -->
+  <div class="card" id="chats-card">
+    <h2><span>Open chats <span id="chats-count" class="muted"></span></span>
+      <span class="head-tools">
+        <label class="live"><input type="checkbox" id="live" checked> live</label>
+        <button class="btn" onclick="closeAll()">close all</button>
+      </span>
+    </h2>
+    <div class="chats" id="chats"></div>
+  </div>
+
+  <!-- Feature flags -->
+  <div class="card">
+    <h2>Feature flags</h2>
+    <div class="flag">
+      <div><div class="flag-name">Login required</div><div class="flag-desc">Off = everyone treated as admin (no auth check)</div></div>
+      <label class="switch"><input type="checkbox" id="flag-auth" onchange="save()"><span class="track"></span></label>
+    </div>
+    <div class="flag">
+      <div><div class="flag-name">Stub / demo curriculum</div><div class="flag-desc">Show the seeded demo class in the student view</div></div>
+      <label class="switch"><input type="checkbox" id="flag-stub" onchange="save()"><span class="track"></span></label>
+    </div>
+    <div class="flag">
+      <div><div class="flag-name">LLM rate limiting</div><div class="flag-desc">20 requests / minute per user — turn off for testing</div></div>
+      <label class="switch"><input type="checkbox" id="flag-rate" onchange="save()"><span class="track"></span></label>
+    </div>
+    <div id="status"></div>
+  </div>
+</div>
+
+<script>
+  const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // The panel is served at /dev/<key>; resend that key on every /api/dev call.
+  const KEY = location.pathname.split('/').filter(Boolean).pop();
+  const dfetch = (url, opts = {}) =>
+    fetch(url, { ...opts, headers: { ...(opts.headers || {}), 'X-Dev-Key': KEY } });
+
+  // ── Monitoring ──
+  async function loadStats() {
+    const el = document.getElementById('stats');
+    try {
+      const s = await (await dfetch('/api/dev/stats')).json();
+      const tile = (n, l, cls = '') => `<div class="stat"><div class="stat-num ${cls}">${n}</div><div class="stat-lbl">${l}</div></div>`;
+      el.innerHTML =
+        tile(s.turns, 'turns') + tile(s.users, 'users') + tile(s.sessions, 'sessions') +
+        tile(s.correct, 'correct', 'good') + tile(s.wrong, 'wrong', 'bad') +
+        tile(s.avg_latency_ms + 'ms', 'avg latency') + tile(s.total_tokens, 'tokens');
+      document.getElementById('events').innerHTML =
+        Object.entries(s.by_event || {}).sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `<span class="pill">${esc(k)} <b>${v}</b></span>`).join('') +
+        (s.last_ts ? `<span class="pill">last <b>${esc(s.last_ts.replace('T', ' ').replace('+00:00', 'Z'))}</b></span>` : '');
+    } catch (e) { el.innerHTML = '<span class="muted">failed to load stats</span>'; }
+  }
+
+  // ── Sessions ──
+  async function loadSessions() {
+    const tb = document.getElementById('sessions');
+    try {
+      const { sessions } = await (await dfetch('/api/dev/sessions')).json();
+      if (!sessions.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">no sessions logged yet</td></tr>'; return; }
+      meta = Object.fromEntries(sessions.map(s => [s.session_id, s]));
+      tb.innerHTML = sessions.map(s => `
+        <tr data-sid="${esc(s.session_id)}">
+          <td class="muted">${esc((s.updated || '').replace('T', ' ').replace('+00:00', ''))}</td>
+          <td>${s.username ? esc(s.username) : (s.user_id == null ? '<span class="muted">—</span>' : esc(s.user_id))}</td>
+          <td>${esc(s.mode)}</td>
+          <td>${esc(s.title) || '<span class="muted">(untitled)</span>'}</td>
+          <td>${s.turns}</td>
+        </tr>`).join('');
+      syncOpen();
+    } catch (e) { tb.innerHTML = '<tr><td colspan="5" class="muted">failed to load sessions</td></tr>'; }
+  }
+  async function loadStudy() {
+    const tb = document.getElementById('study');
+    try {
+      const { study } = await (await dfetch('/api/dev/study')).json();
+      if (!study.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">no submitted quizzes yet</td></tr>'; return; }
+      const pct = (s, t) => t ? Math.round(100 * s / t) : 0;
+      tb.innerHTML = study.map(r => {
+        const d = pct(r.post_score, r.post_total) - pct(r.pre_score, r.pre_total);
+        const col = d > 0 ? '#3fb950' : d < 0 ? '#f85149' : '#8b949e';
+        return `<tr>
+          <td>${esc(r.username)}</td>
+          <td>${esc(r.topic)}</td>
+          <td>${r.pre_score}/${r.pre_total}</td>
+          <td>${r.post_score}/${r.post_total}</td>
+          <td style="color:${col}">${d > 0 ? '+' : ''}${d}%</td>
+          <td>${r.attempts}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) { tb.innerHTML = '<tr><td colspan="6" class="muted">failed to load</td></tr>'; }
+  }
+  // ── Open chats: several side by side, so a whole lab can be watched at once ──
+  const open = new Map();   // session_id -> its pane element
+  let meta = {};            // session_id -> its row from /api/dev/sessions
+
+  document.getElementById('sessions').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-sid]');
+    if (tr) open.has(tr.dataset.sid) ? closeChat(tr.dataset.sid) : openChat(tr.dataset.sid);
+  });
+
+  function openChat(sid) {
+    const pane = document.createElement('div');
+    pane.className = 'pane';
+    pane.innerHTML = `<div class="pane-head"><span></span><button class="btn">close</button></div>
+      <div class="pane-body"><span class="muted">loading…</span></div>`;
+    pane.querySelector('button').onclick = () => closeChat(sid);
+    document.getElementById('chats').appendChild(pane);
+    open.set(sid, pane);
+    syncOpen();
+    refreshChat(sid);
+  }
+  function closeChat(sid) { open.get(sid)?.remove(); open.delete(sid); syncOpen(); }
+  function openAll() { Object.keys(meta).forEach(sid => open.has(sid) || openChat(sid)); }
+  function closeAll() { [...open.keys()].forEach(closeChat); }
+
+  // Show the card only while something is open, and highlight the open rows.
+  function syncOpen() {
+    document.getElementById('chats-card').style.display = open.size ? 'block' : 'none';
+    document.getElementById('chats-count').textContent = open.size ? `(${open.size})` : '';
+    document.querySelectorAll('#sessions tr[data-sid]').forEach(tr => tr.classList.toggle('on', open.has(tr.dataset.sid)));
+  }
+
+  async function refreshChat(sid) {
+    const pane = open.get(sid);
+    if (!pane) return;
+    const s = meta[sid] || {};
+    pane.querySelector('.pane-head span').innerHTML =
+      `<b>${esc(s.username ?? s.user_id ?? '—')}</b> <span class="muted">${esc(s.title || s.mode || '')}</span>`;
+    const body = pane.querySelector('.pane-body');
+    // Only follow new messages if you were already at the bottom — never yank
+    // the view away while you're reading further up.
+    const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+    try {
+      const { turns } = await (await dfetch('/api/dev/sessions/' + encodeURIComponent(sid))).json();
+      body.innerHTML = turns.map(t => {
+        let verdict = '';
+        if (t.correct === true) verdict = '<span class="tag ok">correct</span>';
+        else if (t.correct === false) verdict = '<span class="tag no">wrong</span>';
+        return `<div class="turn">
+          <div class="turn-head">
+            <span class="tag">${esc(t.event)}</span>${verdict}
+            <span>${esc((t.ts || '').slice(11, 19))}</span>
+          </div>
+          ${t.input ? `<div class="msg-lbl">student</div><div class="msg msg-in">${esc(t.input)}</div>` : ''}
+          ${t.output ? `<div class="msg-lbl" style="margin-top:8px">tutor</div><div class="msg msg-out">${esc(t.output)}</div>` : ''}
+        </div>`;
+      }).join('') || '<span class="muted">no turns</span>';
+      if (atBottom) body.scrollTop = body.scrollHeight;
+    } catch (e) { body.innerHTML = '<span class="muted">failed to load turns</span>'; }
+  }
+
+  // Live: every 10 s, refresh the list, the stats and every open chat.
+  setInterval(() => {
+    if (!document.getElementById('live').checked) return;
+    loadStats(); loadSessions();
+    open.forEach((_, sid) => refreshChat(sid));
+  }, 10000);
+
+  // ── Feature flags ──
+  async function load() {
+    const res = await dfetch('/api/dev/settings');
+    if (!res.ok) { setStatus('Could not load settings', 'err'); return; }
+    const cfg = await res.json();
+    document.getElementById('flag-auth').checked = cfg.auth_required;
+    document.getElementById('flag-stub').checked = cfg.stub_testing;
+    document.getElementById('flag-rate').checked = cfg.rate_limiting;
+  }
+  async function save() {
+    const body = {
+      auth_required: document.getElementById('flag-auth').checked,
+      stub_testing: document.getElementById('flag-stub').checked,
+      rate_limiting: document.getElementById('flag-rate').checked,
+    };
+    const res = await dfetch('/api/dev/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    setStatus(res.ok ? 'Saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
+  }
+  function setStatus(msg, cls) {
+    const el = document.getElementById('status');
+    el.textContent = msg; el.className = cls;
+    if (cls === 'ok') setTimeout(() => { el.textContent = ''; el.className = ''; }, 2000);
+  }
+
+  loadStats(); loadStudy(); loadSessions(); load();
+</script>
+</body>
+</html>

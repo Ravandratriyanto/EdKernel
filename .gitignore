@@ -5,7 +5,6 @@ __pycache__/
 data/chroma/
 .env
 settings.json
-static/dev.html
 .venv/
 .logs/
 training/out/

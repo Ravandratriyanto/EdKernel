@@ -147,8 +147,8 @@ Last recorded redeploy: session 31. Everything since is **not deployed**.
 (so after a lab run, local login stays ON). Students: guest sign-in at
 `http://<LAN IP>:5000`. Admin: log in as `4dmin` (password = `ADPASS` env, **still
 empty in `.env`**) at `localhost`, then `/chats` — a dev panel that shows many chats
-side by side, live. **`static/dev.html` is gitignored** — a fresh clone has no
-`/chats` page. Only one class is live: `cambridge-as-p1`, named **Math**; the GCSE
+side by side, live (`static/dev.html` — un-gitignored 2026-10-22, so clones get it).
+Only one class is live: `cambridge-as-p1`, named **Math**; the GCSE
 classes are in `curricula_archive/`. Lab quiz = 10 MCQs (user's 8 straight-line + 2
 circle); the tutor/Questions tab still use the old 5 circle questions. Tutor avatar is
 the user's character — smiles when the student is right.

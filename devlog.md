@@ -5544,6 +5544,8 @@ time: rendered in headless Chrome, 25/25 with no syntax-error SVGs, labels read.
   behind `/chats` and `/dev/<key>` — is not in git. A fresh clone or the lab PC
   (if it pulls from GitHub) has no `dev.html`, and `/chats` will 404. Copy it over
   by hand or un-ignore it before the lab.
+  *Update, same day:* removed from `.gitignore` at the user's request (checked
+  first: no keys or passwords in the file).
 - **`ADPASS` is still empty** in `.env` — nobody can log in as `4dmin` yet.
 - Review points 1–4 above are unfixed (auth-off dev panel, same-name guests,
   `4dmin` registrable, no login form on `/chats`).

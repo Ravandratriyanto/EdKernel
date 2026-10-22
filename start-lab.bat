@@ -22,8 +22,8 @@ REM   The LAN IP changes when the network changes - read it off this window ever
 REM
 REM THE DEV PANEL
 REM   File: static\dev.html.  Served by app.py at /chats (needs an admin login) and at
-REM   /dev/<DEV_PANEL_KEY> (key from .env). static\dev.html is in .gitignore - if this laptop
-REM   got the code from GitHub, the file is MISSING and /chats 404s. Copy it over by hand.
+REM   /dev/<DEV_PANEL_KEY> (key from .env). It used to be gitignored; it is tracked since
+REM   2026-10-22, so a pull brings it. If /chats 404s, check static\dev.html exists.
 REM
 REM .env ON THIS LAPTOP NEEDS
 REM   API_KEY=...        Groq key - the tutor does nothing without it
