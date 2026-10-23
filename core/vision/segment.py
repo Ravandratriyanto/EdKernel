@@ -28,7 +28,9 @@ def _merge_rows(boxes, overlap=ROW_OVERLAP):
         for x, y, w, h in boxes:
             merged = False
             for i, (X, Y, W, H) in enumerate(out):
-                if min(y + h, Y + H) - max(y, Y) >= bar:
+                cy, CY = (y + h / 2, Y + H / 2)
+                centred = Y <= cy <= Y + H or y <= CY <= y + h
+                if min(y + h, Y + H) - max(y, Y) >= bar and centred:
                     nx, ny = (min(x, X), min(y, Y))
                     out[i] = (nx, ny, max(x + w, X + W) - nx, max(y + h, Y + H) - ny)
                     changed = merged = True

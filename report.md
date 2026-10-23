@@ -58,43 +58,54 @@ On top of that grounding, EdKernel's defensible value is the combination a gener
 
 ### OpenCV 5 pipeline (the hot path)
 
-Every uploaded image passes through six stages before any model call is made:
+Every uploaded image passes through these stages before any model call is made
+(`core/vision/preprocess.py`, `core/vision/segment.py`):
 
 | Stage | OpenCV call | Purpose |
 |---|---|---|
-| 1. Blur rejection | `cv2.Laplacian(gray, cv2.CV_64F).var()` | Drop frames below sharpness threshold before paying inference cost |
-| 2. Rectification | `findContours` → `approxPolyDP` → `getPerspectiveTransform` → `warpPerspective` | Find the page quad, flatten a phone photo taken at an angle |
-| 3. Binarisation | `bilateralFilter` → `adaptiveThreshold` (Gaussian) | Handle uneven desk lighting; isolate ink from background |
-| 4. Deskew | `HoughLinesP` on ink mask → rotation estimate → `warpAffine` | Correct rotated pages |
-| 5. Step segmentation | `morphologyEx` (horizontal close) → `findContours` | One bounding box per working line |
-| 6. Ink mask | `threshold` (Otsu) | Feed HoughLinesP with a clean binary |
+| 1. Page detection | `bilateralFilter` → `Canny` → `morphologyEx` → `findContours` → `approxPolyDP` | Find the paper's four corners in a phone photo |
+| 2. Rectification | `getPerspectiveTransform` → `warpPerspective` | Flatten a page photographed at an angle |
+| 3. Deskew (no page found) | `adaptiveThreshold` + `morphologyEx` ink mask → `findContours` → `minAreaRect` seed → projection-profile search over `warpAffine` rotations | Straighten a rotated page when no clean page edge is visible |
+| 4. Binarisation | `adaptiveThreshold` (Gaussian, 25px block) | Handle uneven desk lighting; isolate ink from background |
+| 5. Step segmentation | `morphologyEx` (horizontal close) + `dilate` → `findContours` → `boundingRect` → row merge → line-shape filters | One bounding box per line of working |
+| 6. Grounding | `rectangle` + `putText` → `imencode` | Draw the red box on the exact wrong line of the student's photo |
 
 The output is a list of bounding boxes. The number of model calls made downstream equals the number of boxes returned. OpenCV does two load-bearing jobs here, neither of which is "reading": it **decides the shape of inference** (box count = tool-call count), and it provides **deterministic spatial grounding** — the coordinates that let the system draw a red box on the exact wrong line of the student's own photo (`step_checker._annotate`). A frontier vision model can say *what* the error is; it cannot reliably say *where* on the page it is. That verifiable "where" is what a teacher can trust and point at, and it is the part frontier models do not provide.
 
 ### Agentic vision loop
 
 ```
-PERCEIVE   OpenCV segments N step boxes from uploaded image
+PERCEIVE   OpenCV segments N line boxes from the uploaded image
     |
     v
-DECIDE     quality check: sharpness score, box count plausible?
-           merged boxes? → widen morphology kernel, re-segment
-           too few boxes? → request another photo
+ACT        transcribe box_1 … box_N  (one vision call per box)
     |
     v
-ACT        transcribe box_1 … box_N  (one tool call per box)
+DECIDE     read unclear?  → re-crop the same box wider (pad 3 → 14 px), re-read
+           still unclear? → skip that step and ask the student for a sharper photo
     |
     v
-PERCEIVE   check each step against the step above it
+DECIDE     line repeats the one above? → skip it, a copied line is not an error
+           (decided without a model call: `_same_line`)
     |
     v
-DECIDE     first step that does not follow = the error line
+ACT        check each step against the step above it (one call per transition)
     |
     v
-ACT        teach from that line; draw bounding box on student's photo
+DECIDE     first step that does not follow = the error line, tagged with a
+           misconception category
+    |
+    v
+ACT        draw the red box on that line of the student's photo; teach from there
 ```
 
-Vision output directly changes what happens next. A low sharpness score triggers re-capture, not transcription. Merged boxes cause the agent to adjust morphology parameters and re-run. The number of downstream tool calls is set by `findContours`. This is the Agentic Vision Award criterion: perception influencing a subsequent plan and tool call.
+Vision output directly changes what happens next: the number of downstream
+tool calls is set by `findContours`, a low-confidence read triggers a wider
+re-crop rather than a guess, and the located box decides where teaching starts.
+Every decision is written to a `trace` returned with the result
+(`core/vision/step_checker.py`, `check_working`), so the loop is inspectable.
+This is the Agentic Vision Award criterion: perception influencing a subsequent
+plan and tool call.
 
 ---
 
@@ -175,8 +186,16 @@ Re-measured on this hardware, the op it removes vs the op it reuses:
 Verified for correctness on the 9 labelled sample photos: the final deskew angle
 (after the projection-profile refinement the seed feeds) matches the old
 Hough-seeded result within **< 0.1° on 6 of 9** and **< 0.75° on 8 of 9**; one
-outlier (v5) differs by 1.38°, still within tolerance for downstream segmentation (box
-counts unchanged). Net: the single heaviest OpenCV call is gone from the hot path
+outlier (v5) differs by 1.38°.
+
+**Correction (found later, fixed).** Box counts were *not* fully unchanged: on v2
+the new angle (1.10° vs 1.50°) let a fragment of the hand-drawn margin line
+bridge two rows, and segmentation fell to 8/9 for a month before it was caught.
+The root cause was the row merge, not the deskew — sweeping v2 through 0–1.5°
+flipped the count with no pattern. The merge now also requires one blob's
+vertical centre to sit inside the other, which restores **9/9** and raises
+robustness under ±1° of extra rotation from 65/72 to 67/72 (the 5 remaining
+failures are all one case, a crossed-out scribble). Net: the single heaviest OpenCV call is gone from the hot path
 with no quality regression, and the replacement leans on `findContours` — an op
 where Graviton *wins*.
 
@@ -201,22 +220,23 @@ Five-stage pipeline: rectify → binarise → segment → transcribe → evaluat
 
 | Metric | Score | What it measures |
 |---|---|---|
-| Step checker (scored cases) | **6/7 (86%)** | Names the exact wrong line (or "no error") |
-| — error located | 1/1 | Found the wrong line on error cases |
+| Segmentation (line count) | **9/9** | Pure OpenCV, no model — one box per written line |
+| Step checker | **8/9 (89%)** | Names the exact wrong line (or "no error") |
+| — error located | 3/3 | Found the wrong line on every error case |
 | — clean pass | 5/6 | No false error on correct work |
-| Transcription | **20/24 lines (83%)** | Faithful read of the handwriting |
-| — clean reads | 4/7 | Whole problem read perfectly |
-| Verdict given a faithful read | **4/4 (100%)** | Step-check logic, isolated from read errors |
+| Transcription | **25/30 lines (83%)** | Faithful read of the handwriting |
+| — clean reads | 5/9 | Whole problem read perfectly |
+| Verdict given a faithful read | **5/5 (100%)** | Step-check logic, isolated from read errors |
 
-Two of the nine (the hardest — crossed-out scribbles, repeated lines) were not
-scored: the Groq vision model returned `503 over capacity` on those requests
-during the run.
+Run of 23 Oct 2026, all nine cases scored (none lost to quota or `503`). Nine
+photos from one student and one pen: this says "not obviously broken", not
+"validated" — see Section 7.
 
 **The headline finding: transcription is the bottleneck, not the reasoning.**
 Scoring the read separately from the verdict shows that **when the handwriting is
-transcribed faithfully, the step-check logic is correct every time (4/4)**. The
+transcribed faithfully, the step-check logic is correct every time (5/5)**. The
 losses are all in the read (83%), not the logic. This drove the design: the
-score climbed 44% → 71% → 86% across the session as segmentation was fixed to
+score climbed 44% → 71% → 86% (then 89% with all nine scored) as segmentation was fixed to
 stop clipping crops and the transcription prompt was tightened to transcribe
 verbatim (which also killed a dangerous failure mode — see below).
 
@@ -225,7 +245,6 @@ verbatim (which also killed a dangerous failure mode — see below).
 | Case | What happened | Cause / status |
 |---|---|---|
 | v1 | `2x+7=19` read as `2x+2=10` | vision misread — the one remaining false positive; a read error, not a logic error |
-| v7, v8 | not scored | Groq `503` — vision model over capacity during the run |
 | (fixed) v8 | previously read `x=4` as `x=-4` — **silently correcting the student's error** | fixed by the verbatim transcription prompt ("do NOT correct errors") |
 | (fixed) v4 | previously flagged for an omitted `= 0` before factorising | fixed by a notation rule — formatting is not a method error |
 
@@ -235,6 +254,42 @@ better than adaptive-threshold output; (2) a strict "transcribe verbatim, do
 not correct or solve" prompt to stop the v8 auto-correction; (3) a fine-tuned
 handwriting-math vision model on collected real working — the real long-term
 fix. The reasoning layer is already sound; the read is what needs the work.
+
+### Classroom trial (23 Oct 2026)
+
+Three secondary-school students used EdKernel for 17 minutes in a school computer lab,
+on coordinate geometry (straight lines and circles). The server ran on a laptop
+over the school network; every turn was logged. Full anonymised log:
+`lab-chats-2026-10-23.md`.
+
+| student | tutor turns | marked correct | marked wrong | quiz |
+|---|---:|---:|---:|---|
+| person 1 | 21 | 5 | 3 | 3/10 |
+| person 3 | 13 | 1 | 0 | 4/10 |
+| person 2 | 4 | 0 | 0 | — |
+
+**Where it worked.** Person 1 got the distance between two points wrong, wrote
+"im sorry", and stopped for two and a half minutes. The tutor named the distance
+formula, gave an analogy, and asked only for the x and y gaps. The student
+answered "6 and 8", then — without being asked to show working — "36 + 64 is
+100 so it is 10!". Wrong → discouraged → scaffolded → solved it themselves,
+with the answer never handed over. When the same student wrote "i dont think im
+smart enough for this yet", the tutor acknowledged it and made the next step
+smaller.
+
+**Where it failed** (all listed in Section 7):
+- Person 3 pasted questions and never attempted one. On a re-paste the tutor
+  gave the full worked answer — six minutes of answer extraction.
+- A correct partial answer (the x-coordinate of a midpoint) was marked wrong,
+  and the student's correct protest was ignored.
+- Person 2 was on a tablet; the on-screen keyboard covered the chat box, so
+  they could not reply after their fourth turn. A layout bug, not
+  disengagement — fixed afterwards (viewport sizing), not yet re-tested on a
+  tablet.
+
+**What this shows and does not show.** It shows real students using the tutor
+and one clear case of scaffolded learning. It does **not** show learning gain:
+there was no pre-test, N = 3, and the two quiz scores are post-test only.
 
 ### Teacher dashboard
 
@@ -348,13 +403,42 @@ inference is offloaded per call.*
 
 ---
 
-## 7. What is still missing (honest)
+## 7. Limitations and responsible use
 
-- `HoughLinesP` → contour-based deskew replacement (planned, not built)
-- OpenCV 5 on Graviton for a fair COOL comparison (blocked on instance setup)
+**What it is not.** EdKernel is a practice tutor, not an assessor. Its verdicts
+come from language models and are wrong some of the time (Section 4 gives the
+measured rates), so it must never be used to grade students. The misconception
+map is a prompt for a teacher to look, not a judgement.
+
+**Known failure modes, seen with real students** (Section 4, classroom trial):
+- The tutor can be argued into giving the full answer when a student re-pastes
+  the same question instead of trying it.
+- Partial answers are marked flatly wrong (a correct x-coordinate was marked
+  `[WRONG]` and the student's protest ignored).
+- It can lose track of which question the student is on.
+- Handwriting reads fail on crossed-out work and very sparse writing; the step
+  checker is only reliable on a flat photo of one problem.
+
+**Data and privacy.** The app stores names, chat messages and quiz scores for
+progress tracking. Guest mode needs only a display name — no email. Student
+work is sent to a third-party inference API (Groq) to be read and checked;
+schools should know this before using it. The trial log published in this
+repo has names replaced with "person 1–3".
+
+**Integrity.** Quiz answer keys stay on the server until an attempt is
+submitted, so a student cannot read them from the page. The tab-switch counter
+is a signal for the teacher, not proof of cheating — the trial showed it
+over-counting on tablets (fixed, but still a heuristic).
+
+**Fairness.** All evaluation photos come from one student and one pen, and the
+trial had three students. Accuracy on other handwriting, other languages and
+other devices is unmeasured.
+
+## 8. What is still missing (honest)
+
 - S3 for file storage (currently local disk on ECS)
 - RDS PostgreSQL (currently SQLite; on Fargate the `users.db` / ChromaDB volumes are **not durable across task restarts** — accounts and the misconception map reset when the task recycles. Needs EFS or RDS to persist.)
 - AWS Bedrock LLM provider (account verification hold with AWS support)
 - Misconception map is **built and live**, but categories are coarse and wobble on genuinely-ambiguous errors (e.g. subtracted-vs-added) — hence framed as teacher-reviewed, not authoritative. Full end-to-end verification through the *vision* path is still pending a window when the Groq vision model is not returning `503`.
-- Architecture diagram (required deliverable)
-- Demo video (required deliverable, due 26 Oct 2026)
+- A pre-test: the classroom trial was post-test only, so it shows use, not learning gain
+- Tutor fixes for the trial failures listed in Section 7

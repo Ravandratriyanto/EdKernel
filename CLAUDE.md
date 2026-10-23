@@ -188,10 +188,12 @@ chat; multi-chat dev panel; lab launchers set the flags.
 
 Groq `openai/gpt-oss-120b` + `qwen/qwen3.8-27b`, temp 0, nine photos
 (`evals/vision_samples/v1–v9`, one student, one pen). "Not obviously broken", not validated.
-- Segmentation line counts **9/9** (pure OpenCV, reproducible).
-- Step checker **4/5** — only 5 of 9 cases scored (rest died on quota/503).
-- Transcription **13/16 lines**; verdict given a faithful read **3/3**.
-- Error located **3/3** (v7–v9, session 32, N=3).
+Last full run 2026-10-23 (session 40), all 9 scored:
+- Segmentation line counts **9/9** (pure OpenCV, reproducible). Was silently 8/9
+  from 2026-09-17 to 2026-10-23 (v2, margin dash bridging rows) — re-check it.
+- Step checker **8/9** — only miss is v1, a misread (`2x+7=19` → `2x+2=10`).
+- Transcription **25/30 lines**, 5/9 clean; verdict given a faithful read **5/5**.
+- Error located **3/3** (v7–v9).
 - Hint ladder **3/5** (`evals/learn_cases.jsonl`, session 28) — two leak the answer early.
 - Error-faithfulness thesis tested **flat** (2/3 vs 2/3) — do not pitch it.
 
