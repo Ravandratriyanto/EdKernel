@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- interactive-widget: let the on-screen keyboard shrink the page instead of
+       covering it. Without it a tablet keyboard sits on top of the chat input
+       and the student cannot reach the box (lab run 2026-10-23). -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>EdKernel</title>
   <link rel="preload" as="image" href="/static/img/tutor-happy.webp">
 
@@ -24,7 +28,12 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #f0f2f5;
+      /* 100vh is the LAYOUT viewport: it does not shrink when a phone/tablet
+         keyboard opens, so the chat input ends up underneath the keyboard.
+         100dvh does shrink. The vh line stays as a fallback for browsers that
+         don't know dvh; iOS Safari needs the visualViewport handler as well. */
       height: 100vh;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
       color: #1a1a2e;
@@ -3546,8 +3555,13 @@
     if (!quizWatching) return;
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
       document.getElementById('fullscreen-resume').classList.remove('hidden');
-      // if the tab also went hidden, _onQuizHidden already counted this switch
-      if (!document.hidden) _bumpQuizSwitch();
+      // Leaving fullscreen is NOT counted as a tab switch. Tablets drop out of
+      // fullscreen on rotation, on the on-screen keyboard opening, or on a
+      // system gesture, with the student still looking at the quiz — and
+      // tapping "Return to fullscreen" can drop straight back out, inflating
+      // the count in a loop. In the 2026-10-23 lab this flagged two students
+      // the teacher was watching the whole time. Only document.hidden counts
+      // now (_onQuizHidden); the banner still nudges them back.
     }
   }
   function resumeFullscreen() {
@@ -4180,6 +4194,29 @@
     document.getElementById('q-mode-practice').classList.toggle('active', mode === 'practice');
     if (mode === 'practice') startPractice();
   }
+
+  // ── Tablet / phone keyboard ───────────────────────────────────────────────
+  // iOS Safari honours neither `interactive-widget` nor `100dvh` reliably: the
+  // layout viewport stays full height when the keyboard opens, so the chat
+  // input sits underneath it and cannot be tapped. visualViewport reports the
+  // area actually left visible, so pin the body to that.
+  // Found in the 2026-10-23 lab: a student on a tablet got one answer, tried to
+  // reply, and could not reach the input box. She left.
+  (function fitToVisualViewport() {
+    const vv = window.visualViewport;
+    if (!vv) return;                       // desktop / older browsers: CSS handles it
+    let frame = null;
+    const fit = () => {
+      if (frame) return;                   // coalesce bursts of resize events
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        document.body.style.height = vv.height + 'px';
+      });
+    };
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);    // iOS shifts the viewport as well as resizing it
+    fit();
+  })();
 </script>
 
 <!-- Questions overlay -->

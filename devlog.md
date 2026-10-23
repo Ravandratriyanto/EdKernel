@@ -5572,3 +5572,210 @@ time: rendered in headless Chrome, 25/25 with no syntax-error SVGs, labels read.
   sit idle. The lab itself *is* Impact evidence, so this time it's closer to the
   point — but the demo video is still at zero.
 - **Nothing committed** this session.
+
+## Session 39 — 2026-10-23
+
+**The first real lab run happened.** Three students, 17 minutes, on the user's
+laptop over the school Wi-Fi. Almost no code was written until the end — the
+session was getting the server in front of students, then reading what came
+back. The chats turned out to be the most useful thing the project has produced
+so far, including the reason one student left.
+
+### Getting the server up
+Read the notes block in `start-lab.bat` (and `start-lab.sh`) and ran the pieces
+by hand rather than the `.bat` itself — it ends in `pause`, which hangs a
+background run. So **`start-lab.bat` still has never been run end to end on
+Windows**; everything it does *before* the server line was executed and verified.
+
+- `lab_setup.py` ran clean: `auth_required` on, `guest_login` on, `stub_testing`
+  off (it changed that one). **`ADPASS` is now set** (16 chars) — the session 38
+  blocker is gone. `FLASK_SECRET_KEY` is still empty, so `app.py:49` generates a
+  random one per boot; harmless under single-process waitress, but a restart
+  logs everyone out.
+- Served with `waitress-serve --listen=0.0.0.0:5000 --threads=8`.
+- Checked before trusting it: `4dmin` login → 200, `/chats` → 200,
+  `/api/dev/sessions` → 200; anonymous → 401. The quiz bank serves 10 from
+  `bank` with **no `answer` and no `working`** in the payload.
+- Firewall was already correct: two allow rules for the exact serving binary
+  (`...\Python311\python.exe`, Private+Public) plus "EdKernel Lab 5000" (Any),
+  no inbound block rules, `AllowInboundRules = True` on Public. Worth recording
+  because block rules beat allow rules on Windows and that is the usual trap.
+
+### The IP moved three times
+`0.0.0.0` binding meant the server never needed restarting, but the address
+students needed changed with every network: `192.168.1.147` (Wi-Fi) →
+`192.168.68.118` (Ethernet, "ICS Grade 10") → **`192.168.68.127`** (Wi-Fi again,
+after the cable came out). Two traps:
+- The Wi-Fi adapter held a **stale** `192.168.68.101` while `netsh wlan show
+  interfaces` said `disconnected`. Reading `Get-NetIPAddress` alone would have
+  handed students a dead address — cross-check against `netsh`.
+- Tailscale sits on the box with a `169.254.x` APIPA address (not connected) and
+  shows up in the IP list. Don't hand it out.
+
+### "There is no login" — `password_login` was off
+The dev panel rendered but every tile read `undefined` and the tables said
+"failed to load". Diagnosed from the screenshot before touching anything:
+`_require_role` (`app.py:1588`) returns `{'error': ...}` as **JSON**, so
+`loadStats` parses it fine and reads missing fields (→ `undefined`), while
+`loadSessions` destructures `{ sessions }` and throws on `undefined.length`
+(→ "failed to load sessions"). A bad key would have given plain-text `Not Found`
+and the *stats* catch message instead, so the signature uniquely says **401, no
+cookie**.
+
+Cause: `settings.json` had `password_login: false`, and `index.html` hides the
+username/password form when it is off — only the guest box renders. The backend
+`4dmin` path was fine throughout (`_authenticate_env_admin` stays open when
+`password_login` is off, exactly as session 38 designed). **The frontend just
+never showed the door.** This is a real gap between the two halves: the lab
+settings `lab_setup.py` writes make the admin login invisible on the page it is
+meant to be used from. Flipped `password_login` to `true` in `settings.json`;
+settings are read in `before_request`, so no restart.
+
+### What the students did
+38 turns, 00:38:46 → 00:55:10 (the other 24 lines in `sessions.jsonl` are older
+test accounts — filter by timestamp, not by file).
+
+| student | turns | correct | wrong | sessions | quiz |
+|---|---|---|---|---|---|
+| person 1 | 21 | 5 | 3 | 2 | 3/10, 10 min |
+| person 3 | 13 | 1 | 0 | 2 | 4/10, 5 min |
+| person 2 | 4 | 0 | 0 | 3 | — |
+
+Logging does not depend on an admin being signed in — the panel is only a
+reader, so nothing was lost while the user was locked out. Exported to
+`lab-chats-2026-10-23.txt` (untracked; contains student names and messages —
+decide on gitignore before committing).
+
+### Does it actually help them? Mixed, and the detail matters
+**Yes, for person 1 — demonstrably.** The distance-formula sequence is the best
+evidence the project has:
+```
+00:41:45  "1 and 2"                       [WRONG]
+00:44:06  "im sorry"                               (2.5 min gap, gave up)
+          tutor: names the distance formula, analogy ("the shortest path a
+                 bird would fly between two towns"), asks for the x and y gaps
+00:44:33  "6 and 8"                       [CORRECT]
+          tutor: Pythagoras + ladder analogy, asks for sqrt(6^2+8^2)
+00:45:25  "36 + 64 is 100 so it is 10!"   [CORRECT]   — working shown unprompted
+00:45:33  "can u praise me pls"
+```
+Wrong → demoralised → scaffolded → self-derived, nothing handed over. **This is
+the clip for the demo video.** The gradient exchange right after is a second,
+smaller version (`3` wrong → re-derivation + question → `3/4` correct).
+
+Emotional handling worked too: *"uhm actually i dont think im smart enough for
+this yet"* got *"I hear you—it can feel tricky at first. Try this: add the
+x-values −3 and 7 together, then split the sum in half."* — acknowledged, then
+the step made smaller.
+
+**No, for person 3, and it is the tutor's fault.** She pasted questions and never
+answered one. At 00:40:58 she re-pasted the *same* question and the tutor
+abandoned the loop and gave the full worked solution `(2,6)`. She then pasted
+the next question five more times. Six minutes of answer extraction, and the
+system allowed it.
+
+**The worst moment: 00:39:58.** Student answers `2?`, marked **[WRONG]**, and
+the tutor immediately dumps the full answer. But **2 is correct for the
+x-coordinate**, and the student knew it:
+> *"but i answered that one rtight tho.... for x coordinate right..? :("*
+
+The tutor ignored the protest, never acknowledged the partial credit, and asked
+a new question. It told a partially-correct student they were wrong *and*
+removed the chance to finish. Then at 00:41:22, after two more exchanges:
+*"dude were on a diff quesyion"* — **the tutor had lost track of which problem
+they were on** and the student had to correct it.
+
+### person 2 did not disengage — the UI locked her out
+She asked "What is a linear graph", got a genuinely good answer, then stopped at
+4 turns. The user watched her screen: **she is on a tablet, and the on-screen
+keyboard covers the chat input**, so she could not reply.
+
+Cause, confirmed in the code: `body { height: 100vh }` (`static/index.html:27`)
+with a column flex layout and the input at the bottom. `100vh` is the **layout**
+viewport and does **not** shrink when a keyboard opens, so the input sits
+underneath it. The viewport meta also lacked `interactive-widget`. Invisible on
+a laptop, which is why every previous test passed.
+
+This reframes the lab result: not "a student who lost interest" but **1 of 3
+students blocked by a layout bug** — a far more useful finding.
+
+### The tab-switch counter was measuring the wrong thing
+`tab_switches` recorded person 3 4 and person 1 1. The user watched every screen and
+confirms **nobody switched away**. Cause, in `_onFullscreenChange`: *leaving
+fullscreen* was counted as a tab switch even when the tab never went hidden
+(`if (!document.hidden) _bumpQuizSwitch()`). The session-38 comment says this
+was deliberate, on the assumption the OS drops fullscreen on an app switch —
+true on a laptop, false on a tablet, where rotation, the keyboard, or a system
+gesture drops it with the student still on the page. It can also loop: drop →
+banner → student taps "Return to fullscreen" → drops again → +1.
+
+**The tab-switch numbers from this run are invalid — do not quote them.**
+
+### Fixes applied (frontend only, `static/index.html`, +40/−3)
+1. Viewport meta: added `interactive-widget=resizes-content`.
+2. `body`: added `height: 100dvh` after the existing `100vh` (kept as fallback).
+3. New `fitToVisualViewport()` IIFE at the end of the script — iOS Safari
+   honours neither of the above reliably, so the body is pinned to
+   `visualViewport.height`. Listens to `resize` **and** `scroll` (iOS shifts the
+   viewport as well as resizing it), coalesced through `requestAnimationFrame`.
+   No-ops where `visualViewport` is absent.
+4. `_onFullscreenChange` no longer calls `_bumpQuizSwitch()`. The "Return to
+   fullscreen" banner still shows; only `document.hidden` increments the counter.
+   `_bumpQuizSwitch` now has exactly one caller.
+
+Each carries a comment naming the lab run so they don't get reverted.
+`node --check` on the extracted inline script: **OK**.
+
+### Known issues / honest gaps
+- **Fixes 1–3 are UNVERIFIED.** No tablet here, server was down, and headless
+  Chrome cannot produce a real on-screen keyboard — so the exact thing that
+  broke for person 2 is the one thing that could not be reproduced. Must be
+  tested by typing into the chat box on a tablet with the keyboard up before
+  anyone claims it works. Fix 4 is the removal of a call and is safe.
+- **No pre-test ran.** Both quizzes are post-only, so the pre/post study design
+  did not happen and the Study box has nothing to compare. N=2 completed
+  quizzes. Claimable: "students used it, scored 3/10 and 4/10". **Not**
+  claimable: any improvement.
+- **No interviews done** while the students were in the room — the one thing
+  that cannot be reconstructed from the log.
+- **The tutor caves when a student re-pastes a question** instead of answering
+  (person 3, 00:40:58). Unfixed. Most damaging behaviour for the demo video.
+- **`[CORRECT]` fired on a pasted question** containing no answer, writing a junk
+  `progress` row whose `topic_id` is the **entire question text**
+  (`'Help me with this problem please: What is the midpoint of \(A(-3, 2)\)…'`),
+  alongside the real `Math` row. Unfixed.
+- **Partial credit is not recognised** — `2?` marked flatly wrong and the
+  student's correct protest ignored (00:39:58–00:40:44). Unfixed.
+- **Context slips between questions** — tutor stayed on the old problem until
+  the student said "dude were on a diff quesyion". Unfixed.
+- **Two replies welded into one**, 00:41:13: "…square each difference.Great! Now
+  add those two squares together…" — no space, and it congratulates before the
+  student answered. Unfixed.
+- **End-of-quiz summary generated twice** (00:46:42, 00:46:52), two different
+  texts, one `quiz_attempts` row — a duplicate call, not a duplicate submit.
+- **Hint ladder never escalated**: `wrong_streak` was `0` on all 38 turns.
+- Pasting out of our own UI duplicates text (`y = 2 x + 1 y=2x+1`) — students
+  copy rendered KaTeX. The model parsed it, but that is what paste looks like
+  from our own page.
+- `tokens` is `{}` on every logged turn, so the panel's tokens tile is empty —
+  do not quote token usage from this run.
+- Two admin accounts exist: `andri` (id 9) and `4dmin` (id 10). Someone typed
+  "andri" at the **guest** box and got `andri #1760` (id 23) — the suffix guard
+  working, but a sign the two doors confuse people.
+- `password_login` left **on**; lab state is **off**. Revert before the next run
+  or students see a password form and a "Create one" link beside the guest box.
+- The waitress server was **killed by the OS for low memory** after the lab
+  ended (`pypdf` was churning a PDF in the last log lines). No data lost. The
+  dev panel needs a restart to be reachable.
+- Everything from session 38 is still open: tutor-flavour bug
+  (`core/prompts.py:10`), Tavily env name (`app.py:1344`), answer keys from
+  `/api/papers` + `/api/practice_from_error`, no CSRF, `sessionlog.LOG_DIR`
+  ignoring `DB_DIR`.
+- **Demo video still at zero. Submission deadline still not confirmed.**
+- Pattern note, inverted for once: no new features were built, and the session
+  produced the first real Impact evidence the project has — plus a named clip
+  for the demo video. The follow-up that converts it (interviews, and a pre-test
+  next time) was not done.
+- Two throwaway accounts created during diagnosis (`Zz Firewall Probe`,
+  `Zz Diag`) were deleted along with their session/attempt rows. **Nothing
+  committed** this session.
