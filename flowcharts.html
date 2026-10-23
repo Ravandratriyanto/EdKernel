@@ -102,12 +102,12 @@
 
 <header>
   <h1>EdKernel — Codebase Flowcharts</h1>
-  <p>One diagram per concern · Updated 2026-09-23 · single curriculum (GCSE Maths) · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · gamification (XP / streaks / quests) · AWS Fargate (live)</p>
+  <p>One diagram per concern · Updated 2026-10-23, checked against the code · one live class (<code>cambridge-as-p1</code>, "Math") · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · gamification (XP / streaks / quests) · AWS Fargate (live)</p>
   <p>Building a front end? The public kernel API contract is in <code>docs/KERNEL_API.md</code>.</p>
 </header>
 
 <nav>
-  <a href="#kernel">Kernel Architecture</a>
+  <a href="#kernel">Engine Architecture</a>
   <a href="#arch">System Architecture</a>
   <a href="#core-pkg">core/ Package</a>
   <a href="#opencv">OpenCV 5 Pipeline</a>
@@ -139,11 +139,11 @@
 <!-- ═══════════════════════ KERNEL ═══════════════════════ -->
 <div class="section color-arch" id="kernel">
   <div class="section-header">
-    <h2>Kernel Architecture — the engine is the product, the UI is swappable</h2>
-    <span class="badge badge-arch">KERNEL</span>
+    <h2>Engine Architecture — the engine is the product, the UI is swappable</h2>
+    <span class="badge badge-arch">ENGINE</span>
   </div>
   <div class="section-desc">
-    EdKernel is a <strong>kernel, not an app</strong>. The value is the
+    EdKernel is an <strong>engine, not an app</strong>. The value is the
     education-specific orchestration — Socratic tutoring that withholds the
     answer, per-step error localisation, curriculum-grounded questions, progress
     and misconception tracking — exposed as composable primitives over the
@@ -153,6 +153,8 @@
     a Linux distro over the kernel. Swap it for a mobile app, an LMS plugin, a
     bot — the backend contract is fixed. <code>core/</code> is pure Python with
     no Flask and no UI; <code>api_v1.py</code> is the only public surface.
+    (Honest scope: no third-party client exists yet — the mobile / LMS / bot
+    boxes show what the contract allows, not shipped integrations.)
   </div>
   <div class="chart-area">
     <div class="mermaid">
@@ -164,7 +166,7 @@ graph TD
         BOT["Bot / CLI / portal<br/>(3rd-party build)"]
     end
 
-    subgraph API["/v1/ — Kernel API · the 'syscalls' · Bearer token + rate limit · api_v1.py"]
+    subgraph API["/v1/ — Engine API · Bearer token + rate limit · api_v1.py"]
         E1["POST /v1/tutor/start"]
         E2["POST /v1/tutor/reply<br/>Socratic hint ladder"]
         E3["POST /v1/check<br/>answer verdict"]
@@ -184,7 +186,7 @@ graph TD
     subgraph DATA["State & providers"]
         DB["users.db<br/>progress · misconceptions · keys"]
         CH["ChromaDB<br/>curriculum RAG"]
-        PROV["Groq · Bedrock · Ollama"]
+        PROV["Groq · Ollama\nBedrock (adapter built,\nAWS account on hold)"]
     end
 
     WEB --> API
@@ -220,7 +222,7 @@ graph TD
     STUDENT["Student\nindex.html\nservice tiles / tutor / quiz"]
     TEACHER["Teacher\nteacher.html"]
     ADMIN["Admin\nadmin.html"]
-    DEV["Dev panel\ndev.html (gitignored)\n/dev/key or /chats\nlive chats side by side"]
+    DEV["Dev panel\ndev.html\n/dev/key or /chats\nlive chats side by side"]
     CLI["CLI\nmain.py"]
     THIRD["Third-party\nintegration"]
 
@@ -231,7 +233,7 @@ graph TD
     CLI --> CORE
     THIRD -->|"Bearer token\nHTTP"| V1
 
-    APP["app.py\nFlask — 58 routes"]
+    APP["app.py\nFlask — 73 routes"]
     V1["api_v1.py\nBlueprint /v1/\n6 endpoint groups"]
 
     APP --> AUTH["users.py\nauth / sessions\napi keys / progress"]
@@ -246,7 +248,7 @@ graph TD
 
     CORE["core/\nAI engine\nno Flask dependency"]
 
-    CORE --> LLM["core/llm/client.py\nOllama / Groq"]
+    CORE --> LLM["core/llm/client.py\nGroq / Ollama / Bedrock"]
     CORE --> RAG["core/rag/retrieve.py\nVector search"]
     CORE --> PROM["core/prompts.py\nShared prompts"]
     CORE --> VIS["core/vision/\nOpenCV 5 pipeline\ntranscribe + step check"]
@@ -309,7 +311,7 @@ flowchart TD
         subgraph VIS["core/vision/"]
             IH["image_handler.py\ntranscribe() — image → text\ndetect_question() — photo → question\ndrop_reasoning() — strip think blocks"]
             SC["step_checker.py\ncheck_working() — find first wrong step\nOpenCV segment + transcribe each line"]
-            PP2["preprocess.py\nOpenCV binarise + rectify"]
+            PP2["preprocess.py\nOpenCV page find + rectify\nor deskew, then binarise"]
             SEG["segment.py\nhorizontal line segmentation"]
         end
 
@@ -357,34 +359,44 @@ flowchart TD
     <h2>OpenCV 5 Pipeline — photo of working → first wrong step</h2>
     <span class="badge badge-vision">VISION</span>
   </div>
-  <div class="section-desc">The perception half of the agentic loop, and the part the competition judges on. A phone photo is rectified, deskewed, binarised and cut into one crop per working line before any model is called. The LLM never sees the raw photo — it sees one line at a time. OpenCV's role here is <strong>deterministic spatial grounding</strong> — the verifiable box coordinates a vision LLM cannot reliably produce — which lets the system draw a red box on the exact wrong line. A located error is then categorised (coarse tag emitted by the examiner) and fed to the class misconception map. Fires automatically when a student attaches an image in Learn mode.</div>
+  <div class="section-desc">The perception half of the agentic loop, and the part the competition judges on. A phone photo is either rectified (if the page's four corners are found) or deskewed (if not), then binarised and cut into one crop per working line before any model is called. The yellow and red nodes are the agentic decisions: an unclear read triggers a wider re-crop, then a request for a better photo. Measured 2026-10-23 on 9 real photos: segmentation 9/9, error line found 8/9. The LLM never sees the raw photo — it sees one line at a time. OpenCV's role here is <strong>deterministic spatial grounding</strong> — the verifiable box coordinates a vision LLM cannot reliably produce — which lets the system draw a red box on the exact wrong line. A located error is then categorised (coarse tag emitted by the examiner) and fed to the class misconception map. Fires automatically when a student attaches an image in Learn mode.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
     IMG["Student photo\nbase64 → POST /api/check_working"] --> READ["cv2.imread\ntemp file from base64"]
-    READ --> FIND["find_page()\ncvtColor → bilateralFilter\nCanny → morphologyEx\nfindContours + approxPolyDP"]
+    READ --> FIND["find_page()\nresize to 900px → cvtColor → bilateralFilter\nCanny → morphologyEx\nfindContours + approxPolyDP"]
     FIND -->|"4-corner page found"| RECT["rectify()\ngetPerspectiveTransform\nwarpPerspective"]
-    FIND -->|"no page found"| ASIS["use the frame as-is"]
-    RECT --> DESK["deskew()\nskew_angle() → _hough_estimate\nHoughLinesP + warpAffine"]
-    ASIS --> DESK
-    DESK --> BIN["binarise()\nadaptiveThreshold\nGaussian, inverted"]
-    BIN --> SEG["segment()\nink_mask → _smear\nMORPH_CLOSE + dilate\nfindContours → boundingRect\n_merge_rows"]
-    SEG --> CROP["crops()\none image per working line\nplus box coordinates"]
-    CROP --> TRANS["image_handler.transcribe()\nvision LLM, one call per line\ndrop_reasoning strips think blocks"]
-    TRANS --> EVAL["step_checker.check_working()\nLLM judges the line sequence\nfinds the FIRST wrong step"]
-    EVAL --> OUT["steps + boxes + error_index\n+ explanation + category\n(examiner emits coarse tag)"]
+    FIND -->|"no page found"| DESK["deskew()\nink_mask → findContours → minAreaRect seed\nprojection-profile search ±3° over warpAffine\n(replaced HoughLinesP, Sept 2026)"]
+    RECT --> BIN["binarise()\nadaptiveThreshold\nGaussian, 25px block"]
+    DESK --> BIN
+    BIN --> SEG["segment()\n_smear: MORPH_CLOSE + dilate\nfindContours → boundingRect\ndrop frame lines, specks, over-tall blobs\n_merge_rows (overlap AND centred)\nline-shape filters: ink density, aspect, size"]
+    SEG --> CROP["_read_box()\ncrop one line + pad\n_upscale() to 96px tall\n(small crops are unreadable)"]
+    CROP --> TRANS["image_handler.transcribe()\nvision LLM, one call per line, temp 0\ndrop_reasoning strips think blocks"]
+    TRANS --> CONF{"_low_confidence()?\nempty / unreadable / too short"}
+    CONF -->|"yes, first try"| WIDE["re-crop wider\npad 3 → 14 px, read again"]
+    WIDE --> CONF2{"still unclear?"}
+    CONF2 -->|yes| SHARP["trace: ask for a sharper photo\nline skipped by the checker"]
+    CONF -->|no| PAIRS
+    CONF2 -->|no| PAIRS
+    SHARP --> PAIRS
+    PAIRS["for each pair of lines"] --> SAME{"_same_line()?\ncopied-out line\n(no model call)"}
+    SAME -->|yes| PAIRS
+    SAME -->|no| EVAL["CHECK_PROMPT\ndoes line i+1 follow from line i?\nfirst NO = the error line\n+ coarse [tag]"]
+    EVAL --> OUT["steps + boxes + error_index\n+ explanation + category + trace\n+ annotated image (_annotate)"]
     OUT --> UI["index.html runStepChecker()\ncanvas overlay = spatial grounding\ngreen = correct, red = error line"]
     OUT -->|"error located"| MISC["app.py\ncore.misconceptions.normalise(category)\nusers.record_misconception()"]
     MISC --> MDB[("misconceptions table\ncurriculum / topic / category\n→ class misconception map")]
 
-    BOTTLE["COOL benchmark: HoughLinesP is\nthe bottleneck on both architectures\n240 ms x86 vs 1587 ms Graviton\nplanned swap: contour-based rotation\nreusing the findContours output"]
+    BOTTLE["COOL benchmark: HoughLinesP was\nthe bottleneck (453 ms x86, 1737 ms Graviton)\nnow gone — deskew reuses findContours\n(1.3 ms)"]
     DESK -.-> BOTTLE
 
     style OUT    fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
     style EVAL   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style TRANS  fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
     style MDB    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
-    style BOTTLE fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
+    style BOTTLE fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style WIDE   fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
+    style SHARP  fill:#3a1a1a,stroke:#dd6f6f,color:#e8e8e8
     </div>
   </div>
 </div>
@@ -455,7 +467,7 @@ flowchart TD
     <h2>Student Home &amp; Quiz Mode</h2>
     <span class="badge badge-arch">OVERVIEW</span>
   </div>
-  <div class="section-desc">Picking a class opens a Gojek-style service-tile grid, not the tutor. Quiz mode copies the Digital SAT Bluebook layout and deliberately shows no live right/wrong — teacher feedback was that live marking spikes exam nerves. The answer key never reaches the browser: the server opens an attempt, sends key-stripped questions, and marks the whole thing at submit. Anti-cheat is two layers on one counter: tab-switch detection (<code>visibilitychange</code>) plus a forced-fullscreen layer (session 36) — fullscreen can't block Alt+Tab/Cmd+Tab, no webpage can, but it hides everything else so a casual peek isn't a click away, and leaving it (Esc, or the OS auto-exiting on an app switch) trips the same counter, de-duped so one real switch isn't counted twice. <strong>Tests vs practice (2026-10-21):</strong> a hand-written bank (<code>quizzes.json</code>) is treated as a test — the whole bank is served (up to 20; the lab quiz is 10 questions) and the side "Ask tutor" is hidden, because the tutor is handed the current question and would otherwise answer it, so a pre/post score would measure the tutor, not the student. Generated quizzes are practice and keep the tutor.</div>
+  <div class="section-desc">Picking a class opens a Gojek-style service-tile grid, not the tutor. Quiz mode copies the Digital SAT Bluebook layout and deliberately shows no live right/wrong — teacher feedback was that live marking spikes exam nerves. The answer key never reaches the browser: the server opens an attempt, sends key-stripped questions, and marks the whole thing at submit. Anti-cheat: tab-switch detection (<code>visibilitychange</code>) is the only thing that increments the counter. Forced fullscreen (session 36) still hides everything else so a casual peek isn't a click away, but since the 2026-10-23 lab run <strong>leaving fullscreen is no longer counted</strong> — on tablets rotation or the on-screen keyboard drops fullscreen with the student still on the page, and it logged 5 switches when nobody left. <strong>Tests vs practice (2026-10-21):</strong> a hand-written bank (<code>quizzes.json</code>) is treated as a test — the whole bank is served (up to 20; the lab quiz is 10 questions) and the side "Ask tutor" is hidden, because the tutor is handed the current question and would otherwise answer it, so a pre/post score would measure the tutor, not the student. Generated quizzes are practice and keep the tutor.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -492,9 +504,8 @@ flowchart TD
     RESULT --> AI["analyzeQuiz()\nbuilt from the server review\nPOST /api/start"]
 
     WATCH["startQuizWatch()\nvisibilitychange only\nwindow blur false-fired on DevTools"] --> BADGE["TAB SWITCH DETECTED (n)"]
-    FS["requestFullscreen() on quiz start\nfullscreenchange listener"] -->|"left fullscreen\n+ still visible (Esc)"| BADGE
-    FS -.->|"left fullscreen\n+ tab hidden too"| DEDUPE["already counted by WATCH\nskip, no double-count"]
-    FS --> OVERLAY["#fullscreen-resume overlay\nclick to re-enter\n(new gesture required)"]
+    FS["requestFullscreen() on quiz start\nfullscreenchange listener"] --> OVERLAY["#fullscreen-resume overlay\nclick to re-enter\n(new gesture required)"]
+    FS -.->|"NOT counted since 2026-10-23"| NOCOUNT["leaving fullscreen alone is not a switch\ntablets drop it on rotate / keyboard\n(lab run: 5 false counts, nobody left)"]
     BADGE -->|"POST /api/quiz/tab-switch"| ATT
 
     style PANEL  fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
@@ -603,7 +614,7 @@ flowchart TD
     <h2>Past Paper Import — Question extraction</h2>
     <span class="badge badge-curric">CURRICULA</span>
   </div>
-  <div class="section-desc">Teacher pastes a URL from an allowed revision site. The server fetches the PDF, core/questions.py extracts text and asks the LLM to copy each real question (swapping variables), then appends them to questions.json. Non-maths subjects only — pypdf corrupts equations.</div>
+  <div class="section-desc">Teacher pastes a URL from an allowed revision site. The server fetches the PDF, extracts text and asks the LLM to copy each real question (swapping variables), then appends them to questions.json. <strong>Two copies of this logic exist:</strong> the teacher route in <code>app.py</code> does it inline with pypdf only and gives up with a 422 on scanned or maths PDFs, while <code>core/questions.py:extract_from_paper()</code> (used by <code>POST /v1/questions/extract</code>) falls back to rendering pages with fitz and reading them with the vision model. The web route should call the core function.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -611,17 +622,19 @@ flowchart TD
     ALLOW -->|blocked| E403["403 domain not allowed"]
     ALLOW -->|ok| FETCH["_fetch_pdf()\nHTTP GET with timeout\ncheck Content-Type\nsize cap 15 MB"]
     FETCH -->|fail| E502["502 Could not fetch"]
-    FETCH -->|ok| CORE["core.questions.extract_from_paper(pdf_bytes, **llm)"]
+    FETCH -->|ok| CORE["app.py import-paper route\n(inline — does NOT call core.questions)"]
     CORE --> PYPDF["pypdf PdfReader\nextract text per page\njoin pages"]
     PYPDF --> TEXTLEN{"text length\n< 100 chars?"}
     TEXTLEN -->|yes| E422["422 extraction failed\n(scanned / maths PDF)"]
+    V1Q["POST /v1/questions/extract\n→ core.questions.extract_from_paper()"] --> VFALL["pypdf, and if < 100 chars:\nfitz renders each page →\nvision model reads it"]
+    VFALL --> LLM
     TEXTLEN -->|ok| LLM["LLM extract prompt\nCopy each question verbatim\nSwap numbers and variables\nReturn JSON array only"]
     LLM --> PARSE["re.search for JSON array\nparse with json.loads"]
     PARSE -->|no array| E500["500 LLM parse error"]
     PARSE -->|ok| MERGE["load existing questions.json\nappend new questions\n_save_questions(cid, merged)"]
     MERGE --> RET["200 imported: N"]
 
-    NOTE["Maths / Physics:\nequations corrupted by pypdf\nVision pipeline needed\n(future work)"]
+    NOTE["Maths / Physics:\npypdf corrupts equations — g(x) → gx^h\nvision fallback exists in core/,\nnot yet wired to the web route"]
 
     style RET   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     style CORE  fill:#0d2a0d,stroke:#6fdd6f,color:#e8e8e8
@@ -734,18 +747,20 @@ flowchart TD
     <div class="mermaid">
 flowchart TD
     BUILD["docker build -t edkernel .\nthe trailing dot matters"] --> ECRR["Amazon ECR\nimage repository"]
-    ECRR --> TASKDEF["ECS task definition\nrevision 14\nDB_DIR + CHROMA_DIR env"]
+    ECRR --> TASKDEF["ECS task definition\nrevision 15 (redeployed 2026-10-23)\nDB_DIR + CHROMA_DIR env"]
     TASKDEF --> FARGATE2["ECS Fargate service\ngunicorn 2 workers x 4 threads\nap-southeast-1"]
     BROWSER["Student / teacher browser"] --> ALB["Application Load Balancer\nedkernel-alb-1135643304"]
     ALB --> FARGATE2
 
     FARGATE2 --> EFS1[("EFS → /app/.logs\nusers.db + sessions.jsonl")]
     FARGATE2 --> EFS2[("EFS → /app/data/chroma\nChromaDB collections")]
+    EFS1 -.- SAMEFS["both volumes point at the SAME\nfilesystem root (fs-04d45688…, /)\ndurable, but the two dirs share files"]
+    EFS2 -.- SAMEFS
     FARGATE2 --> GROQ3["Groq API\nopenai/gpt-oss-120b"]
     FARGATE2 -.->|"blocked: account hold"| BEDROCK["AWS Bedrock provider\nValidationException\nnot integrated yet"]
 
     WARN1["_INGEST_STATUS is a per-process dict\na GET can hit a different worker\nthan the POST that started ingest\nverify the feature, not the status"]
-    WARN2["Ingest does not auto-run on boot\nmust be re-triggered after\nevery task replacement"]
+    WARN2["Ingest does not auto-run on boot\nChromaDB persists on EFS, so it is\nonly needed once per fresh volume"]
     FARGATE2 -.-> WARN1
     EFS2 -.-> WARN2
 
@@ -773,7 +788,7 @@ flowchart TD
         F1["auth_required: true\nfalse = every visitor IS user #1\n(the real admin account)"]
         F2["stub_testing: true\n(demo curriculum removed —\nflag now inert for curricula)"]
         F3["rate_limiting: true\nfalse = no 20-req/min cap during testing"]
-        F4["password_login: true\nfalse = /api/login + /api/register 403\n(Google / guest only)"]
+        F4["password_login: true\nfalse = /api/login + /api/register 403\n(Google / guest only)\nGAP: false also HIDES the form,\nso 4dmin can't log in from the page"]
         F5["guest_login: false\ntrue = name-only student accounts\n(lab mode)"]
     end
 
@@ -810,8 +825,10 @@ flowchart TD
 flowchart TD
     CALL["caller passes messages + provider"] --> WHICH{"provider?"}
 
-    WHICH -->|groq| GC["_groq_chat()"]
+    WHICH -->|groq| GC["_groq_chat()\ntemp 0, timeout 60, max_retries 0"]
     WHICH -->|ollama| OC["OllamaClient.chat() / .generate()"]
+    WHICH -->|bedrock| BC["_bedrock_chat()\nbuilt; AWS account hold\nso not used in production"]
+    BC --> WRAP
 
     GC --> GAPI["Groq API\nchat.completions.create()"]
     GAPI --> GUSAGE["read usage\nprompt_tokens + completion_tokens"]
@@ -1004,7 +1021,7 @@ flowchart TD
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
-    START["python -m core.rag.ingest\n--curriculum gcse-maths"] --> CUR2["load curriculum manifest\nget collection name\nget reference_dir + papers_dir"]
+    START["python -m core.rag.ingest\n--curriculum cambridge-as-p1"] --> CUR2["load curriculum manifest\nget collection name\nget reference_dir + papers_dir"]
 
     CUR2 --> BUILD["build(collection_name, ref_dir, papers_dir)"]
     BUILD --> DEL["delete old collection"]
@@ -1258,7 +1275,7 @@ flowchart TD
     <h2>evals/run.py</h2>
     <span class="badge badge-eval">EVAL</span>
   </div>
-  <div class="section-desc">Scores check mode against 50 questions with sympy-verified answer keys. Retries on per-minute 429s, fails fast on daily limit. Score moves ~2 points between runs because temperature is not pinned.</div>
+  <div class="section-desc">Scores check mode against 50 questions with sympy-verified answer keys. Retries on per-minute 429s, fails fast on daily limit. Temperature is pinned to 0 in <code>core/llm/client.py</code>, so runs are repeatable apart from provider-side changes.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD
@@ -1281,7 +1298,7 @@ flowchart TD
     <h2>evals/learn.py</h2>
     <span class="badge badge-eval">EVAL</span>
   </div>
-  <div class="section-desc">Scores the hint ladder. Sends the same wrong answer three times at increasing wrong_streak values and judges whether the replies obey the ladder's promises. Current score: 1/5 — rung 1 names the concept too early.</div>
+  <div class="section-desc">Scores the hint ladder. Sends the same wrong answer three times at increasing wrong_streak values and judges whether the replies obey the ladder's promises. Last measured score: 3/5 (session 28) — two cases leak the answer too early.</div>
   <div class="chart-area">
     <div class="mermaid">
 flowchart TD

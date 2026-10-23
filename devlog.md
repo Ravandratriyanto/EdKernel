@@ -5668,9 +5668,9 @@ this yet"* got *"I hear you—it can feel tricky at first. Try this: add the
 x-values −3 and 7 together, then split the sum in half."* — acknowledged, then
 the step made smaller.
 
-**No, for person 3, and it is the tutor's fault.** She pasted questions and never
-answered one. At 00:40:58 she re-pasted the *same* question and the tutor
-abandoned the loop and gave the full worked solution `(2,6)`. She then pasted
+**No, for person 3, and it is the tutor's fault.** Person 3 pasted questions and never
+answered one. At 00:40:58 person 3 re-pasted the *same* question and the tutor
+abandoned the loop and gave the full worked solution `(2,6)`. Person 3 then pasted
 the next question five more times. Six minutes of answer extraction, and the
 system allowed it.
 
@@ -5685,10 +5685,10 @@ removed the chance to finish. Then at 00:41:22, after two more exchanges:
 *"dude were on a diff quesyion"* — **the tutor had lost track of which problem
 they were on** and the student had to correct it.
 
-### person 2 did not disengage — the UI locked her out
-She asked "What is a linear graph", got a genuinely good answer, then stopped at
-4 turns. The user watched her screen: **she is on a tablet, and the on-screen
-keyboard covers the chat input**, so she could not reply.
+### person 2 did not disengage — the UI locked person 2 out
+Person 2 asked "What is a linear graph", got a genuinely good answer, then stopped at
+4 turns. The user watched the screen: **person 2 was on a tablet, and the on-screen
+keyboard covers the chat input**, so person 2 could not reply.
 
 Cause, confirmed in the code: `body { height: 100vh }` (`static/index.html:27`)
 with a column flex layout and the input at the bottom. `100vh` is the **layout**

@@ -437,7 +437,8 @@ other devices is unmeasured.
 ## 8. What is still missing (honest)
 
 - S3 for file storage (currently local disk on ECS)
-- RDS PostgreSQL (currently SQLite; on Fargate the `users.db` / ChromaDB volumes are **not durable across task restarts** — accounts and the misconception map reset when the task recycles. Needs EFS or RDS to persist.)
+- RDS PostgreSQL (currently SQLite on EFS: `users.db` and ChromaDB survive task restarts, but SQLite allows one writer at a time, which caps how far the app can scale out)
+- Ingest does not run on container start; on a fresh EFS volume the RAG collection must be built once by hand
 - AWS Bedrock LLM provider (account verification hold with AWS support)
 - Misconception map is **built and live**, but categories are coarse and wobble on genuinely-ambiguous errors (e.g. subtracted-vs-added) — hence framed as teacher-reviewed, not authoritative. Full end-to-end verification through the *vision* path is still pending a window when the Groq vision model is not returning `503`.
 - A pre-test: the classroom trial was post-test only, so it shows use, not learning gain
