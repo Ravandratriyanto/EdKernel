@@ -6,7 +6,14 @@ import time
 import os
 from pathlib import Path
 import gamify
-_N, _R, _P, _DKLEN, _SALT_BYTES = (2 ** 14, 8, 1, 32, 16)
+import threading
+_N, _R, _P, _DKLEN, _SALT_BYTES = (2 ** 16, 8, 2, 32, 16)
+# 128 MB ceiling. hashlib refuses anything over 32 MB without it, and that
+# error used to come back as wrong password.
+_MAXMEM = 2 ** 27
+# Each hash needs 64 MB and the task idles at 425 MB of its 1 GB, so allow
+# at most 2 at once per gunicorn worker (4 across the task).
+_HASH_SLOTS = threading.BoundedSemaphore(2)
 SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 MIN_PASSWORD_LENGTH = 8
 _DB_DIR = Path(os.getenv('DB_DIR', str(Path(__file__).parent / '.logs')))
@@ -17,8 +24,11 @@ def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
+    # Not WAL: users.db sits on EFS in production, and WAL's shared-memory
+    # file does not work on a network filesystem (lock errors, corruption risk).
+    # DELETE is SQLite's default rollback journal and is safe on EFS.
+    conn.execute("PRAGMA journal_mode=DELETE")
     return conn
 
 def init() -> None:
@@ -52,19 +62,26 @@ def init() -> None:
     finally:
         conn.close()
 
+def _scrypt(password: str, salt: bytes, n: int, r: int, p: int, dklen: int) -> bytes:
+    with _HASH_SLOTS:
+        return hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p, dklen=dklen, maxmem=_MAXMEM)
+
 def _hash_password(password: str) -> str:
     salt = secrets.token_bytes(_SALT_BYTES)
-    dk = hashlib.scrypt(password.encode(), salt=salt, n=_N, r=_R, p=_P, dklen=_DKLEN)
+    dk = _scrypt(password, salt, _N, _R, _P, _DKLEN)
     return f'scrypt${_N}${_R}${_P}${salt.hex()}${dk.hex()}'
 
 def _verify_password(password: str, stored: str) -> bool:
+    # Only a badly formed stored string means "no match" (e.g. '!oauth' for
+    # Google accounts). Errors from scrypt itself are real bugs: let them raise.
     try:
         scheme, n, r, p, salt_hex, hash_hex = stored.split('$')
-        if scheme != 'scrypt':
-            return False
-        dk = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt_hex), n=int(n), r=int(r), p=int(p), dklen=len(hash_hex) // 2)
+        n, r, p, salt = int(n), int(r), int(p), bytes.fromhex(salt_hex)
     except (ValueError, TypeError):
         return False
+    if scheme != 'scrypt':
+        return False
+    dk = _scrypt(password, salt, n, r, p, len(hash_hex) // 2)
     return secrets.compare_digest(dk.hex(), hash_hex)
 
 def _hash_token(token: str) -> str:
@@ -156,6 +173,13 @@ def authenticate(username: str, password: str) -> int | None:
         return None
     if not _verify_password(password or '', row['password_hash']):
         return None
+    if not row['password_hash'].startswith(f'scrypt${_N}${_R}${_P}$'):
+        conn = _connect()
+        try:
+            conn.execute('UPDATE users SET password_hash = ? WHERE id = ?', (_hash_password(password), row['id']))
+            conn.commit()
+        finally:
+            conn.close()
     return row['id']
 
 def create_session(user_id: int) -> str:

@@ -1,21 +1,30 @@
-ollama
-chromadb
-flask
-pypdf
-pymupdf
-cryptography
-groq
-matplotlib
-numpy
-pillow
-requests
-python-dotenv
-pyflakes
+# Pinned to the versions in the deployed image (pip freeze, 2026-10-23).
+# Change one, rebuild, and re-run evals before shipping.
+ollama==0.6.3
+chromadb==1.5.9
+flask==3.1.3
+pypdf==6.21.2
+pymupdf==2.0
+cryptography==50.0.2
+groq==1.7.0
+matplotlib==3.11.2
+numpy==2.5.4
+pillow==13.0.0
+requests==2.34.2
+python-dotenv==1.2.4
+pyflakes==4.0.3
 opencv-python-headless==5.0.0.93
-gunicorn
-python-pptx
-boto3
-youtube-transcript-api
-yt-dlp
-authlib
-waitress
+gunicorn==26.2.0
+python-pptx==1.0.2
+boto3==1.43.118
+youtube-transcript-api==1.2.4
+yt-dlp==2026.10.21
+authlib==1.9.1
+waitress==3.0.2
+
+# Not used directly -- pinned at the October 2026 security-fix versions so a
+# rebuild can't resolve back to a vulnerable release.
+werkzeug==3.1.9
+urllib3==2.8.0
+aiohttp==3.14.5
+certifi==2026.10.19

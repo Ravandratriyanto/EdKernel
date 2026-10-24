@@ -387,7 +387,7 @@ flowchart TD
     OUT -->|"error located"| MISC["app.py\ncore.misconceptions.normalise(category)\nusers.record_misconception()"]
     MISC --> MDB[("misconceptions table\ncurriculum / topic / category\n→ class misconception map")]
 
-    BOTTLE["COOL benchmark: HoughLinesP was\nthe bottleneck (453 ms x86, 1737 ms Graviton)\nnow gone — deskew reuses findContours\n(1.3 ms)"]
+    BOTTLE["Graviton benchmark: HoughLinesP was\nthe bottleneck (453 ms x86, 1737 ms Graviton)\nnow gone — deskew reuses findContours\n(1.3 ms)"]
     DESK -.-> BOTTLE
 
     style OUT    fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8

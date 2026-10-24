@@ -24,3 +24,6 @@ Pictures/
 # disables auth for the whole deployment. Prod falls back to settings.py
 # DEFAULTS (auth_required: True).
 settings.json
+
+# Holds live secrets (task definition with env vars).
+ecs-task-def.json

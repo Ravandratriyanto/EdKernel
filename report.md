@@ -109,9 +109,13 @@ plan and tool call.
 
 ---
 
-## 3. COOL Benchmark — Graviton vs x86
+## 3. OpenCV benchmark — Graviton (arm64) vs x86
 
-**Award target:** Best Use of COOL — Cloud-Optimized OpenCV Library on AWS Graviton.
+**Scope, stated plainly:** this is *not* a COOL result. The Graviton run used the
+stock `opencv-python` 5.0.0 wheel on Amazon Linux 2023 (Python 3.9), not the
+Cloud-Optimized OpenCV Library build, and the deployed app runs on x86 Fargate.
+We are not entering the COOL award. The benchmark is here because it found the
+pipeline's real bottleneck and drove a change that is in the deployed code.
 
 We benchmarked EdKernel's actual OpenCV pipeline operations on two architectures using a reproducible synthetic worksheet image (1200×900 px, ruled lines, handwriting blobs, fixed seed).
 
@@ -160,8 +164,7 @@ corrects an earlier, unfair result: a prior run showed Graviton "winning"
 against 5.0 on x86. On equal OpenCV 5.0, x86's SIMD advantage holds across the
 board — the honest result, not the one we hoped for.
 
-**The COOL win is not raw op speed — it is that the optimization makes the cheap
-hardware viable.** Replacing `HoughLinesP` with the contour-based deskew (below)
+**What the benchmark changed: it made the cheaper hardware viable.** Replacing `HoughLinesP` with the contour-based deskew (below)
 removes ~1,737 ms from every image on Graviton, collapsing per-image pipeline
 time from ~1.75 s to ~40 ms — roughly a **40× pipeline speedup on ARM**. Graviton
 (t4g) runs ~20% cheaper per hour than the equivalent x86 (t3); once the bottleneck
@@ -196,8 +199,8 @@ flipped the count with no pattern. The merge now also requires one blob's
 vertical centre to sit inside the other, which restores **9/9** and raises
 robustness under ±1° of extra rotation from 65/72 to 67/72 (the 5 remaining
 failures are all one case, a crossed-out scribble). Net: the single heaviest OpenCV call is gone from the hot path
-with no quality regression, and the replacement leans on `findContours` — an op
-where Graviton *wins*.
+with no quality regression, and the replacement reuses a `findContours` result the
+pipeline already has.
 
 ---
 
@@ -315,23 +318,48 @@ with the accuracy ceiling — a flag for review, not an authoritative grade.
 
 ## 5. Reproducibility
 
+Tested with Python 3.12 (the Docker image) and 3.14 (dev laptop). Every
+dependency is pinned in `requirements.txt`; `requirements.lock.txt` is the full
+`pip freeze` of the deployed image, for an exact rebuild.
+
+**Build and run locally**
 ```bash
-# Clone and run locally
-git clone <repo>
-cd EdKernel
-cp .env.example .env   # fill in GROQ_API_KEY
+git clone <repo> && cd EdKernel
+git config core.hooksPath hooks       # pre-commit hook that blocks API keys
+python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-python app.py
-
-# Run COOL benchmark (requires OpenCV)
-python bench/graviton_standalone.py --out bench/results/local.json
-
-# Deploy to ECS (requires AWS credentials + ECR repo)
-docker build -t edkernel .
-docker tag edkernel <ecr-uri>
-docker push <ecr-uri>
-# update ECS service to force new deployment
+cp .env.example .env                  # set API_KEY=<your Groq key>; leave the rest blank
+python -m core.rag.ingest --curriculum cambridge-as-p1   # builds the RAG index (once)
+python app.py                         # http://localhost:5000
 ```
+The tutor works without the ingest step, but answers are not grounded in the
+syllabus until it has run.
+
+**Test**
+```bash
+# Free: 40 regression checks (signal parsing, prompts, quiz key stripping). No API calls.
+python -m evals.run --only regress
+
+# Vision pipeline on the 9 labelled photos. Uses Groq quota (~a large slice of the
+# free 200k tokens/day); --pause keeps it under the 7k tokens/min limit.
+python -m evals.vision --provider groq --model openai/gpt-oss-120b \
+    --vision-model qwen/qwen3.8-27b --pause 20
+
+# OpenCV benchmark (Section 3). OpenCV + NumPy only, no EdKernel imports.
+python bench/graviton_standalone.py --out bench/results/local.json
+```
+
+**Deploy (AWS ECS Fargate)**
+```bash
+docker build -t edkernel .            # note the trailing "."
+aws ecr get-login-password --region ap-southeast-1 \
+  | docker login --username AWS --password-stdin <account>.dkr.ecr.ap-southeast-1.amazonaws.com
+docker tag edkernel <ecr-uri>:latest && docker push <ecr-uri>:latest
+aws ecs update-service --cluster edkernel-cluster --service edkernel-service --force-new-deployment
+```
+The task definition sets `API_KEY`, `BEHIND_PROXY=1`, `DB_DIR` and `CHROMA_DIR`,
+and mounts one EFS volume at `/app/.logs` and `/app/data/chroma`. Never set
+`DEV_BYPASS_AUTH` on a deployment.
 
 Raw benchmark JSON: `bench/results/x86.json`, `bench/results/graviton.json`  
 Benchmark script: `bench/graviton_standalone.py` — no EdKernel imports, runs on any machine with OpenCV and NumPy.
@@ -388,7 +416,7 @@ provider's API. EdKernel provisions **zero GPU/inference machines**.
 For **1,000 students** (peak concurrency ~5–15%, so ~50–150 active at once),
 most requests are I/O-bound — the app mostly waits on the inference API, with
 short CPU bursts only during OpenCV preprocessing (~0.05–0.3 s per image, per
-the COOL benchmark). Sizing:
+the benchmark above). Sizing:
 
 - **~2–4 small CPU app servers** (ECS Fargate, 1 vCPU / 2 GB) behind the ALB
 - **1 small RDS PostgreSQL** instance (replacing SQLite)

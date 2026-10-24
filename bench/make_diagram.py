@@ -1,129 +1,131 @@
+"""Draws docs/architecture.png. Every box here should match the code -- re-check
+core/vision/ and the ECS task definition before changing a label."""
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
-fig, ax = plt.subplots(figsize=(14, 9))
+from matplotlib.patches import FancyBboxPatch
+
+fig, ax = plt.subplots(figsize=(14, 9.4))
 ax.set_xlim(0, 14)
-ax.set_ylim(0, 9)
+ax.set_ylim(0, 9.4)
 ax.axis('off')
-fig.patch.set_facecolor('#0f1117')
-ax.set_facecolor('#0f1117')
-C = {'aws': '#232F3E', 'ecs': '#1a2332', 'opencv': '#1a3a2a', 'rag': '#1a2a3a', 'llm': '#2a1a3a', 'user': '#1e2a1e', 'service': '#2a2218', 'border': '#4a5568', 'orange': '#FF9900', 'green': '#2dba4e', 'blue': '#4a90d9', 'purple': '#9b59b6', 'teal': '#1abc9c', 'red': '#e74c3c', 'white': '#e8eaf0', 'grey': '#8892a4', 'arrow': '#6b7a8d'}
+BG = '#0f1117'
+fig.patch.set_facecolor(BG)
+ax.set_facecolor(BG)
+C = {'aws': '#232F3E', 'ecs': '#1a2332', 'opencv': '#1a3a2a', 'agent': '#2a2a14', 'rag': '#1a2a3a',
+     'llm': '#2a1a3a', 'user': '#1e2a1e', 'service': '#2a2218', 'ext': '#1a1a2e',
+     'orange': '#FF9900', 'green': '#2dba4e', 'blue': '#4a90d9', 'purple': '#9b59b6',
+     'teal': '#1abc9c', 'red': '#e74c3c', 'yellow': '#e6c84a', 'white': '#e8eaf0', 'grey': '#8892a4'}
 
-def box(ax, x, y, w, h, color, border, lw=1.5, radius=0.3, alpha=1.0):
-    p = FancyBboxPatch((x, y), w, h, boxstyle=f'round,pad=0,rounding_size={radius}', facecolor=color, edgecolor=border, linewidth=lw, alpha=alpha)
-    ax.add_patch(p)
 
-def label(ax, x, y, text, size=9, color='#e8eaf0', ha='center', va='center', bold=False):
-    weight = 'bold' if bold else 'normal'
-    ax.text(x, y, text, fontsize=size, color=color, ha=ha, va=va, fontweight=weight, fontfamily='monospace')
+def box(x, y, w, h, color, border, lw=1.5, radius=0.25):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle=f'round,pad=0,rounding_size={radius}',
+                                facecolor=color, edgecolor=border, linewidth=lw))
 
-def arrow(ax, x1, y1, x2, y2, color='#6b7a8d', lw=1.5, style='->'):
-    ax.annotate('', xy=(x2, y2), xytext=(x1, y1), arrowprops=dict(arrowstyle=style, color=color, lw=lw, connectionstyle='arc3,rad=0.0'))
 
-def chip(ax, x, y, w, h, text, bg, fg='#e8eaf0', size=7.5):
-    box(ax, x - w / 2, y - h / 2, w, h, bg, fg, lw=1.0, radius=0.15)
-    label(ax, x, y, text, size=size, color=fg)
-label(ax, 7, 8.65, 'EdKernel — Architecture', size=15, bold=True, color=C['orange'])
-label(ax, 7, 8.35, 'OpenCV AI Competition 2026 · AWS · Team Metis', size=9, color=C['grey'])
-box(ax, 0.4, 6.9, 2.2, 1.1, C['user'], C['green'], lw=1.5)
-label(ax, 1.5, 7.7, 'Student', size=9, bold=True, color=C['green'])
-label(ax, 1.5, 7.35, 'browser / phone', size=7.5, color=C['grey'])
-label(ax, 1.5, 7.05, 'upload handwritten working', size=7, color=C['white'])
-box(ax, 3.0, 6.9, 2.2, 1.1, C['user'], C['teal'], lw=1.5)
-label(ax, 4.1, 7.7, 'Teacher', size=9, bold=True, color=C['teal'])
-label(ax, 4.1, 7.35, 'browser', size=7.5, color=C['grey'])
-label(ax, 4.1, 7.05, 'progress dashboard', size=7, color=C['white'])
-box(ax, 0.2, 0.2, 13.6, 6.5, C['aws'], C['orange'], lw=2.0, radius=0.4)
-label(ax, 1.3, 6.55, 'AWS Cloud', size=8, bold=True, color=C['orange'])
-box(ax, 0.5, 2.5, 8.8, 3.8, C['ecs'], C['blue'], lw=1.8, radius=0.3)
-label(ax, 2.2, 6.15, 'ECS Fargate — Flask App', size=9, bold=True, color=C['blue'])
-box(ax, 0.7, 2.65, 4.1, 3.5, C['opencv'], C['green'], lw=1.4, radius=0.25)
-label(ax, 2.75, 6.0, 'OpenCV 5 Pipeline', size=8.5, bold=True, color=C['green'])
-stages = [('1. Blur reject', 'Laplacian variance → drop blurry frames'), ('2. Rectify', 'findContours → warpPerspective'), ('3. Binarise', 'bilateralFilter → adaptiveThreshold'), ('4. Deskew', 'contour angle estimate → warpAffine'), ('5. Segment', 'morphologyEx → findContours → boxes'), ('6. Step check', 'per-box transcribe → error localise')]
-for i, (title, detail) in enumerate(stages):
-    y = 5.6 - i * 0.49
-    label(ax, 1.05, y, title, size=7.5, bold=True, color=C['green'], ha='left')
-    label(ax, 1.05, y - 0.22, detail, size=6.5, color=C['grey'], ha='left')
-box(ax, 3.55, 2.72, 1.2, 0.45, '#2a1800', C['orange'], lw=1.2, radius=0.15)
-label(ax, 4.15, 2.945, 'COOL / Graviton', size=6.5, bold=True, color=C['orange'])
-box(ax, 5.05, 4.4, 3.95, 1.75, C['rag'], C['blue'], lw=1.4, radius=0.25)
-label(ax, 7.025, 6.0, 'ChromaDB RAG', size=8.5, bold=True, color=C['blue'])
-label(ax, 7.025, 5.65, 'syllabus chunks + past papers', size=7.5, color=C['white'])
-label(ax, 7.025, 5.35, '~3,500 chunks  ·  with_sources=True', size=7, color=C['grey'])
-label(ax, 7.025, 5.05, 'PMT source links shown to student', size=7, color=C['grey'])
-label(ax, 7.025, 4.72, 'topic → MCQ → hint ladder', size=7, color=C['grey'])
-box(ax, 5.05, 2.65, 3.95, 1.55, C['llm'], C['purple'], lw=1.4, radius=0.25)
-label(ax, 7.025, 4.05, 'LLM Client', size=8.5, bold=True, color=C['purple'])
-label(ax, 7.025, 3.72, 'core/llm/client.py', size=7.5, color=C['grey'])
-label(ax, 7.025, 3.42, 'Groq  ·  AWS Bedrock', size=7.5, color=C['white'])
-label(ax, 7.025, 3.12, 'gpt-oss-120b (text) · qwen3.8 (vision)', size=6.5, color=C['grey'])
-label(ax, 7.025, 2.82, 'fallback: server key → client key', size=7, color=C['grey'])
-box(ax, 0.5, 0.35, 2.8, 1.9, C['service'], '#e67e22', lw=1.4, radius=0.25)
-label(ax, 1.9, 2.1, 'users.db', size=8.5, bold=True, color='#e67e22')
-label(ax, 1.9, 1.78, 'SQLite → RDS (planned)', size=7, color=C['grey'])
-label(ax, 1.9, 1.5, 'per-student progress', size=7, color=C['white'])
-label(ax, 1.9, 1.25, 'topic accuracy', size=7, color=C['white'])
-label(ax, 1.9, 1.0, 'misconception map', size=7, color=C['white'])
-label(ax, 1.9, 0.72, '(live → teacher dash)', size=6.5, color=C['green'])
-box(ax, 3.5, 0.35, 2.3, 1.9, C['service'], C['orange'], lw=1.4, radius=0.25)
-label(ax, 4.65, 2.1, 'ECR', size=8.5, bold=True, color=C['orange'])
-label(ax, 4.65, 1.75, 'Elastic Container', size=7.5, color=C['white'])
-label(ax, 4.65, 1.48, 'Registry', size=7.5, color=C['white'])
-label(ax, 4.65, 1.15, 'pinned image', size=7, color=C['grey'])
-label(ax, 4.65, 0.88, 'judge can repro', size=7, color=C['grey'])
-label(ax, 4.65, 0.58, 'from repo', size=7, color=C['grey'])
-box(ax, 6.0, 0.35, 2.3, 1.9, C['service'], C['green'], lw=1.4, radius=0.25)
-label(ax, 7.15, 2.1, 'S3', size=8.5, bold=True, color=C['green'])
-label(ax, 7.15, 1.75, 'uploads, curricula', size=7.5, color=C['white'])
-label(ax, 7.15, 1.48, 'past papers', size=7.5, color=C['white'])
-label(ax, 7.15, 1.15, 'step crops', size=7, color=C['grey'])
-label(ax, 7.15, 0.88, 'vision traces', size=7, color=C['grey'])
-label(ax, 7.15, 0.58, '(planned)', size=6.5, color=C['grey'])
-box(ax, 8.5, 0.35, 2.3, 1.9, C['service'], C['red'], lw=1.4, radius=0.25)
-label(ax, 9.65, 2.1, 'CloudWatch', size=8.5, bold=True, color=C['red'])
-label(ax, 9.65, 1.75, 'per-stage latency', size=7.5, color=C['white'])
-label(ax, 9.65, 1.48, 'drop counts', size=7.5, color=C['white'])
-label(ax, 9.65, 1.15, 'frame throughput', size=7, color=C['grey'])
-label(ax, 9.65, 0.88, 'blur reject rate', size=7, color=C['grey'])
-label(ax, 9.65, 0.58, '(planned)', size=6.5, color=C['grey'])
-box(ax, 11.0, 3.5, 2.7, 3.0, '#1a1a2e', C['purple'], lw=1.8, radius=0.3)
-label(ax, 12.35, 6.35, 'Model APIs', size=8.5, bold=True, color=C['purple'])
-label(ax, 12.35, 5.95, 'Groq', size=8, bold=True, color=C['white'])
-label(ax, 12.35, 5.65, 'gpt-oss-120b · qwen3.8-vl', size=6.5, color=C['grey'])
-label(ax, 12.35, 5.3, '───────────', size=7, color=C['border'])
-label(ax, 12.35, 4.95, 'AWS Bedrock', size=8, bold=True, color=C['orange'])
-label(ax, 12.35, 4.65, 'Nova Lite', size=7, color=C['grey'])
-label(ax, 12.35, 4.35, '(pending account', size=6.5, color=C['red'])
-label(ax, 12.35, 4.1, 'verification)', size=6.5, color=C['red'])
-label(ax, 12.35, 3.72, 'us-east-1', size=7, color=C['grey'])
-box(ax, 11.0, 0.35, 2.7, 2.8, '#1a1e1a', C['teal'], lw=1.8, radius=0.3)
-label(ax, 12.35, 2.95, 'PMT', size=8.5, bold=True, color=C['teal'])
-label(ax, 12.35, 2.6, 'physicsandmaths', size=7.5, color=C['white'])
-label(ax, 12.35, 2.33, 'tutor.com', size=7.5, color=C['white'])
-label(ax, 12.35, 2.0, 'revision pages', size=7, color=C['grey'])
-label(ax, 12.35, 1.72, 'ingested via RAG', size=7, color=C['grey'])
-label(ax, 12.35, 1.4, 'source links', size=7, color=C['grey'])
-label(ax, 12.35, 1.12, 'shown to student', size=7, color=C['grey'])
-label(ax, 12.35, 0.72, 'on MCQ answers', size=7, color=C['grey'])
-arrow(ax, 1.5, 6.9, 2.5, 6.3, color=C['green'], lw=1.8)
-arrow(ax, 4.1, 6.9, 4.5, 6.3, color=C['teal'], lw=1.8)
-arrow(ax, 2.75, 2.65, 5.8, 4.05, color=C['green'], lw=1.5)
-arrow(ax, 7.0, 4.4, 7.0, 4.2, color=C['blue'], lw=1.5)
-arrow(ax, 4.65, 2.5, 4.65, 2.25, color=C['orange'], lw=1.5)
-arrow(ax, 6.5, 2.5, 7.0, 2.25, color=C['green'], lw=1.5)
-arrow(ax, 8.0, 2.8, 9.0, 2.25, color=C['red'], lw=1.5)
-arrow(ax, 1.9, 2.5, 1.9, 2.25, color='#e67e22', lw=1.5)
-arrow(ax, 9.0, 3.5, 11.0, 4.8, color=C['purple'], lw=1.5)
-arrow(ax, 9.0, 4.7, 11.0, 1.8, color=C['teal'], lw=1.5)
-ax.annotate('', xy=(2.75, 5.0), xytext=(5.05, 3.8), arrowprops=dict(arrowstyle='<->', color=C['green'], lw=1.4, connectionstyle='arc3,rad=-0.4'))
-label(ax, 4.35, 4.65, 'agentic loop\n perceive→decide→act', size=6.5, color=C['green'], ha='center')
-legend_items = [(C['green'], 'OpenCV 5 / COOL'), (C['blue'], 'AWS ECS / ECR'), (C['purple'], 'LLM inference'), (C['orange'], 'AWS services'), (C['teal'], 'External data')]
-for i, (color, text) in enumerate(legend_items):
-    x = 0.55 + i * 2.6
-    box(ax, x, 0.02, 0.25, 0.22, color, color, lw=1, radius=0.05)
-    label(ax, x + 0.45, 0.13, text, size=6.5, color=C['grey'], ha='left')
+def label(x, y, text, size=8, color=C['white'], ha='center', bold=False):
+    ax.text(x, y, text, fontsize=size, color=color, ha=ha, va='center',
+            fontweight='bold' if bold else 'normal', fontfamily='monospace')
+
+
+def arrow(x1, y1, x2, y2, color, text=None, rad=0.0):
+    ax.annotate('', xy=(x2, y2), xytext=(x1, y1),
+                arrowprops=dict(arrowstyle='->', color=color, lw=1.5, connectionstyle=f'arc3,rad={rad}'))
+    if text:
+        label((x1 + x2) / 2 + 0.08, (y1 + y2) / 2, text, size=6.5, color=color, ha='left')
+
+
+def panel(x, y, w, h, fill, border, title, lines, title_size=8.5):
+    """A box with a bold title and (text, colour) lines listed under it."""
+    box(x, y, w, h, fill, border, lw=1.4)
+    label(x + w / 2, y + h - 0.25, title, size=title_size, bold=True, color=border)
+    for i, (text, colour) in enumerate(lines):
+        label(x + w / 2, y + h - 0.58 - i * 0.27, text, size=6.8, color=colour)
+
+
+W, G = C['white'], C['grey']
+
+# -- title --
+label(7, 9.1, 'EdKernel — Architecture', size=15, bold=True, color=C['orange'])
+label(7, 8.8, 'OpenCV AI Competition 2026 · Team Metis (solo) · as deployed 2026-10-23', size=8.5, color=G)
+
+# -- users --
+panel(0.4, 7.45, 2.4, 1.05, C['user'], C['green'], 'Student', [('browser / phone', G), ('photo of handwritten working', W)])
+panel(3.1, 7.45, 2.4, 1.05, C['user'], C['teal'], 'Teacher', [('browser', G), ('misconception map, uploads', W)])
+panel(5.8, 7.45, 2.4, 1.05, C['user'], C['yellow'], 'Developer', [('/dev/<key> panel', G), ('live chats, study data', W)])
+
+# -- AWS cloud --
+box(0.2, 0.25, 10.0, 7.0, C['aws'], C['orange'], lw=2.0, radius=0.4)
+label(9.0, 7.02, 'AWS ap-southeast-1', size=8, bold=True, color=C['orange'])
+
+box(0.5, 6.25, 9.4, 0.5, C['service'], C['orange'], lw=1.3, radius=0.15)
+label(5.2, 6.5, 'Application Load Balancer  →  target group edkernel-tg  →  port 5000', size=7.5, color=W)
+for x in (1.6, 4.3, 7.0):
+    arrow(x, 7.45, x, 6.77, C['white'])
+
+# -- ECS Fargate task --
+box(0.5, 2.35, 9.4, 3.7, C['ecs'], C['blue'], lw=1.8, radius=0.3)
+label(5.2, 5.85, 'ECS Fargate (x86) — Flask app, gunicorn 2 workers × 4 threads  ·  app.py + /v1/ API', size=8, bold=True, color=C['blue'])
+
+# OpenCV pipeline -- names are the real functions in core/vision/
+box(0.7, 2.5, 3.9, 3.1, C['opencv'], C['green'], lw=1.4)
+label(2.65, 5.38, 'OpenCV 5 pipeline (deterministic)', size=8, bold=True, color=C['green'])
+stages = [('find_page', 'bilateralFilter→Canny→approxPolyDP'),
+          ('rectify  or  deskew', 'warpPerspective | minAreaRect→warpAffine'),
+          ('binarise', 'adaptiveThreshold (Gaussian)'),
+          ('segment', 'morphologyEx smear→findContours→merge'),
+          ('crop + _upscale', 'resize line to 96 px → vision model')]
+for i, (name, detail) in enumerate(stages):
+    y = 5.05 - i * 0.5
+    label(0.9, y, f'{i + 1}. {name}', size=7.2, bold=True, color=C['green'], ha='left')
+    label(1.08, y - 0.21, detail, size=6.3, color=G, ha='left')
+
+# agent loop -- check_working() in step_checker.py
+panel(4.8, 2.5, 2.5, 3.1, C['agent'], C['yellow'], 'Agent loop',
+      [('step_checker.py', G), ('read each line', W), ('unclear? re-crop', W), ('  wider + re-read', W),
+       ('still? ask student', W), ('repeat line? skip', W), ('check i vs i-1', W), ('→ red box + trace', C['red'])],
+      title_size=8)
+arrow(4.6, 3.3, 4.8, 3.3, C['green'])
+
+panel(7.5, 4.0, 2.2, 1.6, C['rag'], C['blue'], 'Socratic tutor',
+      [('core/tutor.py', G), ('hint ladder', W), ('RAG: ChromaDB', W), ('top-k chunks', G)], title_size=8)
+panel(7.5, 2.5, 2.2, 1.35, C['llm'], C['purple'], 'LLM client',
+      [('core/llm/client.py', G), ('temp 0, timeout 60s', W), ('Groq | Bedrock', W)], title_size=8)
+arrow(7.3, 3.2, 7.5, 3.2, C['yellow'])
+arrow(8.6, 4.0, 8.6, 3.85, C['blue'])
+
+# -- storage / ops row --
+panel(0.5, 0.45, 3.6, 1.65, C['service'], '#e67e22', 'EFS (one file system)',
+      [('users.db — SQLite (accounts, progress)', W), ('/app/.logs — session logs', W),
+       ('/app/data/chroma — RAG index', W), ('survives task restarts', G)])
+panel(4.3, 0.45, 2.1, 1.65, C['service'], C['orange'], 'ECR',
+      [('edkernel:latest', W), ('built from repo', G), ('Dockerfile', G)])
+panel(6.6, 0.45, 1.6, 1.65, C['service'], C['red'], 'CloudWatch',
+      [('Logs', W), ('/ecs/edkernel', G)], title_size=8)
+panel(8.4, 0.45, 1.6, 1.65, C['service'], C['orange'], 'Bedrock',
+      [('adapter built', W), ('account on', C['red']), ('hold', C['red'])], title_size=8)
+arrow(2.3, 2.35, 2.3, 2.1, '#e67e22')
+arrow(5.35, 2.1, 5.35, 2.35, C['orange'])
+arrow(7.4, 2.35, 7.4, 2.1, C['red'])
+arrow(9.2, 2.5, 9.2, 2.1, C['purple'])
+
+# -- outside AWS --
+panel(10.6, 3.6, 3.1, 2.45, C['ext'], C['purple'], 'Groq API (live provider)',
+      [('openai/gpt-oss-120b', W), ('tutor + step check', G), ('qwen/qwen3.8-27b', W), ('line transcription', G),
+       ('free tier: 7k ITPM', C['red']), ('200k tokens/day', C['red'])])
+arrow(9.7, 3.0, 10.6, 4.3, C['purple'], rad=-0.2)
+
+panel(10.6, 0.45, 3.1, 2.8, C['ext'], C['teal'], 'Offline / separate',
+      [('core/rag/ingest.py', W), ('builds the index once', G), ('per fresh EFS volume', G), ('', G),
+       ('bench/ — OpenCV timings', W), ('on Graviton arm64 EC2', G), ('(not part of this deploy)', G)])
+
+legend = [(C['green'], 'OpenCV 5'), (C['yellow'], 'agent decisions'), (C['blue'], 'app / RAG'),
+          (C['purple'], 'LLM inference'), (C['orange'], 'AWS services')]
+for i, (colour, text) in enumerate(legend):
+    x = 0.4 + i * 2.75
+    box(x, 0.0, 0.22, 0.18, colour, colour, lw=1, radius=0.04)
+    label(x + 0.35, 0.09, text, size=7, color=G, ha='left')
+
 plt.tight_layout(pad=0)
-plt.savefig('docs/architecture.png', dpi=160, bbox_inches='tight', facecolor=fig.get_facecolor())
+plt.savefig('docs/architecture.png', dpi=160, bbox_inches='tight', facecolor=BG)
 print('Saved: docs/architecture.png')

@@ -34,7 +34,9 @@ EXPOSE 5000
 # __main__ block passes debug=True, which exposes the Werkzeug debugger --
 # arbitrary code execution for anyone who can trigger an exception. Importing
 # app:app means that block never runs.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", \
-     "--workers", "2", "--threads", "4", \
-     "--timeout", "120", \
-     "app:app"]
+#
+# users.init() runs once, alone, before the workers start. Switching users.db
+# out of WAL needs every other connection closed; with two workers both calling
+# init() at boot they lock each other out and the task crash-loops. Retried
+# because EFS can hold a dead task's lock for a short while.
+CMD ["sh", "-c", "for i in 1 2 3 4 5 6; do python -c 'import users; users.init()' && break; echo 'users.init failed, retrying in 10s'; sleep 10; done; exec gunicorn --bind 0.0.0.0:5000 --workers 2 --threads 4 --timeout 120 app:app"]
