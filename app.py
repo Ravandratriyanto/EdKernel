@@ -107,17 +107,21 @@ def _check_llm_rate() -> object:
         return (resp, 429)
     return None
 
-def _chat_retry(messages: list[dict], **llm):
-    # Groq's free tier is 8k tokens/min shared by every user, and one tutor turn
-    # is ~2k, so a busy minute 429s. Wait out the "try again in Ns" and retry once.
-    # Only on 429, capped at 20s: retrying a 60s timeout would pass gunicorn's 120s.
+def _retry_429(fn):
+    # Groq's free tier is per-minute token budgets shared by every user (8k for
+    # chat, 7k input for vision), so a busy minute 429s. Wait out the "try again
+    # in Ns" and retry once. Only on 429, capped at 20s: retrying a 60s timeout
+    # would pass gunicorn's 120s.
     try:
-        return chat(messages, **llm)
+        return fn()
     except Exception as e:
         if '429' not in str(e):
             raise
         time.sleep(min(_retry_delay(e, 0), 20.0))
-        return chat(messages, **llm)
+        return fn()
+
+def _chat_retry(messages: list[dict], **llm):
+    return _retry_429(lambda: chat(messages, **llm))
 
 def _login_keys(username: str) -> tuple:
     return (f'ip:{request.remote_addr}', f"user:{(username or '').strip().lower()}")
@@ -738,7 +742,8 @@ def _apply_attachment(msg: dict, attachment: dict, provider: str, model: str='',
 def _transcription_note(attachment: dict, provider: str, model: str, host: str, api_key: str, vision_model: str) -> str:
     name = attachment.get('name', 'image')
     try:
-        text = transcribe(attachment['b64'], name=name, provider=provider, model=model, host=host, api_key=api_key, vision_model=vision_model)
+        # The step checker reads the same photo at the same time, so this often meets a 429.
+        text = _retry_429(lambda: transcribe(attachment['b64'], name=name, provider=provider, model=model, host=host, api_key=api_key, vision_model=vision_model))
     except Exception as e:
         app.logger.warning('Image transcription failed for %s: %s', name, e)
         return f'\n\n(Student attached image: {name} — could not be read: {e})'
