@@ -5736,8 +5736,12 @@ Each carries a comment naming the lab run so they don't get reverted.
   did not happen and the Study box has nothing to compare. N=2 completed
   quizzes. Claimable: "students used it, scored 3/10 and 4/10". **Not**
   claimable: any improvement.
-- **No interviews done** while the students were in the room — the one thing
-  that cannot be reconstructed from the log.
+- **Student feedback was spoken, not recorded.** The user talked with the
+  students after the session (corrected 2026-10-24 — this entry first said no
+  interviews happened). What they said, as reported by the user: "I really think
+  this is useful and helpful, it is fun to use and I can see many use cases for
+  this kind of AI." No written survey or recording, so it is one informal
+  account, not a measured result.
 - **The tutor caves when a student re-pastes a question** instead of answering
   (person 3, 00:40:58). Unfixed. Most damaging behaviour for the demo video.
 - **`[CORRECT]` fired on a pasted question** containing no answer, writing a junk
@@ -5774,8 +5778,8 @@ Each carries a comment naming the lab run so they don't get reverted.
 - **Demo video still at zero. Submission deadline still not confirmed.**
 - Pattern note, inverted for once: no new features were built, and the session
   produced the first real Impact evidence the project has — plus a named clip
-  for the demo video. The follow-up that converts it (interviews, and a pre-test
-  next time) was not done.
+  for the demo video. Informal post-session talks happened (see above); a pre-test and a written
+  survey next time are what would turn it into a measured result.
 - Two throwaway accounts created during diagnosis (`Zz Firewall Probe`,
   `Zz Diag`) were deleted along with their session/attempt rows. **Nothing
   committed** this session.

@@ -4204,13 +4204,18 @@
   // reply, and could not reach the input box. She left.
   (function fitToVisualViewport() {
     const vv = window.visualViewport;
-    if (!vv) return;                       // desktop / older browsers: CSS handles it
+    if (!vv) return;                       // older browsers: CSS handles it
     let frame = null;
     const fit = () => {
       if (frame) return;                   // coalesce bursts of resize events
       frame = requestAnimationFrame(() => {
         frame = null;
-        document.body.style.height = vv.height + 'px';
+        // Pin only while an on-screen keyboard is taking space. Otherwise clear
+        // the pin and let 100dvh fill the window: desktop browsers have
+        // visualViewport too, and a pin left over from a zoom or a closed
+        // keyboard kept the app at half the window's height.
+        const keyboard = window.innerHeight - vv.height;
+        document.body.style.height = keyboard > 80 && vv.scale < 1.01 ? vv.height + 'px' : '';
       });
     };
     vv.addEventListener('resize', fit);

@@ -177,7 +177,7 @@ face after a live Groq `[CORRECT]`; quiz maths + guest button in a real browser;
 Bedrock (AWS hold case 178878401900360); the `CHECK_PROMPT` notation fix.
 
 **Top scored work (still not started):** 5-min demo video (required deliverable);
-lab / user interviews (Impact 20% has zero validation); confirm the real submission
+Impact evidence is one 3-student lab (2026-10-23) + informal spoken feedback, no pre-test; confirm the real submission
 deadline (unreconciled since session 33).
 
 **Already done — don't re-propose:** HoughLinesP → contour deskew; `dev.html` exists;

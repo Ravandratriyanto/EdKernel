@@ -280,6 +280,11 @@ with the answer never handed over. When the same student wrote "i dont think im
 smart enough for this yet", the tutor acknowledged it and made the next step
 smaller.
 
+**What the students said.** I talked with the students after the session. Their
+feedback: *"I really think this is useful and helpful, it is fun to use and I
+can see many use cases for this kind of AI."* This was an informal conversation,
+not a recorded interview or survey, so it is one account, not a measured result.
+
 **Where it failed** (all listed in Section 7):
 - Person 3 pasted questions and never attempted one. On a re-paste the tutor
   gave the full worked answer — six minutes of answer extraction.
