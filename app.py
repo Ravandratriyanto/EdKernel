@@ -27,7 +27,7 @@ from pypdf import PdfReader
 from core.llm.client import generate, chat
 from core.rag.retrieve import retrieve
 from core.vision.image_handler import transcribe
-from core.vision.step_checker import check_working
+from core.vision.step_checker import check_working, _retry_delay
 from core.notes import notes_from_text
 from core.transcripts import fetch_transcript, transcribe_video 
 import core.misconceptions
@@ -106,6 +106,18 @@ def _check_llm_rate() -> object:
         resp.headers['Retry-After'] = str(wait)
         return (resp, 429)
     return None
+
+def _chat_retry(messages: list[dict], **llm):
+    # Groq's free tier is 8k tokens/min shared by every user, and one tutor turn
+    # is ~2k, so a busy minute 429s. Wait out the "try again in Ns" and retry once.
+    # Only on 429, capped at 20s: retrying a 60s timeout would pass gunicorn's 120s.
+    try:
+        return chat(messages, **llm)
+    except Exception as e:
+        if '429' not in str(e):
+            raise
+        time.sleep(min(_retry_delay(e, 0), 20.0))
+        return chat(messages, **llm)
 
 def _login_keys(username: str) -> tuple:
     return (f'ip:{request.remote_addr}', f"user:{(username or '').strip().lower()}")
@@ -498,7 +510,7 @@ def api_start():
         _apply_attachment(user_msg, attachment, provider, model, host, api_key, vision_model)
     messages = [{'role': 'system', 'content': system_prompt}, user_msg]
     started = time.monotonic()
-    raw = chat(messages, model=model, host=host, provider=provider, api_key=api_key)
+    raw = _chat_retry(messages, model=model, host=host, provider=provider, api_key=api_key)
     response, _ = _tutor_reply(raw)
     messages.append({'role': 'assistant', 'content': response})
     log_turn('start', session_id=data.get('session_id', ''), user_id=g.user['id'], mode='learn', topic=topic, provider=provider, model=model, input=topic, output=response, attachment=attachment_meta(attachment), tokens=getattr(raw, 'usage', {}), latency_ms=round((time.monotonic() - started) * 1000))
@@ -552,7 +564,7 @@ def api_reply():
     last_question = next((m['content'] for m in reversed(messages[:-1]) if m['role'] == 'assistant'), '')
 
     def _tutor_call():
-        return _tutor_reply(chat(messages, **llm))
+        return _tutor_reply(_chat_retry(messages, **llm))
 
     def _eval_call():
         if not user_input.strip():
