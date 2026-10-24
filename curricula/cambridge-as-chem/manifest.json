@@ -1,0 +1,15 @@
+{
+ "id": "cambridge-as-chem",
+ "name": "Chemistry",
+ "level": "AS Level",
+ "subjects": [
+  "atomic structure",
+  "chemical bonding",
+  "moles and equations"
+ ],
+ "tutor_style": "Socratic",
+ "prompt_flavour": "Cambridge International AS Level Chemistry (9701) exam preparation",
+ "collection": "cambridge_as_chem",
+ "reference_dir": "curricula/cambridge-as-chem/reference",
+ "papers_dir": "curricula/cambridge-as-chem/reference"
+}

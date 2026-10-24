@@ -1,0 +1,26 @@
+[
+ {
+  "id": "8dfa690a238fca0b",
+  "question": "Q1 [5]",
+  "marks": 5,
+  "answer": "(a) $n = 5.00 / 100.1 = 0.0500\\ \\mathrm{mol}$.\n(b) 1:1 ratio, so $0.0500 \\times 24.0 = 1.20\\ \\mathrm{dm^3}$.\n(c) $0.0500 \\times 56.1 = 2.80\\ \\mathrm{g}$."
+ },
+ {
+  "id": "39ac01acf39c5262",
+  "question": "Q2 [4]",
+  "marks": 4,
+  "answer": "(a) $\\mathrm{NaOH + HCl \\rightarrow NaCl + H_2O}$.\n(b) $n(\\mathrm{HCl}) = 0.100 \\times 0.0200 = 0.00200\\ \\mathrm{mol} = n(\\mathrm{NaOH})$; $c = 0.00200 / 0.0250 = 0.0800\\ \\mathrm{mol\\ dm^{-3}}$."
+ },
+ {
+  "id": "98e979a819bc5385",
+  "question": "Q3 [6]",
+  "marks": 6,
+  "answer": "(a) Trigonal pyramidal, about $107^\\circ$.\n(b) N has 3 bonding pairs and 1 lone pair; the lone pair repels more strongly than bonding pairs, pushing the bonds closer together (methane has 4 bonding pairs, $109.5^\\circ$).\n(c) Ammonia forms hydrogen bonds between molecules (N is small and very electronegative); phosphine only has weaker London forces and permanent dipole forces, so less energy is needed to separate its molecules."
+ },
+ {
+  "id": "8770963973c4d592",
+  "question": "Q4 [4]",
+  "marks": 4,
+  "answer": "(a) $1s^2\\,2s^2\\,2p^6\\,3s^2\\,3p^6\\,3d^6\\,4s^2$.\n(b) $1s^2\\,2s^2\\,2p^6\\,3s^2\\,3p^6\\,3d^5$ (4s electrons are lost first).\n(c) Aluminium's outer electron is in a 3p subshell, which is higher in energy than 3s and is partly shielded by the 3s electrons, so it is easier to remove."
+ }
+]

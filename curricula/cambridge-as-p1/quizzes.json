@@ -21,7 +21,8 @@
    }
   ],
   "answer": "C",
-  "working": "\\(\\left(\\frac{-3+7}{2}, \\frac{2+10}{2}\\right) = (2, 6)\\)"
+  "working": "\\(\\left(\\frac{-3+7}{2}, \\frac{2+10}{2}\\right) = (2, 6)\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q2",
@@ -45,7 +46,8 @@
    }
   ],
   "answer": "B",
-  "working": "\\(\\sqrt{6^2 + 8^2} = 10\\)"
+  "working": "\\(\\sqrt{6^2 + 8^2} = 10\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q3",
@@ -69,7 +71,8 @@
    }
   ],
   "answer": "D",
-  "working": "\\(y = \\frac{3}{4}x - 3\\)"
+  "working": "\\(y = \\frac{3}{4}x - 3\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q4",
@@ -93,7 +96,8 @@
    }
   ],
   "answer": "A",
-  "working": "\\(y + 4 = 2(x - 3)\\) gives \\(y = 2x - 10\\)"
+  "working": "\\(y + 4 = 2(x - 3)\\) gives \\(y = 2x - 10\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q5",
@@ -117,7 +121,8 @@
    }
   ],
   "answer": "C",
-  "working": "\\(m_l = -\\frac{1}{2}\\), so \\(m_\\perp = 2\\), and \\(y - 1 = 2(x - 4)\\) gives \\(y = 2x - 7\\)"
+  "working": "\\(m_l = -\\frac{1}{2}\\), so \\(m_\\perp = 2\\), and \\(y - 1 = 2(x - 4)\\) gives \\(y = 2x - 7\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q6",
@@ -141,7 +146,8 @@
    }
   ],
   "answer": "B",
-  "working": "Midpoint \\((3, 5)\\), \\(m_{AB} = 1\\), so \\(m_\\perp = -1\\) and \\(y = -x + 8\\)"
+  "working": "Midpoint \\((3, 5)\\), \\(m_{AB} = 1\\), so \\(m_\\perp = -1\\) and \\(y = -x + 8\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q7",
@@ -165,7 +171,8 @@
    }
   ],
   "answer": "D",
-  "working": "\\(\\frac{1}{2} \\times 8 \\times 5 = 20\\)"
+  "working": "\\(\\frac{1}{2} \\times 8 \\times 5 = 20\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "cg-q8",
@@ -189,7 +196,8 @@
    }
   ],
   "answer": "A",
-  "working": "\\(A(4, 0)\\), \\(B(0, 10)\\), so \\(AB = \\sqrt{16 + 100} = \\sqrt{116} = 2\\sqrt{29}\\)"
+  "working": "\\(A(4, 0)\\), \\(B(0, 10)\\), so \\(AB = \\sqrt{16 + 100} = \\sqrt{116} = 2\\sqrt{29}\\)",
+  "quiz": "Lab quiz"
  },
  {
   "id": "p1-q1a",
@@ -213,7 +221,8 @@
    }
   ],
   "answer": "B",
-  "working": "Complete the square: \\((x-2)^2+(y+3)^2=12+4+9=25\\). Centre \\((2,-3)\\), radius \\(\\sqrt{25}=5\\)."
+  "working": "Complete the square: \\((x-2)^2+(y+3)^2=12+4+9=25\\). Centre \\((2,-3)\\), radius \\(\\sqrt{25}=5\\).",
+  "quiz": "Lab quiz"
  },
  {
   "id": "p1-q2a",
@@ -237,6 +246,607 @@
    }
   ],
   "answer": "D",
-  "working": "\\(m_{AB}=\\frac{3-1}{5-1}=\\frac12\\), \\(m_{BC}=\\frac{7-3}{3-5}=-2\\). Product \\(=-1\\), so \\(AB\\perp BC\\). (Equal lengths alone do not prove a right angle.)"
+  "working": "\\(m_{AB}=\\frac{3-1}{5-1}=\\frac12\\), \\(m_{BC}=\\frac{7-3}{3-5}=-2\\). Product \\(=-1\\), so \\(AB\\perp BC\\). (Equal lengths alone do not prove a right angle.)",
+  "quiz": "Lab quiz"
+ },
+ {
+  "id": "ci-q1",
+  "quiz": "Circles",
+  "text": "What are the centre and radius of \\((x-3)^2+(y+2)^2=25\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Centre \\((-3,2)\\), radius \\(5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Centre \\((3,-2)\\), radius \\(5\\)"
+   },
+   {
+    "letter": "C",
+    "text": "Centre \\((3,-2)\\), radius \\(25\\)"
+   },
+   {
+    "letter": "D",
+    "text": "Centre \\((-3,2)\\), radius \\(25\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "\\((x-a)^2+(y-b)^2=r^2\\) has centre \\((a,b)\\) and radius \\(r\\), so centre \\((3,-2)\\), \\(r=\\sqrt{25}=5\\)"
+ },
+ {
+  "id": "ci-q2",
+  "quiz": "Circles",
+  "text": "Find the centre and radius of \\(x^2+y^2+6x-8y=0\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Centre \\((3,-4)\\), radius \\(5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Centre \\((-3,4)\\), radius \\(25\\)"
+   },
+   {
+    "letter": "C",
+    "text": "Centre \\((-6,8)\\), radius \\(10\\)"
+   },
+   {
+    "letter": "D",
+    "text": "Centre \\((-3,4)\\), radius \\(5\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\((x+3)^2-9+(y-4)^2-16=0\\), so \\((x+3)^2+(y-4)^2=25\\)"
+ },
+ {
+  "id": "ci-q3",
+  "quiz": "Circles",
+  "text": "Find the centre and radius of \\(x^2+y^2-10x+4y+20=0\\).",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Centre \\((5,-2)\\), radius \\(3\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Centre \\((-5,2)\\), radius \\(3\\)"
+   },
+   {
+    "letter": "C",
+    "text": "Centre \\((5,-2)\\), radius \\(7\\)"
+   },
+   {
+    "letter": "D",
+    "text": "Centre \\((10,-4)\\), radius \\(3\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "\\((x-5)^2+(y+2)^2=25+4-20=9\\), so \\(r=3\\)"
+ },
+ {
+  "id": "ci-q4",
+  "quiz": "Circles",
+  "text": "What is the equation of the circle with centre \\((2,-1)\\) that passes through \\((5,3)\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((x-2)^2+(y+1)^2=5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((x+2)^2+(y-1)^2=25\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((x-2)^2+(y+1)^2=25\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((x-2)^2+(y+1)^2=7\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "\\(r^2=(5-2)^2+(3+1)^2=9+16=25\\)"
+ },
+ {
+  "id": "ci-q5",
+  "quiz": "Circles",
+  "text": "\\(A(-1,4)\\) and \\(B(5,-4)\\) are the ends of a diameter. What is the equation of the circle?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((x+2)^2+y^2=25\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((x-2)^2+y^2=100\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((x-2)^2+y^2=25\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((x-2)^2+(y-4)^2=25\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "Centre = midpoint \\((2,0)\\). \\(AB=\\sqrt{6^2+8^2}=10\\), so \\(r=5\\)"
+ },
+ {
+  "id": "ci-q6",
+  "quiz": "Circles",
+  "text": "Where is the point \\((6,1)\\) compared with the circle \\((x-2)^2+(y-4)^2=25\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "On the circle"
+   },
+   {
+    "letter": "B",
+    "text": "Inside the circle"
+   },
+   {
+    "letter": "C",
+    "text": "Outside the circle"
+   },
+   {
+    "letter": "D",
+    "text": "It cannot be told without a diagram"
+   }
+  ],
+  "answer": "A",
+  "working": "\\((6-2)^2+(1-4)^2=16+9=25\\), which equals \\(r^2\\), so the point is on the circle"
+ },
+ {
+  "id": "ci-q7",
+  "quiz": "Circles",
+  "text": "For what value of \\(k\\) is \\(x^2+y^2-4x+2y+k=0\\) a circle of radius \\(3\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(k=4\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(k=14\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(k=-14\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(k=-4\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\((x-2)^2+(y+1)^2=5-k\\), and \\(5-k=9\\) gives \\(k=-4\\)"
+ },
+ {
+  "id": "ci-q8",
+  "quiz": "Circles",
+  "text": "\\(P(5,4)\\) lies on the circle \\((x-1)^2+(y-2)^2=20\\). What is the gradient of the tangent at \\(P\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(\\frac{1}{2}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(-2\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(2\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(-\\frac{1}{2}\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "Radius gradient \\(\\frac{4-2}{5-1}=\\frac{1}{2}\\). The tangent is perpendicular, so \\(-2\\)"
+ },
+ {
+  "id": "ti-q1",
+  "quiz": "Tangents and intersections",
+  "text": "What is the equation of the tangent to \\(x^2+y^2=25\\) at \\((3,4)\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(4x-3y=0\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(3x+4y=25\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(4x+3y=24\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(3x-4y=-7\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "Radius gradient \\(\\frac{4}{3}\\), tangent gradient \\(-\\frac{3}{4}\\). \\(y-4=-\\frac{3}{4}(x-3)\\) gives \\(3x+4y=25\\)"
+ },
+ {
+  "id": "ti-q2",
+  "quiz": "Tangents and intersections",
+  "text": "Where does the line \\(y=x+1\\) meet the circle \\(x^2+y^2=13\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((-2,-1)\\) and \\((3,4)\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Only at \\((2,3)\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((3,2)\\) and \\((-2,-3)\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((2,3)\\) and \\((-3,-2)\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\(x^2+(x+1)^2=13\\) gives \\(x^2+x-6=0\\), so \\(x=2\\) or \\(x=-3\\)"
+ },
+ {
+  "id": "ti-q3",
+  "quiz": "Tangents and intersections",
+  "text": "For which values of \\(c\\) is the line \\(y=x+c\\) a tangent to \\(x^2+y^2=8\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(c=\\pm 4\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(c=\\pm 2\\sqrt{2}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(c=\\pm 8\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(c=\\pm 2\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "\\(2x^2+2cx+c^2-8=0\\). Tangent when \\(b^2-4ac=4c^2-8(c^2-8)=0\\), so \\(c^2=16\\)"
+ },
+ {
+  "id": "ti-q4",
+  "quiz": "Tangents and intersections",
+  "text": "How many times does the line \\(y=2x-1\\) meet the circle \\(x^2+y^2=4\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Never"
+   },
+   {
+    "letter": "B",
+    "text": "Once (it is a tangent)"
+   },
+   {
+    "letter": "C",
+    "text": "Twice"
+   },
+   {
+    "letter": "D",
+    "text": "It cannot be told without solving fully"
+   }
+  ],
+  "answer": "C",
+  "working": "\\(5x^2-4x-3=0\\), and \\(b^2-4ac=16+60=76>0\\), so two points"
+ },
+ {
+  "id": "ti-q5",
+  "quiz": "Tangents and intersections",
+  "text": "The line \\(y=3\\) cuts the circle \\(x^2+y^2=25\\) at \\(A\\) and \\(B\\). What is the length of the chord \\(AB\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(4\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(10\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(8\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(6\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "\\(x^2+9=25\\), so \\(x=\\pm 4\\) and \\(AB=4-(-4)=8\\)"
+ },
+ {
+  "id": "ti-q6",
+  "quiz": "Tangents and intersections",
+  "text": "The circle \\((x-2)^2+(y-1)^2=9\\) and the line \\(3x+4y+5=0\\). Which is true?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "The line is a tangent to the circle"
+   },
+   {
+    "letter": "B",
+    "text": "The line cuts the circle at two points"
+   },
+   {
+    "letter": "C",
+    "text": "The line misses the circle"
+   },
+   {
+    "letter": "D",
+    "text": "The line passes through the centre"
+   }
+  ],
+  "answer": "A",
+  "working": "Distance from \\((2,1)\\) is \\(\\frac{|6+4+5|}{\\sqrt{3^2+4^2}}=3\\), which equals the radius"
+ },
+ {
+  "id": "ti-q7",
+  "quiz": "Tangents and intersections",
+  "text": "What is the length of the tangent from \\(P(7,1)\\) to the circle \\(x^2+y^2=25\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(\\sqrt{50}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(25\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(3\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(5\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\(OP^2=49+1=50\\). Tangent length \\(=\\sqrt{50-25}=5\\)"
+ },
+ {
+  "id": "ti-q8",
+  "quiz": "Tangents and intersections",
+  "text": "\\((4,4)\\) lies on \\(x^2+y^2-6x-4y+8=0\\). What is the tangent at that point?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(2x-y=4\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(x+2y=12\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(2x+y=12\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(x-2y=-4\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "Centre \\((3,2)\\), radius gradient \\(2\\), tangent gradient \\(-\\frac{1}{2}\\). \\(y-4=-\\frac{1}{2}(x-4)\\)"
+ },
+ {
+  "id": "mx-q1",
+  "quiz": "Mixed exam practice",
+  "text": "What is the perpendicular distance from \\((1,2)\\) to the line \\(3x-4y+15=0\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(10\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(2\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(\\frac{10}{7}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(4\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "\\(\\frac{|3(1)-4(2)+15|}{\\sqrt{3^2+4^2}}=\\frac{10}{5}=2\\)"
+ },
+ {
+  "id": "mx-q2",
+  "quiz": "Mixed exam practice",
+  "text": "A circle passes through \\(O(0,0)\\), \\(B(6,0)\\) and \\(C(0,8)\\). What is its equation?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((x-3)^2+(y-4)^2=100\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((x-6)^2+(y-8)^2=25\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((x+3)^2+(y+4)^2=25\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((x-3)^2+(y-4)^2=25\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "Angle \\(BOC=90^\\circ\\), so \\(BC\\) is a diameter: centre \\((3,4)\\), \\(BC=10\\)"
+ },
+ {
+  "id": "mx-q3",
+  "quiz": "Mixed exam practice",
+  "text": "\\(L_1: 2x+3y=6\\) and \\(L_2: 3x-2y=1\\). Which statement is correct?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Perpendicular, because \\(-\\frac{2}{3}\\times\\frac{3}{2}=-1\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Parallel, because they have the same gradient"
+   },
+   {
+    "letter": "C",
+    "text": "Perpendicular, because \\(2\\times 3=6\\)"
+   },
+   {
+    "letter": "D",
+    "text": "Neither parallel nor perpendicular"
+   }
+  ],
+  "answer": "A",
+  "working": "Gradients are \\(-\\frac{2}{3}\\) and \\(\\frac{3}{2}\\), and their product is \\(-1\\)"
+ },
+ {
+  "id": "mx-q4",
+  "quiz": "Mixed exam practice",
+  "text": "Where do the lines \\(y=3x-5\\) and \\(x+2y=11\\) meet?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((4,7)\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((1,5)\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((3,4)\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((2,1)\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "\\(x+2(3x-5)=11\\) gives \\(7x=21\\), so \\(x=3, y=4\\)"
+ },
+ {
+  "id": "mx-q5",
+  "quiz": "Mixed exam practice",
+  "text": "\\(M(4,1)\\) is the midpoint of \\(PQ\\), and \\(P\\) is \\((1,-3)\\). What is \\(Q\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((2.5,-1)\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((3,4)\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((7,5)\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((5,7)\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "\\(Q=(2(4)-1,\\ 2(1)+3)=(7,5)\\)"
+ },
+ {
+  "id": "mx-q6",
+  "quiz": "Mixed exam practice",
+  "text": "A circle has centre \\((-1,3)\\) and touches the \\(x\\)-axis. What is its equation?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\((x+1)^2+(y-3)^2=9\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\((x+1)^2+(y-3)^2=1\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\((x-1)^2+(y+3)^2=9\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\((x+1)^2+(y-3)^2=3\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "Touching the \\(x\\)-axis means the radius is the height of the centre, \\(r=3\\)"
+ },
+ {
+  "id": "mx-q7",
+  "quiz": "Mixed exam practice",
+  "text": "What is the \\(y\\)-intercept of the line through \\((2,5)\\) and \\((6,-3)\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(4.5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(-2\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(1\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(9\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "Gradient \\(\\frac{-3-5}{6-2}=-2\\), so \\(y=-2x+9\\)"
+ },
+ {
+  "id": "mx-q8",
+  "quiz": "Mixed exam practice",
+  "text": "The point \\((k,2)\\) lies on the circle \\(x^2+y^2-2x=7\\). What are the possible values of \\(k\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(k=-3\\) or \\(k=1\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(k=3\\) or \\(k=-1\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(k=3\\) only"
+   },
+   {
+    "letter": "D",
+    "text": "\\(k=1\\) or \\(k=7\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "\\(k^2+4-2k=7\\) gives \\(k^2-2k-3=0\\), so \\((k-3)(k+1)=0\\)"
  }
 ]

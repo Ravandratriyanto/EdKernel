@@ -14,6 +14,12 @@ def load(curriculum_id: str) -> list[dict]:
     except Exception:
         return []
     return data if isinstance(data, list) else []
-
+def names(curriculum_id: str) -> list[str]:
+    return list(dict.fromkeys(q.get('quiz') or 'Quiz' for q in load(curriculum_id)))
+def load_quiz(curriculum_id: str, name: str='') -> list[dict]:
+    quizzes = names(curriculum_id)
+    if name not in quizzes:
+        name = quizzes[0] if quizzes else ''
+    return [q for q in load(curriculum_id) if (q.get('quiz') or 'Quiz') == name]
 def pick(curriculum_id: str, n: int=5) -> list[dict]:
     return load(curriculum_id)[:n]

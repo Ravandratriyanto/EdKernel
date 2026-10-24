@@ -1,0 +1,47 @@
+[
+ {
+  "name": "Atomic structure",
+  "subtopics": [
+   "protons, neutrons and electrons",
+   "isotopes",
+   "electron configuration",
+   "ionisation energy"
+  ],
+  "objectives": [
+   "Work out the numbers of protons, neutrons and electrons in atoms and ions",
+   "Write full electron configurations, including the 3d and 4s order",
+   "Explain trends in first ionisation energy across a period"
+  ]
+ },
+ {
+  "name": "Chemical bonding",
+  "subtopics": [
+   "ionic and covalent bonding",
+   "shapes of molecules (VSEPR)",
+   "polarity",
+   "intermolecular forces"
+  ],
+  "objectives": [
+   "Predict shapes and bond angles from electron pairs",
+   "Decide whether a molecule is polar from its shape",
+   "Explain boiling points using hydrogen bonding and London forces"
+  ]
+ },
+ {
+  "name": "Moles and equations",
+  "subtopics": [
+   "relative formula mass",
+   "the mole",
+   "gas volumes",
+   "concentration",
+   "empirical formulae",
+   "titrations"
+  ],
+  "objectives": [
+   "Convert between mass, moles, gas volume and concentration",
+   "Balance equations and use them to find reacting masses",
+   "Find an empirical formula from percentage composition",
+   "Work out an unknown concentration from titration results"
+  ]
+ }
+]

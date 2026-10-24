@@ -964,9 +964,10 @@ def api_quiz_start():
     if not cid:
         return (jsonify({'error': 'No curriculum given'}), 400)
     source = 'bank'
-    # A hand-written bank is a whole test (e.g. the 14-part lab quiz), so serve
-    # all of it (capped at 20). n only sizes the generated fallback below.
-    questions = _attempt_questions(quizbank.load(cid)[:20])
+    # A hand-written bank can hold several quizzes (the 'quiz' field on each
+    # question). Serve the one asked for, whole (capped at 20); no name gives
+    # the first. n only sizes the generated fallback below.
+    questions = _attempt_questions(quizbank.load_quiz(cid, (data.get('quiz') or '').strip())[:20])
     if not questions:
         err = _check_llm_rate()
         if err:
@@ -980,6 +981,11 @@ def api_quiz_start():
         return (jsonify({'error': 'No quiz questions available for this class yet.'}), 404)
     attempt_id = users.create_attempt(g.user['id'], cid, topic, questions)
     return jsonify({'attempt_id': attempt_id, 'source': source, 'questions': _public_questions(questions)})
+
+@app.route('/api/quiz/list', methods=['POST'])
+def api_quiz_list():
+    cid = ((request.json or {}).get('curriculum_id') or '').strip()
+    return jsonify({'quizzes': quizbank.names(cid)})
 
 @app.route('/api/quiz/answer', methods=['POST'])
 def api_quiz_answer():

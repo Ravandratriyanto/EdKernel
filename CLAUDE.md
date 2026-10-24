@@ -94,13 +94,24 @@ git config core.hooksPath hooks
 Work on `main` and push there — local `master` was renamed to `main` in session 21 and tracks `origin/main`. (`master` still exists on GitHub but is stale.)
 Commit and push **only when asked**. Write devlog entries when asked, matching the existing structure including an honest "Known issues" section.
 
-## How the user likes to work
+## How we work
 
-**Bias toward action, not questions.** When the task is clear, make the reasonable call and do it. Do not pause to ask which approach, which file, or whether to proceed — just go. They will redirect if needed.
+The user owns the project: they set the direction, make the design and scope
+decisions, and question or correct Claude when it is wrong. They check Claude's
+advice against other sources, and they catch bugs Claude misses. Claude is an
+assistant that proposes, implements and checks. Review goes both ways: Claude
+reviews the code the user types, and the user reviews Claude's claims and changes.
+
+What that means in practice:
+
+**Bias toward action, not questions.** When the task is clear, make the reasonable call and do it. Do not pause to ask which approach, which file, or whether to proceed — just go. They will redirect if needed. But for facts only the user knows (what students said, what happened in the lab), ask — don't fill the gap from the devlog.
+
+**Say when you disagree, and say when you were wrong.** If a request conflicts with the scored work, the deadline or an earlier decision, say so in one line, then do what they decide. When the user corrects you, fix it everywhere it was written, not just in the reply.
 
 **Established split:** Claude does frontend (`static/`) directly; the user types
 backend (`core/`, `app.py`, `users.py`) to learn it — give file + exact change + syntax
-notes. "Just fix it" / "can u just fix it" overrides this for that task only.
+notes, then review what they typed (pyflakes + a real run) before calling it done.
+"Just fix it" / "fix please" overrides this for that task only.
 
 **Ask before writing code they might want to type.** They often want to read every line and type it in — that is how they learn. If they say "let me code it", give the file path + exact change to make, not edits to files. If they say "just do it" or "run it", go ahead.
 
@@ -148,7 +159,7 @@ Last recorded redeploy: session 31. Everything since is **not deployed**.
 `http://<LAN IP>:5000`. Admin: log in as `4dmin` (password = `ADPASS` env, **still
 empty in `.env`**) at `localhost`, then `/chats` — a dev panel that shows many chats
 side by side, live (`static/dev.html` — un-gitignored 2026-10-22, so clones get it).
-Only one class is live: `cambridge-as-p1`, named **Math**; the GCSE
+Two classes are live: `cambridge-as-p1` (**Math**, 4 quizzes) and `cambridge-as-chem` (**Chemistry**, 2 quizzes, no RAG index yet); the GCSE
 classes are in `curricula_archive/`. Lab quiz = 10 MCQs (user's 8 straight-line + 2
 circle); the tutor/Questions tab still use the old 5 circle questions. Tutor avatar is
 the user's character — smiles when the student is right.
@@ -162,9 +173,7 @@ still valid.
 **Open — security:** `[ANSWER: X]` reaches the browser from `/api/papers` and
 `/api/practice_from_error`; no CSRF; curricula have no owner.
 
-**Open — correctness:** `build_tutor_prompt()` in `core/prompts.py` replaces a sentence
-the prompt no longer contains, so **every class gets the generic "SAT and A-level"
-tutor** (fix given to user, not applied); admin auto-research reads `TAVILY_API_KEY`
+**Open — correctness:** admin auto-research reads `TAVILY_API_KEY`
 (see Env vars); generated MCQs put every answer on A; notes model makes arithmetic
 slips; `sessionlog.LOG_DIR` ignores `DB_DIR` (tests write to the real log).
 

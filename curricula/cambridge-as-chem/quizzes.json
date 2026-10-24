@@ -1,0 +1,402 @@
+[
+ {
+  "id": "mo-q1",
+  "quiz": "Moles and equations",
+  "text": "How many moles are in \\(4.00\\ \\mathrm{g}\\) of sodium hydroxide, \\(\\mathrm{NaOH}\\)? (\\(M_r = 40.0\\))",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(10.0\\ \\mathrm{mol}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(0.100\\ \\mathrm{mol}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(160\\ \\mathrm{mol}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(1.00\\ \\mathrm{mol}\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "\\(n = \\frac{m}{M_r} = \\frac{4.00}{40.0} = 0.100\\ \\mathrm{mol}\\)"
+ },
+ {
+  "id": "mo-q2",
+  "quiz": "Moles and equations",
+  "text": "What is the relative formula mass of calcium carbonate, \\(\\mathrm{CaCO_3}\\)? (\\(A_r\\): Ca 40.1, C 12.0, O 16.0)",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(68.1\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(84.1\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(116.1\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(100.1\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\(40.1 + 12.0 + 3(16.0) = 100.1\\)"
+ },
+ {
+  "id": "mo-q3",
+  "quiz": "Moles and equations",
+  "text": "What volume does \\(0.250\\ \\mathrm{mol}\\) of a gas take up at room temperature and pressure? (1 mol = \\(24.0\\ \\mathrm{dm^3}\\))",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(6.00\\ \\mathrm{dm^3}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(96.0\\ \\mathrm{dm^3}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(0.0104\\ \\mathrm{dm^3}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(24.0\\ \\mathrm{dm^3}\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "\\(V = n \\times 24.0 = 0.250 \\times 24.0 = 6.00\\ \\mathrm{dm^3}\\)"
+ },
+ {
+  "id": "mo-q4",
+  "quiz": "Moles and equations",
+  "text": "\\(0.0500\\ \\mathrm{mol}\\) of a solute is dissolved to make \\(250\\ \\mathrm{cm^3}\\) of solution. What is the concentration?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(0.0125\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(12.5\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(0.200\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(5.00\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "Change \\(250\\ \\mathrm{cm^3}\\) to \\(0.250\\ \\mathrm{dm^3}\\): \\(c = \\frac{0.0500}{0.250} = 0.200\\)"
+ },
+ {
+  "id": "mo-q5",
+  "quiz": "Moles and equations",
+  "text": "Propane burns completely: \\(\\mathrm{C_3H_8} + x\\,\\mathrm{O_2 \\rightarrow 3CO_2 + 4H_2O}\\). What is \\(x\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(3.5\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(7\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(5\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(10\\)"
+   }
+  ],
+  "answer": "C",
+  "working": "Oxygen atoms on the right: \\(3(2) + 4(1) = 10\\), so \\(5\\ \\mathrm{O_2}\\)"
+ },
+ {
+  "id": "mo-q6",
+  "quiz": "Moles and equations",
+  "text": "A compound is 40.0% carbon, 6.7% hydrogen and 53.3% oxygen by mass. What is its empirical formula?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(\\mathrm{CH_2O}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(\\mathrm{C_2H_4O}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(\\mathrm{CHO}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(\\mathrm{CH_4O}\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "\\(\\frac{40.0}{12.0} : \\frac{6.7}{1.0} : \\frac{53.3}{16.0} = 3.33 : 6.7 : 3.33 = 1 : 2 : 1\\)"
+ },
+ {
+  "id": "mo-q7",
+  "quiz": "Moles and equations",
+  "text": "\\(10.0\\ \\mathrm{g}\\) of \\(\\mathrm{CaCO_3}\\) (\\(M_r = 100\\)) is heated: \\(\\mathrm{CaCO_3 \\rightarrow CaO + CO_2}\\). What mass of \\(\\mathrm{CO_2}\\) is made?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(10.0\\ \\mathrm{g}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(5.60\\ \\mathrm{g}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(2.20\\ \\mathrm{g}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(4.40\\ \\mathrm{g}\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\(n = 0.100\\ \\mathrm{mol}\\), 1:1 ratio, so \\(0.100 \\times 44.0 = 4.40\\ \\mathrm{g}\\)"
+ },
+ {
+  "id": "mo-q8",
+  "quiz": "Moles and equations",
+  "text": "\\(25.0\\ \\mathrm{cm^3}\\) of \\(\\mathrm{NaOH}\\) is neutralised by \\(20.0\\ \\mathrm{cm^3}\\) of \\(0.100\\ \\mathrm{mol\\ dm^{-3}}\\) \\(\\mathrm{HCl}\\). What is the concentration of the \\(\\mathrm{NaOH}\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(0.125\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(0.0800\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(0.100\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(0.00200\\ \\mathrm{mol\\ dm^{-3}}\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "\\(n(\\mathrm{HCl}) = 0.100 \\times 0.0200 = 0.00200\\); 1:1, so \\(c = \\frac{0.00200}{0.0250} = 0.0800\\)"
+ },
+ {
+  "id": "ab-q1",
+  "quiz": "Atoms and bonding",
+  "text": "How many protons, neutrons and electrons are in the ion \\(^{37}\\mathrm{Cl^-}\\)? (Cl has \\(Z = 17\\))",
+  "options": [
+   {
+    "letter": "A",
+    "text": "17 protons, 20 neutrons, 17 electrons"
+   },
+   {
+    "letter": "B",
+    "text": "17 protons, 20 neutrons, 18 electrons"
+   },
+   {
+    "letter": "C",
+    "text": "17 protons, 37 neutrons, 18 electrons"
+   },
+   {
+    "letter": "D",
+    "text": "18 protons, 20 neutrons, 17 electrons"
+   }
+  ],
+  "answer": "B",
+  "working": "Protons \\(= Z = 17\\), neutrons \\(= 37 - 17 = 20\\), and the \\(-\\) charge adds one electron: \\(18\\)"
+ },
+ {
+  "id": "ab-q2",
+  "quiz": "Atoms and bonding",
+  "text": "What is the electron configuration of an iron atom, \\(\\mathrm{Fe}\\) (\\(Z = 26\\))?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(1s^2\\,2s^2\\,2p^6\\,3s^2\\,3p^6\\,3d^8\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(1s^2\\,2s^2\\,2p^6\\,3s^2\\,3p^6\\,4s^2\\,4p^6\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(1s^2\\,2s^2\\,2p^6\\,3s^2\\,3p^6\\,3d^4\\,4s^2\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(1s^2\\,2s^2\\,2p^6\\,3s^2\\,3p^6\\,3d^6\\,4s^2\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "18 electrons fill to \\(3p^6\\); the last 8 go \\(4s^2\\) then \\(3d^6\\)"
+ },
+ {
+  "id": "ab-q3",
+  "quiz": "Atoms and bonding",
+  "text": "What are the shape and bond angle of ammonia, \\(\\mathrm{NH_3}\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Trigonal pyramidal, about \\(107^\\circ\\)"
+   },
+   {
+    "letter": "B",
+    "text": "Trigonal planar, \\(120^\\circ\\)"
+   },
+   {
+    "letter": "C",
+    "text": "Tetrahedral, \\(109.5^\\circ\\)"
+   },
+   {
+    "letter": "D",
+    "text": "Bent, about \\(104.5^\\circ\\)"
+   }
+  ],
+  "answer": "A",
+  "working": "3 bonding pairs and 1 lone pair. The lone pair repels more, squeezing the angle from \\(109.5^\\circ\\) to about \\(107^\\circ\\)"
+ },
+ {
+  "id": "ab-q4",
+  "quiz": "Atoms and bonding",
+  "text": "Why does water, \\(\\mathrm{H_2O}\\), boil at a much higher temperature than hydrogen sulfide, \\(\\mathrm{H_2S}\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "The O–H covalent bond is stronger than S–H"
+   },
+   {
+    "letter": "B",
+    "text": "Water has stronger London forces because it has more electrons"
+   },
+   {
+    "letter": "C",
+    "text": "Water molecules form hydrogen bonds with each other"
+   },
+   {
+    "letter": "D",
+    "text": "Water is an ionic compound"
+   }
+  ],
+  "answer": "C",
+  "working": "Boiling separates molecules, it does not break covalent bonds. O is small and very electronegative, so water forms hydrogen bonds; \\(\\mathrm{H_2S}\\) does not"
+ },
+ {
+  "id": "ab-q5",
+  "quiz": "Atoms and bonding",
+  "text": "Which of these elements has the highest first ionisation energy?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Sodium"
+   },
+   {
+    "letter": "B",
+    "text": "Magnesium"
+   },
+   {
+    "letter": "C",
+    "text": "Argon"
+   },
+   {
+    "letter": "D",
+    "text": "Aluminium"
+   }
+  ],
+  "answer": "C",
+  "working": "Across a period nuclear charge rises while shielding barely changes, so the noble gas at the end is highest"
+ },
+ {
+  "id": "ab-q6",
+  "quiz": "Atoms and bonding",
+  "text": "Why is the first ionisation energy of aluminium lower than that of magnesium?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "Al loses a 3p electron, which is higher in energy and shielded by the 3s electrons"
+   },
+   {
+    "letter": "B",
+    "text": "Al has fewer protons than Mg"
+   },
+   {
+    "letter": "C",
+    "text": "The 3p electrons in Al are spin-paired and repel each other"
+   },
+   {
+    "letter": "D",
+    "text": "Al loses a 3s electron, which is further from the nucleus"
+   }
+  ],
+  "answer": "A",
+  "working": "Mg loses a 3s electron. Al's outer electron is alone in 3p, higher in energy and partly shielded by 3s, so it is easier to remove"
+ },
+ {
+  "id": "ab-q7",
+  "quiz": "Atoms and bonding",
+  "text": "Which of these molecules is polar?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(\\mathrm{CO_2}\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(\\mathrm{CH_4}\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(\\mathrm{BF_3}\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(\\mathrm{H_2O}\\)"
+   }
+  ],
+  "answer": "D",
+  "working": "\\(\\mathrm{H_2O}\\) is bent, so its bond dipoles do not cancel. The other three are symmetrical, so their dipoles cancel"
+ },
+ {
+  "id": "ab-q8",
+  "quiz": "Atoms and bonding",
+  "text": "What is the H–C–H bond angle in methane, \\(\\mathrm{CH_4}\\)?",
+  "options": [
+   {
+    "letter": "A",
+    "text": "\\(90^\\circ\\)"
+   },
+   {
+    "letter": "B",
+    "text": "\\(109.5^\\circ\\)"
+   },
+   {
+    "letter": "C",
+    "text": "\\(120^\\circ\\)"
+   },
+   {
+    "letter": "D",
+    "text": "\\(107^\\circ\\)"
+   }
+  ],
+  "answer": "B",
+  "working": "4 bonding pairs and no lone pairs repel equally: tetrahedral, \\(109.5^\\circ\\)"
+ }
+]

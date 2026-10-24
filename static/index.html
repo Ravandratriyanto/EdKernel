@@ -701,6 +701,9 @@
     .qb-mark { font-size: 0.85rem; color: #6b7280; }
     .qb-prompt { font-size: 0.98rem; color: #1a1a2e; margin-bottom: 18px; line-height: 1.5; }
     #quiz-options { display: flex; flex-direction: column; gap: 12px; }
+    /* choosing which quiz: hide the per-question chrome */
+    #quiz-panel.picking .qb-upload-hint, #quiz-panel.picking .qb-upload-row,
+    #quiz-panel.picking .qb-qnum-bar, #quiz-panel.picking .qb-prompt { display: none !important; }   /* beats the row's inline flex */
     .quiz-opt {
       display: flex; align-items: center; gap: 14px;
       background: white; border: 1.5px solid #d1d5db; border-radius: 10px;
@@ -1558,7 +1561,7 @@
     <div class="qb-pane qb-left">
       <div id="quiz-question-box">Loading question…</div>
       <div class="qb-upload-hint">— or upload a photo of your answer —</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="qb-upload-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="qb-upload-btn" onclick="document.getElementById('quiz-file-input').click()">Upload a photo</button>
         <label style="font-size:0.78rem;color:#6b7280">Model:</label>
         <select id="quiz-provider" onchange="setProvider(this.value)"
@@ -3641,14 +3644,57 @@
     document.getElementById('quiz-timer').textContent = '00:00';
     document.getElementById('quiz-provider').value = provider;   // reflect current provider
 
+    // A class can have several quizzes in its bank. Ask which ones exist; an
+    // older server without /api/quiz/list just gets the single quiz as before.
+    let names = [];
+    try {
+      const res = await fetch('/api/quiz/list', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(basePayload()),
+      });
+      if (res.ok) names = (await res.json()).quizzes || [];
+    } catch (e) { /* fall through to the single quiz */ }
+    if (names.length > 1) showQuizPicker(className, names);
+    else loadQuiz(className, names[0] || '');
+  }
+
+  function showQuizPicker(className, names) {
+    document.getElementById('quiz-question-box').textContent = 'Choose a quiz';
+    document.querySelector('.qb-footer').style.display = 'none';   // no Next/Finish until one is picked
+    document.getElementById('quiz-panel').classList.add('picking');
+    const opts = document.getElementById('quiz-options');
+    opts.innerHTML = '';
+    names.forEach((name, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'quiz-opt';
+      const num = document.createElement('span');
+      num.className = 'qb-letter';
+      num.textContent = i + 1;
+      const txt = document.createElement('span');
+      txt.className = 'qb-opt-text';
+      txt.textContent = name;
+      btn.appendChild(num);
+      btn.appendChild(txt);
+      btn.onclick = () => loadQuiz(className, name);
+      opts.appendChild(btn);
+    });
+  }
+
+  async function loadQuiz(className, quizName) {
+    // Before any await, so the fullscreen request still counts as part of the click.
     startQuizWatch();
+    document.querySelector('.qb-footer').style.display = '';
+    document.getElementById('quiz-panel').classList.remove('picking');
+    if (quizName) document.getElementById('quiz-topic-label').textContent = className + ' · ' + quizName;
+    document.getElementById('quiz-question-box').textContent = 'Loading questions…';
+    document.getElementById('quiz-options').innerHTML = '';
 
     // The server opens an attempt and sends the questions with the answer key
     // stripped out. Nothing in this browser can decide what counts as correct.
     try {
       const res = await fetch('/api/quiz/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: className, n_questions: 5, ...basePayload() }),
+        body: JSON.stringify({ topic: className, quiz: quizName, n_questions: 5, ...basePayload() }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
