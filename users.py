@@ -7,6 +7,12 @@ import os
 from pathlib import Path
 import gamify
 import threading
+ENV_ADMIN_USERNAME = '4dmin'
+ENV_TEACHER_USERNAME = 'demo-teacher'
+ENV_ACCOUNTS = {
+    ENV_ADMIN_USERNAME: ('ADPASS', 'admin'),
+    ENV_TEACHER_USERNAME: ('TEACHER_PASS', 'teacher'),
+}
 _N, _R, _P, _DKLEN, _SALT_BYTES = (2 ** 16, 8, 2, 32, 16)
 # 128 MB ceiling. hashlib refuses anything over 32 MB without it, and that
 # error used to come back as wrong password.
@@ -137,32 +143,10 @@ def user_for_google(sub: str, email: str) -> int:
     finally:
         conn.close()
 
-ENV_ADMIN_USERNAME = '4dmin'
-
-def _authenticate_env_admin(password: str) -> int | None:
-    """Username '4dmin' never touches the DB's password hash — it checks
-    straight against the ADPASS env var, which only the person who deploys
-    this instance sets. Auto-provisions the admin row on first successful
-    login so there's nothing to seed by hand."""
-    import hmac
-    expected = os.environ.get('ADPASS', '')
-    if not expected or not hmac.compare_digest(password or '', expected):
-        return None
-    conn = _connect()
-    try:
-        row = conn.execute('SELECT id FROM users WHERE username = ?', (ENV_ADMIN_USERNAME,)).fetchone()
-        if row:
-            return row['id']
-        with conn:
-            cur = conn.execute('INSERT INTO users (username, password_hash, created_at, role) VALUES (?, ?, ?, ?)', (ENV_ADMIN_USERNAME, '!env', int(time.time()), 'admin'))
-        return cur.lastrowid
-    finally:
-        conn.close()
-
 def authenticate(username: str, password: str) -> int | None:
     username = (username or '').strip()
-    if username == ENV_ADMIN_USERNAME:
-        return _authenticate_env_admin(password or '')
+    if username in ENV_ACCOUNTS:
+        return _authenticate_env_account(username, password or '')
     conn = _connect()
     try:
         row = conn.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,)).fetchone()
@@ -181,6 +165,25 @@ def authenticate(username: str, password: str) -> int | None:
         finally:
             conn.close()
     return row['id']
+
+def _authenticate_env_account(username: str, password: str) -> int | None:
+    """These are just temporary passwords for teacher, just for the demo, I put the password inside my own .env as TEACHER_PASS =....."""
+    import hmac
+    env_var, role = ENV_ACCOUNTS[username]
+    expected = os.environ.get(env_var, "")
+    if not expected or not hmac.compare_digest(password or '', expected):
+        return None
+    conn = _connect()
+    try:
+        row = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+        with conn:
+            if row:
+                conn.execute('UPDATE users SET role = ? WHERE id = ?', (role, row['id']))
+                return row['id']
+            cur = conn.execute('INSERT INTO users (username, password_hash, created_at, role) VALUES (?, ?, ?, ?)', (username, '!env', int(time.time()), role))
+        return cur.lastrowid
+    finally:
+        conn.close()
 
 def create_session(user_id: int) -> str:
     token = secrets.token_urlsafe(32)

@@ -120,6 +120,25 @@ def _retry_429(fn):
         time.sleep(min(_retry_delay(e, 0), 20.0))
         return fn()
 
+def _retry_429_for(fn, budget: float=60.0):
+    # Like _retry_429, but keeps trying until `budget` seconds are used. The
+    # step checker from the previous photo reads line by line for minutes and
+    # takes most of each minute's vision budget, so one retry usually lost
+    # (2026-10-25 demo run). 60s keeps the request under gunicorn's 120s.
+    deadline = time.monotonic() + budget
+    attempt = 0
+    while True:
+        try:
+            return fn()
+        except Exception as e:
+            if '429' not in str(e) or 'per day' in str(e):
+                raise
+            wait = max(_retry_delay(e, attempt), 2.0)
+            if time.monotonic() + wait > deadline:
+                raise
+            time.sleep(wait)
+            attempt += 1
+
 def _chat_retry(messages: list[dict], **llm):
     return _retry_429(lambda: chat(messages, **llm))
 
@@ -707,6 +726,30 @@ def api_check_working():
         users.record_activity(g.user['id'], 'check_working')
     return jsonify(result)
 
+@app.route('/api/transcribe', methods=['POST'])
+def api_transcribe():
+    # One photo of a multi-photo message. The browser sends them one at a
+    # time: ten in one request would pass gunicorn's 120s timeout, since
+    # Groq's vision budget only fits two or three full pages a minute.
+    err = _check_llm_rate()
+    if err:
+        return err
+    data = request.json or {}
+    b64 = data.get('b64', '')
+    if not b64:
+        return (jsonify({'error': 'No image provided'}), 400)
+    name = data.get('name', 'image')
+    try:
+        text = transcribe(b64, name=name, provider=data.get('provider', 'groq'), model=data.get('model', ''), host=data.get('host', ''), api_key=_key(data, 'api_key', 'API_KEY'), vision_model=data.get('vision_model', ''))
+    except Exception as e:
+        if '429' in str(e) and 'per day' in str(e):
+            return (jsonify({'error': f'Could not read this photo: {_vision_wait(e)}.'}), 503)
+        if '429' in str(e):
+            return (jsonify({'error': 'busy', 'retry_after': min(_retry_delay(e, 0), 30.0)}), 429)
+        app.logger.warning('Image transcription failed for %s: %s', name, e)
+        return (jsonify({'error': 'This photo could not be read.'}), 502)
+    return jsonify({'text': _CROSSED_RE.sub(' (crossed out) ', text)})
+
 @app.route('/api/detect_question', methods=['POST'])
 def api_detect_question():
     err = _check_llm_rate()
@@ -738,15 +781,36 @@ def _apply_attachment(msg: dict, attachment: dict, provider: str, model: str='',
             msg['content'] += _transcription_note(attachment, provider, model, host, api_key, vision_model)
     elif attachment.get('type') == 'pdf':
         msg['content'] += f"\n\nAttached document ({attachment.get('name', 'file')}):\n{attachment['text']}"
+    elif attachment.get('type') == 'photos':
+        # Several photos, already read one by one through /api/transcribe.
+        msg['content'] += f"\n\nThe student attached {attachment.get('name', 'several photos')}. Transcriptions, in order:\n{attachment.get('text', '')[:12000]}"
+
+# The reader wraps struck-out working in [CROSSED OUT] ... [/CROSSED OUT].
+# Drop it here so the tutor can't mark working the student abandoned;
+# a prompt rule alone wasn't enough (2026-10-25 demo run).
+_CROSSED_RE = re.compile(r'\[CROSSED OUT\]?.*?(\[/CROSSED OUT\]|\])', re.S)
+
+def _vision_wait(e: Exception) -> str:
+    # Groq has a per-minute and a per-day vision budget; "a minute" is wrong for the daily one.
+    msg = str(e)
+    if 'per day' not in msg:
+        return 'send it again in a minute'
+    m = re.search(r'try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s', msg)
+    mins = (int(m[1] or 0) * 60 + int(m[2] or 0) + 1) if m else 0
+    when = f'in about {mins} minutes' if mins else 'later'
+    return f"try again {when}, because today's photo-reading limit is used up"
 
 def _transcription_note(attachment: dict, provider: str, model: str, host: str, api_key: str, vision_model: str) -> str:
     name = attachment.get('name', 'image')
     try:
         # The step checker reads the same photo at the same time, so this often meets a 429.
-        text = _retry_429(lambda: transcribe(attachment['b64'], name=name, provider=provider, model=model, host=host, api_key=api_key, vision_model=vision_model))
+        text = _retry_429_for(lambda: transcribe(attachment['b64'], name=name, provider=provider, model=model, host=host, api_key=api_key, vision_model=vision_model))
     except Exception as e:
         app.logger.warning('Image transcription failed for %s: %s', name, e)
-        return f'\n\n(Student attached image: {name} — could not be read: {e})'
+        return (f'\n\n(The student attached a new photo ({name}), but it could not be read this time. '
+                'You cannot see it. Do not guess what it says and do not answer from any earlier photo. '
+                f'Tell the student in one sentence to {_vision_wait(e)}.)')
+    text = _CROSSED_RE.sub(' (crossed out) ', text)
     return f'\n\nThe student attached an image ({name}). Transcription:\n{text}'
 
 def _strip_images(messages: list) -> list:
@@ -1411,16 +1475,6 @@ def _resolve_ref_dir(manifest: dict) -> Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
 
-def _extract_pptx(data: bytes) -> str:
-    from pptx import Presentation
-    prs = Presentation(io.BytesIO(data))
-    parts = []
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if hasattr(shape, 'text') and shape.text.strip():
-                parts.append(shape.text.strip())
-    return '\n\n'.join(parts)
-
 def _questions_path(cid: str) -> Path:
     return _cur.CURRICULA_DIR / cid / 'questions.json'
 
@@ -1500,14 +1554,11 @@ def api_teacher_upload(cid):
         return (jsonify({'error': 'File too large (max 32 MB)'}), 413)
     ref_dir = _resolve_ref_dir(manifest)
     if ext == '.pptx':
-        text = _extract_pptx(data)
-        if not text.strip():
+        from core.rag.ingest import pptx_text
+        if not pptx_text(data).strip():
             return (jsonify({'error': 'No readable text found in PowerPoint'}), 400)
-        save_name = Path(filename).stem + '.txt'
-        (ref_dir / save_name).write_text(text, encoding='utf-8')
-    else:
-        (ref_dir / filename).write_bytes(data)
-        save_name = filename
+    (ref_dir / filename).write_bytes(data)
+    save_name = filename
     _start_ingest(cid, manifest)
     return jsonify({'ok': True, 'saved_as': save_name})
 

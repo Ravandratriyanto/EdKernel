@@ -224,6 +224,8 @@
       max-width: 200px;
     }
     .bubble .attach-preview img { width: 100%; display: block; }
+    .bubble .attach-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .bubble .attach-grid img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; }
     .bubble .attach-pill {
       display: inline-flex; align-items: center; gap: 6px;
       background: rgba(0,0,0,0.08);
@@ -273,6 +275,7 @@
       padding: 8px 12px; font-size: 0.82rem; color: #374151;
     }
     .attach-strip img { height: 48px; border-radius: 6px; }
+    .attach-strip .attach-thumbs { display: flex; gap: 6px; overflow-x: auto; max-width: 60%; flex-shrink: 0; }
     .attach-strip .attach-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .attach-strip button {
       background: none; border: none; cursor: pointer;
@@ -1309,7 +1312,7 @@
       <div class="svc-tile" onclick="enterService('learn')">
         <div class="svc-icon" style="background:rgba(99,102,241,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>
         <div class="svc-name">Learn</div>
-        <div class="svc-desc">Chat with AI tutor</div>
+        <div class="svc-desc">Chat with Sophie, your AI tutor</div>
       </div>
       <div class="svc-tile" onclick="enterService('quiz')">
         <div class="svc-icon" style="background:rgba(234,179,8,0.25)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
@@ -1444,11 +1447,11 @@
 
 <div id="chat-area"></div>
 
-<input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" class="hidden" onchange="handleFileChange()" />
+<input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" multiple class="hidden" onchange="handleFileChange()" />
 
 <div id="learn-panel">
   <div id="notes-composer" class="hidden">
-    <div class="notes-c-head">Make revision notes — the tutor adds them to the chat, then you can ask about them.</div>
+    <div class="notes-c-head">Make revision notes — Sophie adds them to the chat, then you can ask about them.</div>
     <div class="notes-c-row">
       <label class="notes-file">
         <input type="file" id="notes-pdf" accept="application/pdf" onchange="makeNotes('pdf')">
@@ -1547,7 +1550,7 @@
       <div class="qb-timer" id="quiz-timer">00:00</div>
       <span class="quiz-tab-warn hidden" id="quiz-tab-warn">TAB SWITCH DETECTED (<span id="quiz-tab-count">0</span>)</span>
     </div>
-    <div class="qb-top-right"><button class="qb-tutor-toggle" onclick="toggleQuizTutor()">Ask tutor</button> <button class="qb-tutor-toggle" onclick="swapTutorSide()" title="Move tutor to the other side">⇄ Side</button></div>
+    <div class="qb-top-right"><button class="qb-tutor-toggle" onclick="toggleQuizTutor()">Ask Sophie</button> <button class="qb-tutor-toggle" onclick="swapTutorSide()" title="Move Sophie to the other side">⇄ Side</button></div>
   </div>
   <div class="qb-rule"></div>
 
@@ -1636,6 +1639,9 @@
   let messages = [];
   let busy = false;
   let attachment = null;
+  // Photos 2..MAX_PHOTOS of one message (Learn chat only); photo 1 is `attachment`.
+  let extraPhotos = [];
+  const MAX_PHOTOS = 10;
   let filePicker_target = '';
   // Groq by default: the lab runs ~20 students off one laptop, and the local
   // Ollama can't serve that (a single gemma4 call measured 90s+ here).
@@ -1759,22 +1765,37 @@
   }
 
   async function handleFileChange() {
-    const file = document.getElementById('file-input').files[0];
-    if (!file) return;
-    uploadFile(file, filePicker_target);
+    const files = Array.from(document.getElementById('file-input').files);
+    // Upload one at a time so the photos keep the order they were picked in.
+    for (const file of files) await uploadFile(file, filePicker_target);
   }
 
+  function multiPhotoTarget(target) { return target === 'learn' || target === 'answer'; }
+
   async function uploadFile(file, target) {
+    // Another image in the Learn chat joins the message instead of replacing it.
+    const adding = multiPhotoTarget(target) && attachment?.type === 'image'
+                   && file.type.startsWith('image/');
+    if (adding && 1 + extraPhotos.length >= MAX_PHOTOS) {
+      alert(`Up to ${MAX_PHOTOS} photos per message.`);
+      return;
+    }
+
     const fd = new FormData();
     fd.append('file', file);
 
     const res  = await fetch('/api/upload', { method: 'POST', body: fd });
     const data = await res.json();
     if (data.error) { alert(data.error); return; }
+    if (data.type === 'image') data.previewUrl = URL.createObjectURL(file);
 
+    if (adding && data.type === 'image') {
+      extraPhotos.push(data);
+      renderAttachStrip(target);
+      return;
+    }
     attachment = data;
-    if (data.type === 'image') attachment.previewUrl = URL.createObjectURL(file);
-
+    extraPhotos = [];
     renderAttachStrip(target);
     if (data.type === 'image') detectQuestion(target);
   }
@@ -1811,16 +1832,22 @@
     strip.classList.remove('hidden');
 
     if (attachment.type === 'image') {
-      const img = document.createElement('img');
-      img.src = attachment.previewUrl;
-      strip.appendChild(img);
+      const thumbs = document.createElement('div');
+      thumbs.className = 'attach-thumbs';
+      [attachment, ...extraPhotos].forEach(a => {
+        const img = document.createElement('img');
+        img.src = a.previewUrl;
+        thumbs.appendChild(img);
+      });
+      strip.appendChild(thumbs);
     } else {
       strip.insertAdjacentHTML('beforeend', `<span>${ico('file')}</span>`);
     }
 
     const name = document.createElement('span');
     name.className = 'attach-name';
-    name.textContent = attachment.name;
+    name.textContent = extraPhotos.length
+      ? `${1 + extraPhotos.length} photos (up to ${MAX_PHOTOS})` : attachment.name;
     strip.appendChild(name);
 
     const rm = document.createElement('button');
@@ -1831,6 +1858,7 @@
 
   function clearAttachment() {
     attachment = null;
+    extraPhotos = [];
     ['learn-attach-strip','answer-attach-strip','check-attach-strip','steps-attach-strip'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
@@ -1901,6 +1929,17 @@
      restoreDollars puts it back once the maths is rendered. */
   const DOLLAR = '\uE000';
 
+  /* "$" before a digit is usually money, but "$0$" and "$2\pi$" are maths
+     (2026-10-25 demo run showed them raw). Hide real maths spans first: no
+     space just inside the $...$, and the closing $ not followed by a digit
+     (pandoc's rule), so "$5 and $10" stays money. Then run fn on the rest. */
+  function protectMath(text, fn) {
+    const spans = [];
+    const hidden = text.replace(/\$\$[\s\S]+?\$\$|\$(?=\S)[^$\n]*?\S\$(?!\d)/g,
+                                m => `\u0000${spans.push(m) - 1}\u0000`);
+    return fn(hidden).replace(/\u0000(\d+)\u0000/g, (_, i) => spans[i]);
+  }
+
   function normaliseMath(text) {
     if (!text) return '';
     /* Odd indices are the fenced blocks, because the delimiter is captured. */
@@ -1909,10 +1948,16 @@
                   /* Currency first. Run after the bracket rewrites below and
                      "\[5x\]" would become "$$5x$$", whose second $ is followed
                      by a digit — the rule here would then eat a real delimiter. */
-                  : part.replace(/\\\$/g, DOLLAR)
-                        .replace(/\$(?=\d)/g, DOLLAR)
+                  : protectMath(part.replace(/\\\$/g, DOLLAR),
+                                t => t.replace(/\$(?=\d)/g, DOLLAR))
                         .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
                         .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$')
+                        /* marked treats "\!" as an escaped "!" and drops the
+                           backslash, so KaTeX got "sin!" (2026-10-25 demo run);
+                           same for \, \{ \\. Inside maths, give every backslash
+                           before punctuation one more for marked to eat. */
+                        .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g,
+                                 m => m.replace(/\\[!-\/:-@\[-`{-~]/g, e => '\\' + e))
     ).join('');
   }
 
@@ -1935,6 +1980,7 @@
     const av = document.createElement('div');
     av.className = `avatar ${role === 'tutor' ? 'tutor-av' : 'student-av'}`;
     av.textContent = role === 'tutor' ? 'T' : 'S';
+    if (role === 'tutor') av.title = 'Sophie';
     if (role === 'tutor' && happy) av.classList.add('happy');
 
     const bubble = document.createElement('div');
@@ -1952,7 +1998,16 @@
     }
 
     if (attach) {
-      if (attach.type === 'image') {
+      if (attach.type === 'image' && attach.extra?.length) {
+        const grid = document.createElement('div');
+        grid.className = 'attach-grid';
+        [attach, ...attach.extra].forEach(a => {
+          const img = document.createElement('img');
+          img.src = a.previewUrl;
+          grid.appendChild(img);
+        });
+        bubble.appendChild(grid);
+      } else if (attach.type === 'image') {
         const wrap = document.createElement('div');
         wrap.className = 'attach-preview';
         const img = document.createElement('img');
@@ -2017,6 +2072,49 @@
                   + '<div class="bubble thinking"><span></span><span></span><span></span></div>';
     area.appendChild(row);
     area.scrollTop = area.scrollHeight;
+  }
+
+  function setThinkingText(text) {
+    const b = document.querySelector('#thinking-indicator .bubble');
+    if (b) { b.classList.remove('thinking'); b.textContent = text; }
+  }
+
+  // Takes the pending attachment(s) for sending. With several photos, the
+  // display copy carries the rest in .extra.
+  function takeAttachment() {
+    const attach = attachment;
+    if (attach && extraPhotos.length) attach.extra = extraPhotos.slice();
+    clearAttachment();
+    return attach;
+  }
+
+  // Several photos: read them one at a time through /api/transcribe (one
+  // request for all ten would pass the server's 120s timeout), waiting out
+  // Groq's per-minute limit, then hand Sophie the text as one attachment.
+  async function readPhotos(attach) {
+    const photos = [attach, ...attach.extra];
+    const parts = [];
+    for (let i = 0; i < photos.length; i++) {
+      setThinkingText(`Reading photo ${i + 1} of ${photos.length}…`);
+      let text = null;
+      for (let tries = 0; tries < 4 && text === null; tries++) {
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ b64: photos[i].b64, name: photos[i].name, ...basePayload(),
+                                 vision_model: photos[i].vision_model || '' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) { text = data.text || ''; break; }
+        if (res.status !== 429) { text = `(${data.error || 'this photo could not be read'})`; break; }
+        const wait = Number(data.retry_after || res.headers.get('Retry-After') || 20);
+        setThinkingText(`Reading photo ${i + 1} of ${photos.length}… (busy, waiting ${Math.ceil(wait)}s)`);
+        await new Promise(r => setTimeout(r, (wait + 1) * 1000));
+      }
+      parts.push(`Photo ${i + 1}:\n${text ?? '(this photo could not be read)'}`);
+    }
+    setThinkingText('Thinking…');
+    return { type: 'photos', name: `${photos.length} photos`, text: parts.join('\n\n') };
   }
 
   function removeThinking() {
@@ -2150,16 +2248,16 @@
     document.getElementById('btn-start').disabled = true;
     document.getElementById('topic-row').classList.add('hidden');
 
-    const attach = attachment;
-    clearAttachment();
+    const attach = takeAttachment();
     appendBubble('student', topic, attach);
     appendThinking();
 
     try {
+      const sendAttach = attach?.extra ? await readPhotos(attach) : attach;
       const res  = await fetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, ...basePayload(), attachment: attach }),
+        body: JSON.stringify({ topic, ...basePayload(), attachment: sendAttach }),
       });
       const data = await res.json();
       removeThinking();
@@ -2210,18 +2308,18 @@
       return;
     }
 
-    const attach = attachment;
-    clearAttachment();
+    const attach = takeAttachment();
     appendBubble('student', input, attach);
     appendThinking();
 
     try {
+      const sendAttach = attach?.extra ? await readPhotos(attach) : attach;
       const res  = await fetch('/api/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages, input, ...basePayload(),
-          attachment: attach,
+          attachment: sendAttach,
           detected_question: attach?.detectedQuestion || '',
           wrong_streak: wrongStreak,
           topic: currentTopic,
@@ -2240,7 +2338,10 @@
       if (data.correct === true)  wrongStreak = 0;
       if (data.correct === false) wrongStreak += 1;
       appendBubble('tutor', data.response, null, null, undefined, data.correct === true);
-      if (attach && attach.type === 'image') runStepChecker(attach);
+      // Off for now: the line-by-line checker read every line of every chat photo
+      // (~20k tokens a page) and used up Groq's 200k/day free vision budget in
+      // about 8 photos (2026-10-25). The quiz photo upload still runs it.
+      // To turn it back on: if (attach && attach.type === 'image' && !attach.extra) runStepChecker(attach);
       loadSessions();          // turn count and timestamp just changed
       if (data.papers && data.papers.length) showPapers(data.papers, null, 0);
 
@@ -3883,7 +3984,7 @@
     btn.disabled = true;
     btn.textContent = 'Analysing…';
     out.style.display = 'block';
-    out.textContent = 'Asking the tutor to review your quiz…';
+    out.textContent = 'Asking Sophie to review your quiz…';
 
     // Built from the server's marking, not from anything this page decided.
     if (!quizReview.length) {

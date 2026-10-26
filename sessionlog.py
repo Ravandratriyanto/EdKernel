@@ -23,7 +23,7 @@ def attachment_meta(attachment: dict | None) -> dict | None:
     meta = {'type': kind, 'name': attachment.get('name', '')}
     if kind == 'image':
         meta['b64_chars'] = len(attachment.get('b64') or '')
-    elif kind == 'pdf':
+    elif kind in ('pdf', 'photos'):
         meta['text_chars'] = len(attachment.get('text') or '')
     return meta
 

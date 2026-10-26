@@ -8,6 +8,7 @@ import chromadb
 from chromadb.utils import embedding_functions
 from pypdf import PdfReader
 import pdftext
+import io
 warnings.filterwarnings('ignore')
 logging.getLogger('pypdf').setLevel(logging.CRITICAL)
 DB_PATH = 'data/chroma'
@@ -92,11 +93,26 @@ def _collect_pdfs(folder: str, vision_kwargs: dict | None=None) -> tuple[list, l
         print(f'  {title[:52]:54} {kept:4} chunks')
     return (docs, ids, metas)
 
+def pptx_text(data: bytes) -> str:
+    from pptx import Presentation
+    prs = Presentation(io.BytesIO(data))
+    parts = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, 'text') and shape.text.strip():
+                parts.append(shape.text.strip())
+    return '\n\n'.join(parts)
+
 def _collect_texts(folder: str) -> tuple[list, list, list]:
     docs, ids, metas = ([], [], [])
-    for path in sorted(glob.glob(f'{folder}/*.txt')):
-        name = Path(path).name
-        chunks = _chunk(Path(path).read_text(encoding='utf-8'))
+    paths = sorted(p for p in Path(folder).glob('*') if p.suffix.lower() in ('.txt', '.pptx'))
+    for path in paths:
+        name = path.name
+        if path.suffix.lower() == '.pptx':
+            text = pptx_text(path.read_bytes())
+        else:
+            text = path.read_text(encoding='utf-8')
+        chunks = _chunk(text)
         for k, chunk in enumerate(chunks):
             docs.append(chunk)
             ids.append(f'{name}_{k}')

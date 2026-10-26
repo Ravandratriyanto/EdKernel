@@ -39,6 +39,40 @@
     transition: all 0.2s;
   }
   nav a:hover { color: #f2ff00; border-color: #f2ff00; }
+  nav .group {
+    width: 100%;
+    color: #666;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+  }
+  nav .group:first-child { margin-top: 0; }
+  nav a.start { color: #f2ff00; border-color: #f2ff00; }
+
+  .howto {
+    padding: 0 1.5rem 1.2rem;
+    color: #ccc;
+    font-size: 0.92rem;
+  }
+  .howto ol { margin-left: 1.3rem; }
+  .howto li { margin: 0.25rem 0; }
+  .howto .key { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
+  .layers { max-width: 900px; margin: 0 auto; color: #222; }
+  .layer { border: 1px solid #c9c98a; border-radius: 6px; padding: 0.6rem 0.8rem 0.8rem; background: #fff; }
+  .layer-name { font-size: 0.8rem; font-weight: 600; color: #555; margin-bottom: 0.5rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.6rem; }
+  .card { background: #f0f0f0; border: 1px solid #aaa; border-radius: 4px; padding: 0.5rem; text-align: center; font-size: 0.85rem; font-family: 'Courier New', monospace; }
+  .card small { display: block; font-family: 'Segoe UI', system-ui, sans-serif; color: inherit; opacity: 0.8; font-size: 0.78rem; }
+  .c-app { background: #1a3a1a; border-color: #6fdd6f; color: #e8e8e8; }
+  .c-api { background: #1a2a2a; border-color: #6fddaa; color: #e8e8e8; }
+  .c-vis { background: #3a1a3a; border-color: #dd6fdd; color: #e8e8e8; }
+  .c-rag { background: #1a2a3a; border-color: #6fb3dd; color: #e8e8e8; }
+  .c-cur { background: #1a3a3a; border-color: #6fdddd; color: #e8e8e8; }
+  .c-db  { background: #3a2a1a; border-color: #dda06f; color: #e8e8e8; }
+  .arrow { text-align: center; color: #666; font-size: 0.82rem; padding: 0.45rem 0; }
+  .runs-on { margin-top: 0.9rem; padding: 0.6rem; text-align: center; font-size: 0.85rem; background: #2a2a1a; color: #e8e8e8; border: 1px solid #dddd6f; border-radius: 4px; }
+  .howto .key span { font-size: 0.78rem; padding: 0.15rem 0.5rem; border-radius: 3px; }
 
   main { max-width: 1200px; margin: 0 auto; padding: 2rem 3rem; }
 
@@ -102,39 +136,166 @@
 
 <header>
   <h1>EdKernel — Codebase Flowcharts</h1>
-  <p>One diagram per concern · Updated 2026-10-23, checked against the code · one live class (<code>cambridge-as-p1</code>, "Math") · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · gamification (XP / streaks / quests) · AWS Fargate (live)</p>
+  <p>New here? Read the first two diagrams, then stop. Everything below them is detail, one diagram per part of the code.</p>
+  <p>Updated 2026-10-25, checked against the code · two live classes (Math, Chemistry) · swappable UIs over /v1/ · OpenCV 5 pipeline (deterministic grounding) · server-marked quizzes · progress + class misconception map · gamification (XP / streaks / quests) · AWS Fargate (live)</p>
   <p>Building a front end? The public kernel API contract is in <code>docs/KERNEL_API.md</code>.</p>
 </header>
 
 <nav>
-  <a href="#kernel">Engine Architecture</a>
-  <a href="#arch">System Architecture</a>
-  <a href="#core-pkg">core/ Package</a>
+  <span class="group">Start here</span>
+  <a class="start" href="#start">EdKernel in one picture</a>
+  <a href="#arch">The big picture (layers)</a>
   <a href="#opencv">OpenCV 5 Pipeline</a>
   <a href="#user-flows">User Flows</a>
+
+  <span class="group">How the engine is built</span>
+  <a href="#kernel">Engine Architecture</a>
+  <a href="#core-pkg">core/ Package</a>
+  <a href="#deploy">AWS Deployment</a>
+  <a href="#v1-api">api_v1.py (/v1/)</a>
+  <a href="#app-routes">app.py Routes</a>
+
+  <span class="group">Features</span>
   <a href="#student-home">Student Home &amp; Quiz</a>
   <a href="#progress">Progress Tracking</a>
   <a href="#curricula">Curricula &amp; Question Bank</a>
   <a href="#paper-import">Past Paper Import</a>
-  <a href="#app-routes">app.py Routes</a>
-  <a href="#v1-api">api_v1.py (/v1/)</a>
-  <a href="#deploy">AWS Deployment</a>
-  <a href="#llm-client">core/llm/client.py</a>
-  <a href="#prompts">core/prompts.py</a>
   <a href="#sources">Content Sources</a>
   <a href="#notes">Notes (PDF · YouTube)</a>
+  <a href="#gamify">Gamification</a>
+
+  <span class="group">One file each</span>
+  <a href="#llm-client">core/llm/client.py</a>
+  <a href="#prompts">core/prompts.py</a>
   <a href="#rag-ingest">core/rag/ingest.py</a>
   <a href="#rag-retrieve">core/rag/retrieve.py</a>
-  <a href="#settings">settings.py</a>
   <a href="#vision">core/vision/image_handler.py</a>
+  <a href="#settings">settings.py</a>
   <a href="#users">users.py</a>
-  <a href="#gamify">Gamification</a>
   <a href="#ratelimit">ratelimit.py</a>
   <a href="#eval-run">evals/run.py</a>
   <a href="#eval-learn">evals/learn.py</a>
 </nav>
 
 <main>
+
+<!-- ═══════════════════════ START HERE ═══════════════════════ -->
+<div class="section color-vision" id="start">
+  <div class="section-header">
+    <h2>EdKernel in one picture: a photo of working, checked line by line</h2>
+    <span class="badge badge-vision">START HERE</span>
+  </div>
+  <div class="howto">
+    <p>A student photographs their working and sends it. Two things happen at once:</p>
+    <ol>
+      <li><strong>The checker (top row).</strong> OpenCV finds the page, straightens it and cuts it into one strip per line. The AI reads each strip, then checks whether each line follows from the one before. The first line that doesn't gets a red box on the student's own photo.</li>
+      <li><strong>The tutor (bottom row).</strong> The AI reads the whole page, crossed-out working is removed, and the tutor answers with a question about the wrong line, using the teacher's own materials. It never hands over the answer.</li>
+    </ol>
+    <p>OpenCV decides <em>where</em> each line is, the same way every time. The AI decides <em>what</em> it says.</p>
+    <div class="key">
+      <span style="background:#3a1a3a;color:#dd6fdd;border:1px solid #6b2e6b">OpenCV 5</span>
+      <span style="background:#3a2a1a;color:#dda06f;border:1px solid #6b4e2e">AI model (Groq)</span>
+      <span style="background:#1a2a3a;color:#6fb3dd;border:1px solid #2e4e6b">Teacher's materials</span>
+      <span style="background:#1a3a1a;color:#6fdd6f;border:1px solid #2e6b2e">What the student sees</span>
+    </div>
+  </div>
+  <div class="chart-area">
+    <div class="mermaid">
+flowchart LR
+    PHOTO["Student's photo\nof their working"]
+
+    subgraph CV["OpenCV 5"]
+        direction LR
+        FIND["Find the page\nand straighten it"] --> CUT["Cut it into\none strip per line"]
+    end
+
+    READ["AI reads\neach line"]
+    CHECK["Does each line follow\nfrom the one before?"]
+    BOX["Red box on the\nfirst wrong line"]
+
+    READALL["AI reads\nthe whole page"]
+    CROSS["Crossed-out\nworking removed"]
+    NOTES[("Teacher's slides\nand notes")]
+    TUTOR["Tutor asks a question\nabout the wrong line\n(no answer given)"]
+
+    PHOTO --> FIND
+    CUT --> READ --> CHECK --> BOX
+    PHOTO --> READALL --> CROSS --> TUTOR
+    NOTES --> TUTOR
+
+    style FIND    fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style CUT     fill:#3a1a3a,stroke:#dd6fdd,color:#e8e8e8
+    style CV      fill:#f6ecf6,stroke:#dd6fdd
+    style READ    fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style CHECK   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style READALL fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style CROSS   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
+    style NOTES   fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
+    style BOX     fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    style TUTOR   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ARCHITECTURE ═══════════════════════ -->
+<div class="section color-arch" id="arch">
+  <div class="section-header">
+    <h2>The big picture: four layers, top to bottom</h2>
+    <span class="badge badge-arch">OVERVIEW</span>
+  </div>
+  <div class="howto">
+    <ol>
+      <li><strong>Who uses it.</strong> Students, teachers and admins each have a web page. Other apps can connect with an API key.</li>
+      <li><strong>The front desk.</strong> <code>app.py</code> takes every request from the web pages: it checks who you are, applies limits and logs the lesson. <code>api_v1.py</code> does the same job for other apps.</li>
+      <li><strong>The engine.</strong> <code>core/</code> does the actual teaching: the tutor, the OpenCV checker, reading past papers, and searching the class materials. It has no website code in it, so the command-line tutor and the tests can use it directly.</li>
+      <li><strong>Where things are kept.</strong> Class files, the search index of those files, the accounts database, and the AI models.</li>
+    </ol>
+    <p>All of it runs on AWS (ECS Fargate). EFS storage keeps the accounts and the search index safe when a new version is deployed.</p>
+  </div>
+  <div class="chart-area">
+    <div class="layers">
+      <div class="layer">
+        <div class="layer-name">1 · Who uses it</div>
+        <div class="cards">
+          <div class="card">Student<small>index.html</small></div>
+          <div class="card">Teacher<small>teacher.html</small></div>
+          <div class="card">Admin<small>admin.html · dev.html</small></div>
+          <div class="card">Other apps<small>with an API key</small></div>
+        </div>
+      </div>
+      <div class="arrow">↓ web pages send a login cookie · other apps send an API key</div>
+      <div class="layer">
+        <div class="layer-name">2 · The front desk</div>
+        <div class="cards">
+          <div class="card c-app">app.py<small>the web server</small></div>
+          <div class="card c-api">api_v1.py<small>the door for other apps</small></div>
+          <div class="card">users.py · ratelimit.py<br>settings.py · sessionlog.py<small>logins, limits, switches, logs</small></div>
+        </div>
+      </div>
+      <div class="arrow">↓ asks the engine to do the work</div>
+      <div class="layer">
+        <div class="layer-name">3 · The engine — core/</div>
+        <div class="cards">
+          <div class="card c-vis">vision/<small>OpenCV 5 checker</small></div>
+          <div class="card c-app">tutor.py · check.py<small>the Socratic tutor</small></div>
+          <div class="card c-app">questions.py<small>past papers → questions</small></div>
+          <div class="card c-rag">rag/<small>searches the class materials</small></div>
+        </div>
+      </div>
+      <div class="arrow">↓ reads files, saves progress, calls the AI</div>
+      <div class="layer">
+        <div class="layer-name">4 · Where things are kept</div>
+        <div class="cards">
+          <div class="card c-cur">curricula/<small>each class's files</small></div>
+          <div class="card c-rag">ChromaDB<small>search index of those files</small></div>
+          <div class="card c-db">users.db<small>accounts and progress</small></div>
+          <div class="card c-db">Groq<small>the AI models</small></div>
+        </div>
+      </div>
+      <div class="runs-on">All four layers run on <strong>AWS ECS Fargate</strong> behind a load balancer · <strong>EFS</strong> keeps users.db and ChromaDB between deploys</div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════════════ KERNEL ═══════════════════════ -->
 <div class="section color-arch" id="kernel">
@@ -205,79 +366,6 @@ graph TD
     RAG --> CH
     TUT --> DB
     LLM --> PROV
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════ ARCHITECTURE ═══════════════════════ -->
-<div class="section color-arch" id="arch">
-  <div class="section-header">
-    <h2>System Architecture — How it all connects</h2>
-    <span class="badge badge-arch">OVERVIEW</span>
-  </div>
-  <div class="section-desc">Top-level view. Three browser UIs and one CLI share the same Flask backend. core/ is the AI engine — pure Python, no Flask. api_v1.py exposes core/ as a stateless REST API for third-party integrations. Curricula are first-class objects with their own RAG collections.</div>
-  <div class="chart-area">
-    <div class="mermaid">
-graph TD
-    STUDENT["Student\nindex.html\nservice tiles / tutor / quiz"]
-    TEACHER["Teacher\nteacher.html"]
-    ADMIN["Admin\nadmin.html"]
-    DEV["Dev panel\ndev.html\n/dev/key or /chats\nlive chats side by side"]
-    CLI["CLI\nmain.py"]
-    THIRD["Third-party\nintegration"]
-
-    STUDENT -->|HTTP + cookie| APP
-    TEACHER -->|HTTP + cookie| APP
-    ADMIN   -->|HTTP + cookie| APP
-    DEV     -->|HTTP| APP
-    CLI --> CORE
-    THIRD -->|"Bearer token\nHTTP"| V1
-
-    APP["app.py\nFlask — 73 routes"]
-    V1["api_v1.py\nBlueprint /v1/\n6 endpoint groups"]
-
-    APP --> AUTH["users.py\nauth / sessions\napi keys / progress"]
-    APP --> RL["ratelimit.py"]
-    APP --> SET["settings.py\nFeature flags"]
-    APP --> CUR["curricula.py\nManifest loader"]
-    APP --> SLOG["sessionlog.py\nLesson log"]
-    APP --> CORE
-
-    V1 --> AUTH
-    V1 --> CORE
-
-    CORE["core/\nAI engine\nno Flask dependency"]
-
-    CORE --> LLM["core/llm/client.py\nGroq / Ollama / Bedrock"]
-    CORE --> RAG["core/rag/retrieve.py\nVector search"]
-    CORE --> PROM["core/prompts.py\nShared prompts"]
-    CORE --> VIS["core/vision/\nOpenCV 5 pipeline\ntranscribe + step check"]
-    CORE --> QST["core/questions.py\nPDF to questions\npypdf + fitz vision fallback"]
-
-    CUR --> CDIR[("curricula/\nmanifest · topics\nquestions · reference/\npapers/")]
-
-    RAG --> CDB[("ChromaDB\none collection\nper curriculum")]
-    INGEST["core/rag/ingest.py\n--curriculum flag"] --> CDB
-    INGEST --> CDIR
-
-    LLM --> OLL["Ollama\nlocalhost:11434"]
-    LLM --> GROQ["Groq API\nopenai/gpt-oss-120b"]
-
-    AUTH --> UDB[("users.db\nSQLite at DB_DIR\nusers / sessions\napi_keys / progress")]
-    APP -.->|"docker to ECR"| FARG["AWS ECS Fargate + ALB\nEFS holds users.db\nand ChromaDB"]
-
-    EVALS["evals/\nrun · regress · learn\nvision · error_faithfulness"] -.->|test calls| CORE
-
-    style APP   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
-    style CORE  fill:#0d2a0d,stroke:#6fdd6f,color:#e8e8e8
-    style V1    fill:#1a2a2a,stroke:#6fddaa,color:#e8e8e8
-    style CDB   fill:#1a2a3a,stroke:#6fb3dd,color:#e8e8e8
-    style CDIR  fill:#1a3a3a,stroke:#6fdddd,color:#e8e8e8
-    style GROQ  fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
-    style OLL   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
-    style UDB   fill:#3a2a1a,stroke:#dda06f,color:#e8e8e8
-    style FARG  fill:#2a2a1a,stroke:#dddd6f,color:#e8e8e8
-    style QST   fill:#1a3a1a,stroke:#6fdd6f,color:#e8e8e8
     </div>
   </div>
 </div>

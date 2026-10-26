@@ -181,8 +181,7 @@ slips; `sessionlog.LOG_DIR` ignores `DB_DIR` (tests write to the real log).
 start; Manim renderer; quiz photo grading; `bench/graviton_standalone.py` has a stale
 `segment()` — re-sync before quoting COOL numbers.
 
-**Unverified:** `start-lab.bat` on Windows; a full `start-lab.sh` launch; the happy
-face after a live Groq `[CORRECT]`; quiz maths + guest button in a real browser;
+**Unverified:** `start-lab.bat` on Windows; a full `start-lab.sh` launch; quiz maths + guest button in a real browser;
 Bedrock (AWS hold case 178878401900360); the `CHECK_PROMPT` notation fix.
 
 **Top scored work (still not started):** 5-min demo video (required deliverable);
