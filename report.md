@@ -34,9 +34,9 @@ On top of that grounding, EdKernel's defensible value is the combination a gener
 
 ```
   student browser
-       |  HTTPS
+       |  HTTP, via an Application Load Balancer (no TLS certificate yet)
        v
-  ECS Fargate (Flask app)          <-- deployed, live
+  ECS Fargate (Flask app)          <-- deployed, live; EFS holds users.db + ChromaDB
        |
        +-- core/vision/            <-- OpenCV 5 pipeline
        |     preprocess.py         (rectify, binarise, deskew)
@@ -106,6 +106,36 @@ Every decision is written to a `trace` returned with the result
 (`core/vision/step_checker.py`, `check_working`), so the loop is inspectable.
 This is the Agentic Vision Award criterion: perception influencing a subsequent
 plan and tool call.
+
+### Example trace (eval sample `v8`, run 27 Oct 2026)
+
+One real run of `check_working('evals/vision_samples/v8.jpg', …)` on Groq
+(`openai/gpt-oss-120b` + `qwen/qwen3.8-27b`). The student wrote
+`-3x = 12`, copied it, then wrote `x = 4` (it should be `x = -4`).
+
+```
+boxes (from OpenCV, x, y, w, h):  [13,12,232,51]  [113,102,139,37]  [151,165,95,40]
+steps (one vision call per box):  "8). -3x = 12" | "-3x=12" (read messily) | "x = 4"
+error_index: 2    category: "sign"
+explanation: "Divide both sides by -3 to obtain x = -4."
+trace:
+  - Perceived 3 line(s) of working.
+  - Line 3 does not follow from line 2 — flagged as the error (sign).
+```
+
+![Annotated output for v8](docs/agentic-trace-v8.jpg)
+
+How OpenCV's output changed what happened next, in this run:
+- `findContours` returned **3 boxes**, so the agent made exactly 3 read calls
+  and 2 step-to-step checks. A different page gives a different plan.
+- Line 2 repeats line 1, so it is not treated as an error.
+- The **coordinates of box 3** decided where the red box is drawn on the
+  student's own photo (green = followed from the line above, red = first error).
+- The `sign` category is what feeds the class misconception map for the teacher.
+
+The line-2 read was messy (`$$-3$$ $$x=$$ …` fragments), yet the verdict was
+still right. That matches Section 4: the read is the weak link, not the
+step-check logic.
 
 ---
 
@@ -449,8 +479,17 @@ map is a prompt for a teacher to look, not a judgement.
 - Partial answers are marked flatly wrong (a correct x-coordinate was marked
   `[WRONG]` and the student's protest ignored).
 - It can lose track of which question the student is on.
-- Handwriting reads fail on crossed-out work and very sparse writing; the step
-  checker is only reliable on a flat photo of one problem.
+- Handwriting reads fail on very sparse writing; the step checker is only
+  reliable on a flat photo of one problem. Crossed-out working is now handled
+  (see Section 9), checked on 2 live runs only.
+- **Free-tier quota.** On Groq's free tier the vision model allows about 8,000
+  tokens a minute and 200,000 a day. The line-by-line step checker costs about
+  2,000 tokens per line (~20k for a full page), so it used up a day's budget in
+  about 8 photos during demo recording. It is therefore **switched off in the
+  chat** for now; the chat reads the whole page once (~2.5k tokens) instead.
+  The step checker still runs on quiz photo uploads and through
+  `POST /v1/check/working`. A paid tier, or a cheaper line reader, is needed to
+  turn it back on everywhere.
 
 **Data and privacy.** The app stores names, chat messages and quiz scores for
 progress tracking. Guest mode needs only a display name — no email. Student
@@ -476,3 +515,28 @@ other devices is unmeasured.
 - Misconception map is **built and live**, but categories are coarse and wobble on genuinely-ambiguous errors (e.g. subtracted-vs-added) — hence framed as teacher-reviewed, not authoritative. Full end-to-end verification through the *vision* path is still pending a window when the Groq vision model is not returning `503`.
 - A pre-test: the classroom trial was post-test only, so it shows use, not learning gain
 - Tutor fixes for the trial failures listed in Section 7
+- Teacher uploads are not on EFS yet, so uploaded files are wiped on every redeploy (the ChromaDB index survives)
+
+## 9. Final changes (25–26 Oct 2026, from demo recording)
+
+Recording the demo with real photos of working exposed several problems, each
+fixed and redeployed the same day:
+
+- **The tutor is named Sophie**, after Sophie Germain, who taught herself
+  mathematics when no school would take her. She runs on open models through
+  Groq; the name is a persona over those models, not a model of our own.
+- **Crossed-out working.** Students cross out abandoned attempts. The vision
+  prompt now tags struck-out lines `[CROSSED OUT] … [/CROSSED OUT]`, and
+  `app.py` removes them before the tutor sees the text. A prompt rule alone was
+  not enough: the tutor still marked crossed-out lines until the code strip was
+  added (then 2/2 live runs ignored them).
+- **Up to 10 photos per message.** The browser sends them one at a time to
+  `POST /api/transcribe` (one request for ten would pass the server's 120 s
+  timeout), waits out rate limits, then gives Sophie all the transcriptions at once.
+- **Honest failure messages.** When a photo can't be read, Sophie now says so
+  and gives the real wait time, instead of answering from an earlier photo
+  still in the chat. That was a real bug found on camera.
+- **PowerPoint** uploads stay `.pptx` and are indexed directly.
+- **Maths display.** Two rendering bugs fixed (`\!` losing its backslash, and
+  `$0$` / `$2\pi$` being mistaken for money).
+- **Step checker off in the chat**, because of the free-tier quota (Section 7).
